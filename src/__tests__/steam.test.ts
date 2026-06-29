@@ -213,7 +213,33 @@ const ITAD_PRICES = [
   },
 ];
 
+const ITEMS = {
+  response: {
+    store_items: [
+      {
+        appid: 620,
+        name: "Portal 2",
+        is_free: false,
+        best_purchase_option: {
+          formatted_final_price: "$1.99",
+          formatted_original_price: "$9.99",
+          discount_pct: 80,
+        },
+        reviews: {
+          summary_filtered: {
+            review_count: 1000,
+            percent_positive: 98,
+            review_score_label: "Overwhelmingly Positive",
+          },
+        },
+        release: { steam_release_date: 1303186800, is_coming_soon: false },
+      },
+    ],
+  },
+};
+
 function router(url: string) {
+  if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(ITEMS);
   if (url.includes("/lookup/id/shop/")) return jsonResponse(ITAD_BULK);
   if (url.includes("/games/prices/v2")) return jsonResponse(ITAD_PRICES);
   if (url.includes("/deals/v2")) return jsonResponse(ITAD_DEALS);
@@ -882,6 +908,34 @@ test("get_player_achievements: success:false but game HAS achievements → hidde
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
     assert.match(s.reason, /hidden|private/i);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_items returns batch store cards (price, review %, release) keyless", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({ name: "get_items", arguments: { appids: [620, 999] } });
+    const s = res.structuredContent as {
+      count: number;
+      items: {
+        appid: number;
+        available?: boolean;
+        price?: { discount_pct: number };
+        review_percent?: number;
+        release_date?: string;
+      }[];
+    };
+    assert.equal(s.count, 2);
+    const a = s.items.find((i) => i.appid === 620)!;
+    assert.equal(a.price!.discount_pct, 80);
+    assert.equal(a.review_percent, 98);
+    assert.equal(a.release_date, "2011-04-19");
+    // 999 is absent from store_items → available:false.
+    assert.equal(s.items.find((i) => i.appid === 999)!.available, false);
   } finally {
     restore();
     await close();

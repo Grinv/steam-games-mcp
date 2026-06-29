@@ -71,6 +71,36 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
   );
 
   server.registerTool(
+    "get_items",
+    {
+      title: "Batch store card for many games",
+      description:
+        "Get price/discount, review % (positive) and release date for a LIST of games by appid in " +
+        "ONE keyless call. The efficient way to price- and rating-check a wishlist or library " +
+        "without a request per game. Get appids from search_games / get_wishlist / get_owned_games.",
+      inputSchema: {
+        appids: z
+          .array(z.number().int().positive())
+          .min(1)
+          .max(100)
+          .describe("Steam appids (1-100)."),
+        country: z
+          .string()
+          .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code.")
+          .describe("Country (cc) for prices; overrides STEAM_COUNTRY.")
+          .optional(),
+        language: z
+          .string()
+          .min(2)
+          .describe("Store language; overrides STEAM_LANGUAGE.")
+          .optional(),
+      },
+      annotations: READ_ONLY,
+    },
+    ({ appids, country, language }) => reply(() => web.getItems(appids, country, language)),
+  );
+
+  server.registerTool(
     "get_current_players",
     {
       title: "Get current player count",

@@ -12,6 +12,7 @@ import {
   summarizeCurrentPlayers,
   summarizeGameSchema,
   summarizeGlobalAchievements,
+  summarizeItems,
   summarizeNews,
   summarizeOwnedGames,
   summarizePlayer,
@@ -26,6 +27,7 @@ import {
   type OwnedGamesResponse,
   type PlayerAchievementsResponse,
   type PlayerSummariesResponse,
+  type StoreItemsResponse,
   type VanityResponse,
   type WishlistResponse,
 } from "../format.js";
@@ -43,12 +45,14 @@ export class SteamWebClient {
   readonly #cache: TtlCache<Record<string, unknown>>;
   readonly #key: string | undefined;
   readonly #l: string;
+  readonly #country: string;
   /** True when a Steam Web API key is configured; player tools short-circuit otherwise. */
   readonly configured: boolean;
 
   constructor(config: Config, logger: Logger) {
     this.#key = config.steamApiKey;
     this.#l = config.language;
+    this.#country = config.country;
     this.configured = Boolean(config.steamApiKey);
     const limiter = new RateLimiter(config.apiMinIntervalMs);
     this.#http = new HttpClient({
@@ -174,6 +178,25 @@ export class SteamWebClient {
       { appid },
     );
     return summarizeCurrentPlayers(res, appid);
+  }
+
+  // Batch store card (price+discount, review %, release) for a list of appids in
+  // one keyless call via the modern store-browse service. The efficient way to
+  // price- and rating-check a known list (wishlist/library) without N requests.
+  async getItems(
+    appids: number[],
+    country?: string,
+    language?: string,
+  ): Promise<Record<string, unknown>> {
+    const input = {
+      ids: appids.map((appid) => ({ appid })),
+      context: { language: language ?? this.#l, country_code: country ?? this.#country },
+      data_request: { include_basic_info: true, include_reviews: true, include_release: true },
+    };
+    const res = await this.#get<StoreItemsResponse>("IStoreBrowseService/GetItems/v1/", {
+      input_json: JSON.stringify(input),
+    });
+    return summarizeItems(res, appids);
   }
 
   // A player's wishlist (needs the wishlist/profile to be public). Keyless.

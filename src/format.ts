@@ -832,3 +832,67 @@ export function summarizeGameInfo(r: ItadGameInfoResponse): Record<string, unkno
     rank: r.stats?.rank ?? null,
   };
 }
+
+// ---- Steam IStoreBrowseService/GetItems (keyless batch store data) ----------
+
+interface StoreItem {
+  appid?: number;
+  name?: string;
+  is_free?: boolean;
+  best_purchase_option?: {
+    formatted_final_price?: string;
+    formatted_original_price?: string;
+    discount_pct?: number;
+  };
+  reviews?: {
+    summary_filtered?: {
+      review_count?: number;
+      percent_positive?: number;
+      review_score_label?: string;
+    };
+  };
+  release?: { steam_release_date?: number; is_coming_soon?: boolean };
+}
+export interface StoreItemsResponse {
+  response?: { store_items?: StoreItem[] };
+}
+
+// Batch store card per requested appid: price+discount, review %, release date —
+// all from one keyless call. Missing appids come back available:false.
+export function summarizeItems(r: StoreItemsResponse, appids: number[]): Record<string, unknown> {
+  const byId = new Map<number, StoreItem>();
+  for (const it of r.response?.store_items ?? [])
+    if (typeof it.appid === "number") byId.set(it.appid, it);
+  return {
+    count: appids.length,
+    items: appids.map((appid) => {
+      const it = byId.get(appid);
+      if (!it || (!it.name && !it.best_purchase_option && !it.reviews)) {
+        return { appid, available: false };
+      }
+      const bp = it.best_purchase_option;
+      const rev = it.reviews?.summary_filtered;
+      return {
+        appid,
+        name: it.name ?? null,
+        is_free: it.is_free ?? false,
+        price: bp
+          ? {
+              final: bp.formatted_final_price || null,
+              original: bp.formatted_original_price || bp.formatted_final_price || null,
+              discount_pct: bp.discount_pct ?? 0,
+            }
+          : it.is_free
+            ? { is_free: true }
+            : null,
+        review_percent: rev?.percent_positive ?? null,
+        review_count: rev?.review_count ?? null,
+        review_label: rev?.review_score_label ?? null,
+        release_date: it.release?.steam_release_date
+          ? new Date(it.release.steam_release_date * 1000).toISOString().slice(0, 10)
+          : null,
+        coming_soon: it.release?.is_coming_soon ?? false,
+      };
+    }),
+  };
+}

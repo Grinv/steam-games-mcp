@@ -6,6 +6,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `get_items` — batch store card (price/discount, review % positive, release
+  date) for a LIST of appids in **one keyless call** (Steam IStoreBrowseService).
+  The efficient way to price/rating-check a wishlist or library without a request
+  per game — collapses the previous N per-game review calls.
+
 ### Changed
 
 - Per-call overrides for the server defaults: `country` (and `language` where it

@@ -43,6 +43,10 @@
     { "name": "get_game_news", "description": "Recent news / patch notes for a game." },
     { "name": "get_global_achievements", "description": "Global achievement unlock rates." },
     {
+      "name": "get_items",
+      "description": "Batch store card (price, review %, release) for many appids."
+    },
+    {
       "name": "get_game_achievements",
       "description": "Full achievement list w/ names + rarity (key)."
     },
