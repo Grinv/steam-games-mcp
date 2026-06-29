@@ -1,8 +1,8 @@
-# steam-mcp
+# steam-games-mcp
 
-[![npm version](https://img.shields.io/npm/v/steam-mcp.svg)](https://www.npmjs.com/package/steam-mcp)
-[![CI](https://github.com/Grinv/steam-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Grinv/steam-mcp/actions/workflows/ci.yml)
-[![license: MIT](https://img.shields.io/npm/l/steam-mcp.svg)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/steam-games-mcp.svg)](https://www.npmjs.com/package/steam-games-mcp)
+[![CI](https://github.com/Grinv/steam-games-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Grinv/steam-games-mcp/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/npm/l/steam-games-mcp.svg)](LICENSE)
 
 An [MCP](https://modelcontextprotocol.io) server for **Steam**: search games and
 read store details, prices, reviews, discounts and news (no key), plus player
@@ -20,7 +20,7 @@ credentials**; player tools need a free Steam Web API key.
   "mcpServers": {
     "steam": {
       "command": "npx",
-      "args": ["-y", "steam-mcp"],
+      "args": ["-y", "steam-games-mcp"],
       "env": {
         "STEAM_API_KEY": "your-steam-web-api-key (optional — enables player tools)",
         "STEAM_COUNTRY": "US (optional — store price region)",
@@ -34,8 +34,8 @@ credentials**; player tools need a free Steam Web API key.
 > Replace each value with your own; remove the optional lines you don't need.
 > A free key comes from <https://steamcommunity.com/dev/apikey>. **From source:**
 > `npm ci && npm run build`, then use `"command": "node"`,
-> `"args": ["/ABS/PATH/steam-mcp/dist/index.js"]`. **As a `.mcpb` bundle:** grab it
-> from the [latest release](https://github.com/Grinv/steam-mcp/releases/latest).
+> `"args": ["/ABS/PATH/steam-games-mcp/dist/index.js"]`. **As a `.mcpb` bundle:** grab it
+> from the [latest release](https://github.com/Grinv/steam-games-mcp/releases/latest).
 
 ## What it does
 
@@ -90,7 +90,7 @@ Per-client config and all tunables: [docs/clients.md](docs/clients.md).
 
 ## Updating
 
-- **npx:** unpinned `npx -y steam-mcp` fetches the latest on the next run.
+- **npx:** unpinned `npx -y steam-games-mcp` fetches the latest on the next run.
 - **`.mcpb` bundle:** download the new bundle from the releases page and reinstall.
 - **From source:** `git pull && npm ci && npm run build`.
 

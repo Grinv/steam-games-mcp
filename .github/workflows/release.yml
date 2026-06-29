@@ -25,11 +25,11 @@ jobs:
       - run: npm run build
       - run: npm test
       - name: Pack .mcpb bundle
-        run: npx mcpb pack . steam-mcp.mcpb
+        run: npx mcpb pack . steam-games-mcp.mcpb
       - name: Create GitHub Release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
         with:
-          files: steam-mcp.mcpb
+          files: steam-games-mcp.mcpb
           generate_release_notes: true
       # Trusted Publishing (OIDC): no token. Requires npm >= 11.5.1 and a
       # trusted publisher configured for this package on npmjs.com.

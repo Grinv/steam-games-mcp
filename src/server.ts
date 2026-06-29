@@ -27,7 +27,7 @@ export function buildServer(config: Config, logger: Logger): McpServer {
   const web = new SteamWebClient(config, logger);
 
   const server = new McpServer(
-    { name: "steam-mcp", version: VERSION },
+    { name: "steam-games-mcp", version: VERSION },
     { instructions: INSTRUCTIONS },
   );
 
@@ -43,7 +43,7 @@ export async function start(): Promise<void> {
   const server = buildServer(config, logger);
 
   await server.connect(new StdioServerTransport());
-  logger.info(`steam-mcp ${VERSION} ready`);
+  logger.info(`steam-games-mcp ${VERSION} ready`);
 
   const shutdown = (signal: string): void => {
     logger.info(`received ${signal}, shutting down`);

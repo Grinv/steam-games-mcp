@@ -1,5 +1,5 @@
 {
-  "name": "steam-mcp",
+  "name": "steam-games-mcp",
   "version": "0.1.0",
   "description": "MCP server for Steam: game/store data (no key) plus player profiles, libraries and achievements via the Steam Web API.",
   "type": "module",
@@ -18,13 +18,13 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Grinv/steam-mcp.git"
+    "url": "git+https://github.com/Grinv/steam-games-mcp.git"
   },
   "engines": {
     "node": ">=18"
   },
   "bin": {
-    "steam-mcp": "dist/index.js"
+    "steam-games-mcp": "dist/index.js"
   },
   "main": "dist/index.js",
   "files": [

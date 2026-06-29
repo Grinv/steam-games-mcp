@@ -3,8 +3,8 @@
 This is a standard stdio MCP server. Store/search tools need no credentials;
 player tools need a free Steam Web API key (<https://steamcommunity.com/dev/apikey>).
 
-Run via `npx -y steam-mcp` (once installed from npm) or from a built clone with
-`node /ABS/PATH/steam-mcp/dist/index.js` after `npm ci && npm run build`.
+Run via `npx -y steam-games-mcp` (once installed from npm) or from a built clone with
+`node /ABS/PATH/steam-games-mcp/dist/index.js` after `npm ci && npm run build`.
 
 ## Claude Desktop / Claude Code
 
@@ -13,7 +13,7 @@ Run via `npx -y steam-mcp` (once installed from npm) or from a built clone with
   "mcpServers": {
     "steam": {
       "command": "npx",
-      "args": ["-y", "steam-mcp"],
+      "args": ["-y", "steam-games-mcp"],
       "env": {
         "STEAM_API_KEY": "your-steam-web-api-key",
         "STEAM_COUNTRY": "US",
@@ -31,7 +31,7 @@ Run via `npx -y steam-mcp` (once installed from npm) or from a built clone with
 Use the same stdio pattern:
 
 - command: `npx` (or `node` for a local build)
-- args: `["-y", "steam-mcp"]` (or `["/ABS/PATH/steam-mcp/dist/index.js"]`)
+- args: `["-y", "steam-games-mcp"]` (or `["/ABS/PATH/steam-games-mcp/dist/index.js"]`)
 - env: `STEAM_API_KEY` (optional), `STEAM_COUNTRY`, `STEAM_LANGUAGE`.
 
 ## Tunables (optional env)

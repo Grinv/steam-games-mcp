@@ -1,6 +1,6 @@
 {
   "manifest_version": "0.3",
-  "name": "steam-mcp",
+  "name": "steam-games-mcp",
   "display_name": "Steam (Games & Players)",
   "version": "0.1.0",
   "description": "Search Steam games and read store details, prices, reviews and discounts (no key), plus player profiles, libraries and achievements via the Steam Web API.",
@@ -9,12 +9,12 @@
     "email": "4070730+Grinv@users.noreply.github.com",
     "url": "https://github.com/Grinv"
   },
-  "homepage": "https://github.com/Grinv/steam-mcp",
-  "documentation": "https://github.com/Grinv/steam-mcp#readme",
-  "support": "https://github.com/Grinv/steam-mcp/issues",
+  "homepage": "https://github.com/Grinv/steam-games-mcp",
+  "documentation": "https://github.com/Grinv/steam-games-mcp#readme",
+  "support": "https://github.com/Grinv/steam-games-mcp/issues",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Grinv/steam-mcp"
+    "url": "https://github.com/Grinv/steam-games-mcp"
   },
   "license": "MIT",
   "keywords": ["mcp", "steam", "games"],
