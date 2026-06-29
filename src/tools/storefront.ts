@@ -83,6 +83,26 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
   );
 
   server.registerTool(
+    "get_prices",
+    {
+      title: "Get prices for many games",
+      description:
+        "Get current price and discount for a batch of games by appid in one call — efficient for " +
+        "checking a whole list (e.g. a wishlist) for deals. Each row has the final/initial price and " +
+        "discount_percent (or is_free). No API key required. Get appids from search_games or get_wishlist.",
+      inputSchema: {
+        appids: z
+          .array(z.number().int().positive())
+          .min(1)
+          .max(500)
+          .describe("Steam appids to price (1-500)."),
+      },
+      annotations: READ_ONLY,
+    },
+    ({ appids }) => reply(() => store.getPrices(appids)),
+  );
+
+  server.registerTool(
     "get_specials",
     {
       title: "Get current discounts",

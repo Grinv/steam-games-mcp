@@ -10,11 +10,13 @@ import { ApiError } from "../lib/errors.js";
 import {
   detailApp,
   summarizeFeatured,
+  summarizePrices,
   summarizeReviewHistogram,
   summarizeReviews,
   summarizeSearch,
   summarizeSpecials,
   type FeaturedResponse,
+  type PriceDetailsResponse,
   type ReviewHistogramResponse,
   type ReviewsResponse,
   type SearchResponse,
@@ -71,6 +73,22 @@ export class StorefrontClient {
       query: { json: 1, num_per_page: max, language: "all", purchase_type: "all" },
     });
     return summarizeReviews(res, max);
+  }
+
+  // Batch prices for many appids in one place. appdetails accepts a comma-list
+  // with filters=price_overview; we chunk to keep URLs/responses bounded and
+  // merge. Not cached — prices change and the appid set varies per call.
+  async getPrices(appids: number[]): Promise<Record<string, unknown>> {
+    const CHUNK = 100;
+    const merged: PriceDetailsResponse = {};
+    for (let i = 0; i < appids.length; i += CHUNK) {
+      const chunk = appids.slice(i, i + CHUNK);
+      const res = await this.#http.getJson<PriceDetailsResponse>("api/appdetails", {
+        query: { appids: chunk.join(","), cc: this.#cc, filters: "price_overview" },
+      });
+      Object.assign(merged, res);
+    }
+    return summarizePrices(merged, appids);
   }
 
   // Review trend over time (monthly history + recent daily). Cached briefly.

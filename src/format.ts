@@ -55,6 +55,14 @@ export interface StoreApp {
   recommendations?: { total?: number };
   pc_requirements?: { minimum?: string; recommended?: string } | [];
   required_age?: number | string;
+  dlc?: number[];
+  achievements?: { total?: number };
+  controller_support?: string;
+  content_descriptors?: { ids?: number[]; notes?: string | null };
+  fullgame?: { appid?: string; name?: string };
+  demos?: { appid?: number; description?: string }[];
+  drm_notice?: string;
+  ext_user_account_notice?: string;
 }
 
 function price(
@@ -67,7 +75,8 @@ function price(
     is_free: false,
     currency: p.currency ?? null,
     final: p.final_formatted ?? null,
-    initial: p.initial_formatted ?? null,
+    // Steam leaves initial_formatted empty when there's no discount.
+    initial: p.initial_formatted || p.final_formatted || null,
     discount_percent: p.discount_percent ?? 0,
   };
 }
@@ -99,6 +108,23 @@ export function detailApp(a: StoreApp): Record<string, unknown> {
     metacritic_url: a.metacritic?.url ?? null,
     recommendations: a.recommendations?.total ?? null,
     required_age: a.required_age ?? null,
+    controller_support: a.controller_support ?? null,
+    achievements_total: a.achievements?.total ?? null,
+    supported_languages: stripHtml(a.supported_languages),
+    dlc: a.dlc ?? [],
+    demos: (a.demos ?? []).map((d) => d.appid).filter(Boolean),
+    // Content descriptor ids flag mature themes (violence/nudity/etc.); notes
+    // is Valve's free-text. Empty ids → no mature descriptors.
+    content_descriptors: {
+      ids: a.content_descriptors?.ids ?? [],
+      notes: a.content_descriptors?.notes ?? null,
+    },
+    // Present only for DLC: the base game it belongs to.
+    base_game: a.fullgame?.appid
+      ? { appid: Number(a.fullgame.appid), name: a.fullgame.name ?? null }
+      : null,
+    drm_notice: a.drm_notice || null,
+    account_notice: a.ext_user_account_notice || null,
     pc_requirements_min: stripHtml(reqs?.minimum),
     website: a.website || null,
     header_image: a.header_image || null,
@@ -122,6 +148,19 @@ export interface SearchResponse {
   items?: SearchItem[];
 }
 
+// storesearch prices are raw cents (initial/final); derive a discount + labels.
+function searchPrice(p: SearchItem["price"]): Record<string, unknown> | null {
+  if (!p || typeof p.final !== "number") return null;
+  const discount =
+    p.initial && p.final && p.initial > p.final ? Math.round((1 - p.final / p.initial) * 100) : 0;
+  return {
+    currency: p.currency ?? null,
+    final: money(p.final, p.currency),
+    initial: money(p.initial, p.currency),
+    discount_percent: discount,
+  };
+}
+
 export function summarizeSearch(r: SearchResponse): Record<string, unknown> {
   return {
     total: r.total ?? r.items?.length ?? 0,
@@ -129,11 +168,46 @@ export function summarizeSearch(r: SearchResponse): Record<string, unknown> {
       appid: i.id,
       name: i.name,
       type: i.type ?? null,
+      price: searchPrice(i.price),
       metascore: i.metascore || null,
       platforms: platforms(i.platforms),
       store_url: i.id ? `https://store.steampowered.com/app/${i.id}` : null,
     })),
   };
+}
+
+// ---- Storefront: batch prices (appdetails?filters=price_overview) -----------
+
+// appdetails keyed by appid; with the price_overview filter, `data` is either
+// { price_overview } or an empty array (free / no price).
+export type PriceDetailsResponse = Record<
+  string,
+  { success?: boolean; data?: { price_overview?: PriceOverview } | [] }
+>;
+
+// Shape a merged batch response into one row per requested appid, preserving
+// order. Missing/free entries come back with is_free:true and no numbers.
+export function summarizePrices(
+  merged: PriceDetailsResponse,
+  appids: number[],
+): Record<string, unknown> {
+  const prices = appids.map((id) => {
+    const entry = merged[String(id)];
+    const data = entry?.data;
+    const po = data && !Array.isArray(data) ? data.price_overview : undefined;
+    if (!entry?.success) return { appid: id, available: false };
+    if (!po) return { appid: id, available: true, is_free: true };
+    return {
+      appid: id,
+      available: true,
+      is_free: false,
+      currency: po.currency ?? null,
+      final: po.final_formatted ?? null,
+      initial: po.initial_formatted || po.final_formatted || null,
+      discount_percent: po.discount_percent ?? 0,
+    };
+  });
+  return { count: prices.length, prices };
 }
 
 // ---- Storefront: appreviews -------------------------------------------------

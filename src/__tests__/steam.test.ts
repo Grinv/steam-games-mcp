@@ -31,6 +31,11 @@ const APP = {
   developers: ["Valve"],
   publishers: ["Valve"],
   recommendations: { total: 1000 },
+  controller_support: "full",
+  achievements: { total: 51 },
+  dlc: [12345],
+  supported_languages: "English<strong>*</strong>, French",
+  content_descriptors: { ids: [2, 5], notes: null },
 };
 
 const SEARCH = { total: 1, items: [{ type: "app", name: "Portal 2", id: 620, metascore: "95" }] };
@@ -189,6 +194,11 @@ test("get_game shapes price, platforms and metacritic", async () => {
       platforms: string[];
       metacritic: number;
       genres: string[];
+      controller_support: string;
+      achievements_total: number;
+      dlc: number[];
+      supported_languages: string;
+      content_descriptors: { ids: number[] };
     };
     assert.equal(s.appid, 620);
     assert.equal(s.price.final, "$1.99");
@@ -196,6 +206,11 @@ test("get_game shapes price, platforms and metacritic", async () => {
     assert.deepEqual(s.platforms, ["windows", "linux"]);
     assert.equal(s.metacritic, 95);
     assert.deepEqual(s.genres, ["Action"]);
+    assert.equal(s.controller_support, "full");
+    assert.equal(s.achievements_total, 51);
+    assert.deepEqual(s.dlc, [12345]);
+    assert.equal(s.supported_languages, "English * , French"); // HTML stripped
+    assert.deepEqual(s.content_descriptors.ids, [2, 5]);
   } finally {
     restore();
     await close();

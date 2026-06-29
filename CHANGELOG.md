@@ -13,6 +13,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   plus recent per-day breakdown with positive % (no key).
 - `get_wishlist` — a player's wishlist appids by SteamID64, sorted by priority
   (no key; returns found:false when the wishlist/profile is private).
+- `get_prices` — batch current price + discount for many appids in one call
+  (no key); efficient for checking a whole wishlist for deals.
+
+### Changed
+
+- `search_games` results now include a `price` (currency, final, initial,
+  discount_percent) — the Storefront returns it; it was previously dropped.
+- `get_game` now also returns `controller_support`, `achievements_total`,
+  `supported_languages`, `dlc`, `demos`, `content_descriptors` (mature flags),
+  `base_game` (for DLC), and `drm_notice` / `account_notice` warnings.
 
 ## [0.1.0]
 
