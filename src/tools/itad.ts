@@ -77,12 +77,41 @@ export function registerItadTools(server: McpServer, itad: ItadClient): void {
   );
 
   server.registerTool(
+    "get_game_info",
+    {
+      title: "Get rich game info (reviews, players, appid)",
+      description:
+        "Get an IsThereAnyDeal game card in one call: Steam appid, Steam review score (%) and count, " +
+        "Metacritic, current players (recent/peak), tags, developers, release date. Pass a Steam " +
+        "`appid` or an `itad_id` (e.g. from get_deals). This is how to filter deals by review " +
+        "quality — get the itad_id from get_deals, then check steam_review here. Requires ITAD_API_KEY.",
+      inputSchema: {
+        appid: z
+          .number()
+          .int()
+          .positive()
+          .describe("Steam appid (resolved to an ITAD id).")
+          .optional(),
+        itad_id: z.string().min(1).describe("ITAD game id (UUID), e.g. from get_deals.").optional(),
+      },
+      annotations: READ_ONLY,
+    },
+    ({ appid, itad_id }) => {
+      if (!appid && !itad_id) {
+        return Promise.resolve(errorResult("Provide either appid or itad_id."));
+      }
+      return requireItad(() => itad.getGameInfo({ appid, itadId: itad_id }));
+    },
+  );
+
+  server.registerTool(
     "get_price_history",
     {
       title: "Get price history & all-time low",
       description:
         "Get a game's price history and the lowest price seen (by Steam appid) via IsThereAnyDeal — " +
-        "the 'is this discount actually good' check. Get the appid from search_games. Requires ITAD_API_KEY.",
+        "the 'is this discount actually good' check. `lowest` is the minimum within the window; " +
+        "widen it with `since` for a true all-time low. Get the appid from search_games. Requires ITAD_API_KEY.",
       inputSchema: {
         appid: z.number().int().positive().describe("Steam application id (appid)."),
         country: z
@@ -90,9 +119,14 @@ export function registerItadTools(server: McpServer, itad: ItadClient): void {
           .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code.")
           .describe("Country for prices; overrides STEAM_COUNTRY.")
           .optional(),
+        since: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}/, "ISO date, e.g. 2022-01-01.")
+          .describe("Only price changes after this date (ISO). Older date → fuller history.")
+          .optional(),
       },
       annotations: READ_ONLY,
     },
-    ({ appid, country }) => requireItad(() => itad.getPriceHistory(appid, country)),
+    ({ appid, country, since }) => requireItad(() => itad.getPriceHistory(appid, country, since)),
   );
 }

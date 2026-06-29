@@ -29,6 +29,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   descriptions, hidden flag) merged with global unlock % (rarity). Requires a
   key (the schema endpoint needs one); `get_game` also now surfaces a keyless
   `achievements_highlighted` sample.
+- `get_game_info` (ITAD) — one call returns the Steam appid, Steam review score
+  (%) + count, Metacritic, current players (recent/peak), tags, developers and
+  release date. Bridges `get_deals` → review-quality filtering by `itad_id`.
+- `get_deals` now also returns `historic_low` / `is_historic_low`; and gains
+  `sort` + a client-side `max_price`. `get_price_history` gains a `since` window
+  (so `lowest` can be a true all-time low) and a `country` override.
 - IsThereAnyDeal integration (optional `ITAD_API_KEY`): `get_deals` —
   catalog-wide current discounts, biggest first, with a `min_cut` filter (e.g.
   ">80% off"), scoped to Steam by default; and `get_price_history` — a game's

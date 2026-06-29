@@ -633,6 +633,8 @@ interface ItadDeal {
   price?: ItadPrice;
   regular?: ItadPrice;
   cut?: number;
+  storeLow?: ItadPrice | null;
+  historyLow?: ItadPrice | null;
   url?: string;
   expiry?: string | null;
 }
@@ -661,12 +663,21 @@ export function summarizeDeals(r: ItadDealsResponse): Record<string, unknown> {
     next_offset: r.nextOffset ?? null,
     deals: list.map((it) => {
       const d = it.deal;
+      // historyLow = all-time low across ITAD's history; flag when this deal
+      // matches it (i.e. a historic best price right now).
+      const histLow = itadMoney(d?.historyLow ?? undefined);
+      const atLow =
+        typeof d?.price?.amount === "number" &&
+        typeof d?.historyLow?.amount === "number" &&
+        d.price.amount <= d.historyLow.amount;
       return {
         title: it.title ?? null,
         itad_id: it.id ?? null,
         cut: d?.cut ?? 0,
         price: itadMoney(d?.price),
         regular: itadMoney(d?.regular),
+        historic_low: histLow,
+        is_historic_low: atLow,
         shop: d?.shop?.name ?? null,
         url: d?.url ?? null,
         expiry: d?.expiry ?? null,
@@ -709,5 +720,57 @@ export function summarizePriceHistory(
     count: entries.length,
     lowest: lowEntry ? point(lowEntry) : null,
     points: entries.map(point),
+  };
+}
+
+// ---- IsThereAnyDeal: game info (appid + reviews + players, needs key) --------
+
+interface ItadReview {
+  score?: number | null;
+  source?: string;
+  count?: number;
+}
+export interface ItadGameInfoResponse {
+  id?: string;
+  slug?: string;
+  title?: string;
+  type?: string;
+  mature?: boolean;
+  appid?: number | null;
+  earlyAccess?: boolean;
+  achievements?: number | boolean;
+  releaseDate?: string | null;
+  tags?: string[];
+  developers?: { id?: number; name?: string }[];
+  publishers?: { id?: number; name?: string }[];
+  reviews?: ItadReview[];
+  players?: { recent?: number; day?: number; week?: number; peak?: number };
+  stats?: { rank?: number; waitlisted?: number; collected?: number };
+}
+
+// One ITAD call that bundles the Steam appid, review score (so deals can be
+// rating-filtered without a separate Steam call), current players, tags, etc.
+export function summarizeGameInfo(r: ItadGameInfoResponse): Record<string, unknown> {
+  const reviews = r.reviews ?? [];
+  const steam = reviews.find((x) => x.source === "Steam");
+  return {
+    itad_id: r.id ?? null,
+    appid: r.appid ?? null,
+    title: r.title ?? null,
+    type: r.type ?? null,
+    early_access: r.earlyAccess ?? false,
+    release_date: r.releaseDate ?? null,
+    steam_review:
+      steam && typeof steam.score === "number"
+        ? { score: steam.score, count: steam.count ?? null }
+        : null,
+    reviews: reviews
+      .filter((x) => typeof x.score === "number")
+      .map((x) => ({ source: x.source, score: x.score, count: x.count ?? null })),
+    players: r.players ? { recent: r.players.recent ?? null, peak: r.players.peak ?? null } : null,
+    tags: (r.tags ?? []).slice(0, 15),
+    developers: (r.developers ?? []).map((d) => d.name).filter(Boolean),
+    publishers: (r.publishers ?? []).map((p) => p.name).filter(Boolean),
+    rank: r.stats?.rank ?? null,
   };
 }

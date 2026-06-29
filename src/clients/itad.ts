@@ -10,8 +10,10 @@ import { TtlCache } from "../lib/cache.js";
 import { ApiError } from "../lib/errors.js";
 import {
   summarizeDeals,
+  summarizeGameInfo,
   summarizePriceHistory,
   type ItadDealsResponse,
+  type ItadGameInfoResponse,
   type ItadHistoryResponse,
   type ItadLookupResponse,
 } from "../format.js";
@@ -82,22 +84,46 @@ export class ItadClient {
   }
 
   // Price history for a Steam game: resolve appid → ITAD id, then fetch history.
-  async getPriceHistory(appid: number, country?: string): Promise<Record<string, unknown>> {
+  // `since` (ISO date) widens the window — ITAD defaults to the last 3 months,
+  // so pass an older date for a true all-time low. Default goes back far enough
+  // to cover the modern catalogue.
+  async getPriceHistory(
+    appid: number,
+    country?: string,
+    since = "2015-01-01T00:00:00Z",
+  ): Promise<Record<string, unknown>> {
     const cc = country ?? this.#country;
-    return this.#cache.wrapStaleOnError(`itad-hist:${appid}:${cc}`, async () => {
-      const lookup = await this.#get<ItadLookupResponse>("games/lookup/v1", { appid });
-      if (!lookup.found || !lookup.game?.id) {
-        throw new ApiError({
-          code: "not_found",
-          message: `IsThereAnyDeal has no game mapped to Steam appid ${appid}`,
-        });
-      }
+    return this.#cache.wrapStaleOnError(`itad-hist:${appid}:${cc}:${since}`, async () => {
+      const id = await this.#resolveId(appid);
       const res = await this.#get<ItadHistoryResponse>("games/history/v2", {
-        id: lookup.game.id,
+        id,
         country: cc,
         shops: STEAM_SHOP_ID,
+        since,
       });
-      return summarizePriceHistory(res, lookup.game.title ?? null);
+      return summarizePriceHistory(res, null);
     });
+  }
+
+  // Rich one-call card (Steam appid + review score + current players + tags),
+  // by Steam appid (resolved to an ITAD id first) or a known ITAD id.
+  async getGameInfo(opts: { appid?: number; itadId?: string }): Promise<Record<string, unknown>> {
+    const id = opts.itadId ?? (await this.#resolveId(opts.appid!));
+    return this.#cache.wrapStaleOnError(`itad-info:${id}`, async () => {
+      const res = await this.#get<ItadGameInfoResponse>("games/info/v2", { id });
+      return summarizeGameInfo(res);
+    });
+  }
+
+  // Steam appid → ITAD game id (UUID), throwing a clear error when unmapped.
+  async #resolveId(appid: number): Promise<string> {
+    const lookup = await this.#get<ItadLookupResponse>("games/lookup/v1", { appid });
+    if (!lookup.found || !lookup.game?.id) {
+      throw new ApiError({
+        code: "not_found",
+        message: `IsThereAnyDeal has no game mapped to Steam appid ${appid}`,
+      });
+    }
+    return lookup.game.id;
   }
 }

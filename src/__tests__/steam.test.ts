@@ -159,11 +159,30 @@ const ITAD_DEALS = {
         price: { amount: 1.99, currency: "USD" },
         regular: { amount: 9.99, currency: "USD" },
         cut: 80,
-        url: "https://store.steampowered.com/app/620",
+        storeLow: { amount: 1.99, currency: "USD" },
+        historyLow: { amount: 1.99, currency: "USD" },
+        url: "https://itad.link/abc",
         expiry: null,
       },
     },
   ],
+};
+const ITAD_INFO = {
+  id: "uuid-1",
+  title: "Portal 2",
+  type: "game",
+  appid: 620,
+  earlyAccess: false,
+  releaseDate: "2011-04-19",
+  tags: ["Puzzle", "Co-op"],
+  developers: [{ id: 1, name: "Valve" }],
+  publishers: [{ id: 1, name: "Valve" }],
+  reviews: [
+    { score: 98, source: "Steam", count: 1000 },
+    { score: 95, source: "Metacritic", count: 50 },
+  ],
+  players: { recent: 5000, day: 6000, week: 7000, peak: 90000 },
+  stats: { rank: 100, waitlisted: 10, collected: 20 },
 };
 const ITAD_HISTORY = [
   {
@@ -181,6 +200,7 @@ const ITAD_HISTORY = [
 function router(url: string) {
   if (url.includes("/deals/v2")) return jsonResponse(ITAD_DEALS);
   if (url.includes("/games/lookup/")) return jsonResponse(ITAD_LOOKUP);
+  if (url.includes("/games/info/")) return jsonResponse(ITAD_INFO);
   if (url.includes("/games/history/")) return jsonResponse(ITAD_HISTORY);
   if (url.includes("/api/storesearch")) return jsonResponse(SEARCH);
   if (url.includes("/api/appdetails")) {
@@ -567,11 +587,9 @@ test("get_price_history resolves appid then returns points + all-time low", asyn
   try {
     const res = await client.callTool({ name: "get_price_history", arguments: { appid: 620 } });
     const s = res.structuredContent as {
-      title: string;
       count: number;
       lowest: { price: string; cut: number };
     };
-    assert.equal(s.title, "Portal 2");
     assert.equal(s.count, 2);
     assert.equal(s.lowest.price, "1.99 USD"); // cheapest of the two entries
     assert.equal(s.lowest.cut, 80);
@@ -642,6 +660,78 @@ test("get_price_history forwards a country override", async () => {
     await client.callTool({ name: "get_price_history", arguments: { appid: 620, country: "DE" } });
     const u = mock.calls.find((c) => c.url.includes("/games/history/"))!.url;
     assert.match(u, /country=DE/);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_deals surfaces historic_low / is_historic_low", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer(ITAD_ENV);
+  try {
+    const res = await client.callTool({ name: "get_deals", arguments: { min_cut: 80 } });
+    const s = res.structuredContent as {
+      deals: { historic_low: string; is_historic_low: boolean }[];
+    };
+    assert.equal(s.deals[0]!.historic_low, "1.99 USD");
+    assert.equal(s.deals[0]!.is_historic_low, true);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_game_info bundles appid + steam review + players (by appid)", async () => {
+  const mock = mockFetch(router);
+  const restore = installFetch(mock);
+  const { client, close } = await connectServer(ITAD_ENV);
+  try {
+    const res = await client.callTool({ name: "get_game_info", arguments: { appid: 620 } });
+    const s = res.structuredContent as {
+      appid: number;
+      steam_review: { score: number; count: number };
+      players: { peak: number };
+      tags: string[];
+    };
+    assert.equal(s.appid, 620);
+    assert.equal(s.steam_review.score, 98);
+    assert.equal(s.players.peak, 90000);
+    assert.ok(s.tags.includes("Puzzle"));
+    // appid path resolves via lookup, then info.
+    assert.ok(mock.calls.some((c) => c.url.includes("/games/lookup/")));
+    assert.ok(mock.calls.some((c) => c.url.includes("/games/info/")));
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_game_info by itad_id skips the lookup", async () => {
+  const mock = mockFetch(router);
+  const restore = installFetch(mock);
+  const { client, close } = await connectServer(ITAD_ENV);
+  try {
+    await client.callTool({ name: "get_game_info", arguments: { itad_id: "uuid-1" } });
+    assert.ok(!mock.calls.some((c) => c.url.includes("/games/lookup/")), "should not look up");
+    assert.ok(mock.calls.some((c) => c.url.includes("/games/info/")));
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_price_history forwards a since override", async () => {
+  const mock = mockFetch(router);
+  const restore = installFetch(mock);
+  const { client, close } = await connectServer(ITAD_ENV);
+  try {
+    await client.callTool({
+      name: "get_price_history",
+      arguments: { appid: 620, since: "2020-01-01" },
+    });
+    const u = mock.calls.find((c) => c.url.includes("/games/history/"))!.url;
+    assert.match(u, /since=2020-01-01/);
   } finally {
     restore();
     await close();
