@@ -160,6 +160,7 @@ const ITEMS = {
             review_score_label: "Overwhelmingly Positive",
           },
         },
+        platforms: { windows: true, steam_deck_compat_category: 3 },
         release: { steam_release_date: 1303186800, is_coming_soon: false },
       },
     ],
@@ -180,6 +181,7 @@ const DISCOVER = {
           formatted_original_price: "$9.99",
         },
         reviews: { summary_filtered: { percent_positive: 98, review_count: 1000 } },
+        platforms: { windows: true, steam_deck_compat_category: 3 },
         release: { steam_release_date: 1303186800 },
       },
       {
@@ -188,6 +190,7 @@ const DISCOVER = {
         visible: true,
         best_purchase_option: { discount_pct: 90, formatted_final_price: "$0.10" },
         reviews: { summary_filtered: { percent_positive: 40, review_count: 5 } },
+        platforms: { windows: true, steam_deck_compat_category: 1 },
       },
       { appid: 111, name: "Hidden", visible: false },
     ],
@@ -416,6 +419,23 @@ test("get_player_achievements computes completion", async () => {
     assert.equal(s.total, 2);
     assert.equal(s.unlocked, 1);
     assert.equal(s.completion_pct, 50);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_player_achievements forwards a per-call language override", async () => {
+  const mock = mockFetch(router);
+  const restore = installFetch(mock);
+  const { client, close } = await connectServer(ENV);
+  try {
+    await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 620, language: "russian" },
+    });
+    const u = mock.calls.find((c) => c.url.includes("GetPlayerAchievements"))!.url;
+    assert.match(u, /l=russian/);
   } finally {
     restore();
     await close();
@@ -679,6 +699,7 @@ test("get_items returns batch store cards (price, review %, release) keyless", a
         available?: boolean;
         price?: { discount_pct: number };
         review_percent?: number;
+        steam_deck?: string;
         release_date?: string;
       }[];
     };
@@ -686,6 +707,7 @@ test("get_items returns batch store cards (price, review %, release) keyless", a
     const a = s.items.find((i) => i.appid === 620)!;
     assert.equal(a.price!.discount_pct, 80);
     assert.equal(a.review_percent, 98);
+    assert.equal(a.steam_deck, "verified"); // steam_deck_compat_category 3 → verified
     assert.equal(a.release_date, "2011-04-19");
     // 999 is absent from store_items → available:false.
     assert.equal(s.items.find((i) => i.appid === 999)!.available, false);
@@ -695,12 +717,104 @@ test("get_items returns batch store cards (price, review %, release) keyless", a
   }
 });
 
-test("discover_deals filters by min discount + review quality, skips hidden, keyless", async () => {
+test("get_game resolves a title to an appid when given name instead of appid", async () => {
+  const mock = mockFetch(router);
+  const restore = installFetch(mock);
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({ name: "get_game", arguments: { name: "portal" } });
+    const s = res.structuredContent as { appid: number; price: { final: string } };
+    assert.equal(s.appid, 620); // resolved via storesearch (top match)
+    assert.equal(s.price.final, "$1.99");
+    assert.ok(mock.calls.some((c) => c.url.includes("/api/storesearch")));
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_game errors when neither appid nor name is given", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({ name: "get_game", arguments: {} });
+    assert.equal(res.isError, true);
+    assert.match((res.content as { text: string }[])[0]!.text, /appid or name/i);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_game reports no match when the title resolves to nothing", async () => {
+  const restore = installFetch(
+    mockFetch((url) =>
+      url.includes("/api/storesearch") ? jsonResponse({ total: 0, items: [] }) : jsonResponse({}),
+    ),
+  );
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({ name: "get_game", arguments: { name: "zzzznope" } });
+    assert.equal(res.isError, true);
+    assert.match((res.content as { text: string }[])[0]!.text, /no steam game found/i);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("player tools fall back to STEAM_ID (SteamID64) when steamid is omitted", async () => {
+  const mock = mockFetch(router);
+  const restore = installFetch(mock);
+  const { client, close } = await connectServer({ ...ENV, STEAM_ID: "76561197960287930" });
+  try {
+    const res = await client.callTool({ name: "get_owned_games", arguments: {} });
+    const s = res.structuredContent as { game_count: number };
+    assert.equal(s.game_count, 2);
+    // The configured SteamID64 reached the upstream call.
+    assert.ok(mock.calls.some((c) => c.url.includes("steamid=76561197960287930")));
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("a vanity STEAM_ID is resolved once, then reused for player tools", async () => {
+  const mock = mockFetch(router);
+  const restore = installFetch(mock);
+  const { client, close } = await connectServer({ ...ENV, STEAM_ID: "gabe" });
+  try {
+    const res = await client.callTool({ name: "get_player_summary", arguments: {} });
+    const s = res.structuredContent as { found: boolean; steamid: string };
+    assert.equal(s.found, true);
+    assert.equal(s.steamid, "76561197960287930");
+    assert.ok(mock.calls.some((c) => c.url.includes("ResolveVanityURL")));
+    assert.ok(mock.calls.some((c) => c.url.includes("GetPlayerSummaries")));
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("player tools error clearly when steamid is omitted and STEAM_ID is unset", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer(ENV); // key set, but no STEAM_ID
+  try {
+    const res = await client.callTool({ name: "get_player_summary", arguments: {} });
+    assert.equal(res.isError, true);
+    assert.match((res.content as { text: string }[])[0]!.text, /STEAM_ID/);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("discover_games filters by min discount + review quality, skips hidden, keyless", async () => {
   const restore = installFetch(mockFetch(router));
   const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
   try {
     const res = await client.callTool({
-      name: "discover_deals",
+      name: "discover_games",
       arguments: { min_discount: 80, min_review: 90, min_reviews: 100 },
     });
     const s = res.structuredContent as {
@@ -713,6 +827,67 @@ test("discover_deals filters by min discount + review quality, skips hidden, key
     assert.equal(s.deals[0]!.appid, 620);
     assert.equal(s.deals[0]!.discount_pct, 80);
     assert.equal(s.deals[0]!.review_percent, 98);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("discover_games filters by recency + Deck + rating (no discount required)", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    // Portal 2 (released 2011-04-19, deck verified, 98%) passes; the unsupported
+    // shovelware and the hidden item drop out.
+    const res = await client.callTool({
+      name: "discover_games",
+      arguments: { released_after: "2011-01-01", steam_deck: "verified", min_review: 90 },
+    });
+    const s = res.structuredContent as {
+      deals: { appid: number; steam_deck: string; release_date: string }[];
+    };
+    assert.equal(s.deals.length, 1);
+    assert.equal(s.deals[0]!.appid, 620);
+    assert.equal(s.deals[0]!.steam_deck, "verified");
+    assert.equal(s.deals[0]!.release_date, "2011-04-19");
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("discover_games recency cutoff excludes older releases", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    // Cutoff in 2020 → Portal 2 (2011) is excluded; nothing else has a date.
+    const res = await client.callTool({
+      name: "discover_games",
+      arguments: { released_after: "2020-01-01" },
+    });
+    const s = res.structuredContent as { deals: unknown[] };
+    assert.equal(s.deals.length, 0);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("discover_games filters by Steam Deck compatibility and tags each result", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "discover_games",
+      arguments: { min_discount: 80, steam_deck: "verified" },
+    });
+    const s = res.structuredContent as {
+      deals: { appid: number; steam_deck: string }[];
+    };
+    // Only Portal 2 is Deck-Verified (cat 3); the Unsupported shovelware (cat 1) drops out.
+    assert.equal(s.deals.length, 1);
+    assert.equal(s.deals[0]!.appid, 620);
+    assert.equal(s.deals[0]!.steam_deck, "verified");
   } finally {
     restore();
     await close();

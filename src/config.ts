@@ -12,6 +12,10 @@ const EnvSchema = z.object({
   // --- Steam Web API: free key (player data). https://steamcommunity.com/dev/apikey
   STEAM_API_KEY: z.string().min(1).optional(),
   STEAM_API_BASE_URL: z.string().url().default("https://api.steampowered.com"),
+  // Default player for the personal tools (wishlist/library/achievements) so a
+  // SteamID64 need not be passed every call. Accepts a 17-digit SteamID64 or a
+  // vanity name (the part after /id/), resolved once via the Web API (needs a key).
+  STEAM_ID: z.string().min(2).optional(),
   // --- Steam Storefront API: no key; game/store data. ---
   STEAM_STORE_BASE_URL: z.string().url().default("https://store.steampowered.com"),
 
@@ -34,6 +38,7 @@ const EnvSchema = z.object({
 export interface Config {
   steamApiBaseUrl: string;
   steamApiKey: string | undefined;
+  defaultSteamId: string | undefined;
   steamStoreBaseUrl: string;
   country: string;
   language: string;
@@ -55,6 +60,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     steamApiBaseUrl: parsed.STEAM_API_BASE_URL,
     steamApiKey: parsed.STEAM_API_KEY,
+    defaultSteamId: parsed.STEAM_ID,
     steamStoreBaseUrl: parsed.STEAM_STORE_BASE_URL,
     country: parsed.STEAM_COUNTRY,
     language: parsed.STEAM_LANGUAGE,

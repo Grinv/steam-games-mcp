@@ -5,7 +5,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StorefrontClient } from "../clients/storefront.js";
-import { jsonResult, type ToolResult } from "../lib/result.js";
+import { errorResult, jsonResult, type ToolResult } from "../lib/result.js";
 import { guard } from "./guard.js";
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
@@ -52,13 +52,36 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
     {
       title: "Get game details",
       description:
-        "Get full store details for one game by appid: description, price/discount, genres, " +
-        "platforms, release date, developers/publishers, Metacritic, age rating, DLC and PC " +
-        "requirements. Get the appid from search_games. No API key required.",
-      inputSchema: { appid, country, language },
+        "Get full store details for one game: description, price/discount, genres, platforms, " +
+        "release date, developers/publishers, Metacritic, age rating, DLC and PC requirements. " +
+        "Identify the game by appid (from search_games) OR by name — a title is resolved to the " +
+        "closest store match. No API key required.",
+      inputSchema: {
+        appid: appid.describe("Steam appid (from search_games). Provide appid OR name.").optional(),
+        name: z
+          .string()
+          .min(1)
+          .describe(
+            "Game title to look up instead of an appid — resolved to the closest store match. " +
+              "Provide appid OR name; appid wins if both are given.",
+          )
+          .optional(),
+        country,
+        language,
+      },
       annotations: READ_ONLY,
     },
-    ({ appid: id, country: cc, language: l }) => reply(() => store.getGame(id, cc, l)),
+    ({ appid: id, name, country: cc, language: l }) =>
+      guard(async () => {
+        let resolved = id;
+        if (!resolved) {
+          if (!name) return errorResult("Provide either appid or name.");
+          const found = await store.resolveAppId(name, cc, l);
+          if (!found) return errorResult(`No Steam game found matching "${name}".`);
+          resolved = found;
+        }
+        return jsonResult(await store.getGame(resolved, cc, l));
+      }),
   );
 
   server.registerTool(
@@ -134,7 +157,7 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       description:
         "List games currently on special (discounted) on the Steam store front page, with the " +
         "discount % and original/final price. For ALL catalog discounts (not just the front page), " +
-        "use discover_deals. No API key required.",
+        "use discover_games with min_discount. No API key required.",
       inputSchema: { country, language },
       annotations: READ_ONLY,
     },

@@ -60,6 +60,15 @@ export class StorefrontClient {
     return summarizeSearch(res);
   }
 
+  // Resolve a game title to its appid via store search (top match), so callers
+  // can pass a name instead of an appid. Returns null when nothing matches.
+  async resolveAppId(term: string, country?: string, language?: string): Promise<number | null> {
+    const res = await this.#http.getJson<SearchResponse>("api/storesearch/", {
+      query: { term, l: language ?? this.#l, cc: country ?? this.#cc },
+    });
+    return res.items?.find((i) => typeof i.id === "number")?.id ?? null;
+  }
+
   async getGame(
     appid: number,
     country?: string,

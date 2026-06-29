@@ -16,6 +16,7 @@ Run via `npx -y steam-games-mcp` (once installed from npm) or from a built clone
       "args": ["-y", "steam-games-mcp"],
       "env": {
         "STEAM_API_KEY": "your-steam-web-api-key",
+        "STEAM_ID": "your-steamid64-or-vanity-name",
         "STEAM_COUNTRY": "US",
         "STEAM_LANGUAGE": "english"
       }
@@ -25,6 +26,8 @@ Run via `npx -y steam-games-mcp` (once installed from npm) or from a built clone
 ```
 
 `STEAM_API_KEY` is optional (omit it and the store/search tools still work).
+`STEAM_ID` is optional too — set it to your SteamID64 (or vanity name) so the
+player tools default to you and you can ask "my wishlist" without passing an ID.
 
 ## Cursor / VS Code / Cline / others
 
@@ -32,13 +35,14 @@ Use the same stdio pattern:
 
 - command: `npx` (or `node` for a local build)
 - args: `["-y", "steam-games-mcp"]` (or `["/ABS/PATH/steam-games-mcp/dist/index.js"]`)
-- env: `STEAM_API_KEY` (optional), `STEAM_COUNTRY`, `STEAM_LANGUAGE`.
+- env: `STEAM_API_KEY` (optional), `STEAM_ID` (optional), `STEAM_COUNTRY`, `STEAM_LANGUAGE`.
 
 ## Tunables (optional env)
 
 | Var                           | Default                          | Meaning                                                            |
 | ----------------------------- | -------------------------------- | ------------------------------------------------------------------ |
 | `STEAM_API_KEY`               | _(unset)_                        | Steam Web API key; enables player tools                            |
+| `STEAM_ID`                    | _(unset)_                        | Default SteamID64 or vanity name for the player tools              |
 | `STEAM_COUNTRY`               | `US`                             | ISO country code (cc) for store prices                             |
 | `STEAM_LANGUAGE`              | `english`                        | Store language (l)                                                 |
 | `STEAM_STORE_MIN_INTERVAL_MS` | `250`                            | Min spacing between Storefront calls (burst-sensitive; 0 disables) |

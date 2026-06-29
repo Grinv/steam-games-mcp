@@ -650,13 +650,29 @@ interface StoreItem {
     };
   };
   release?: { steam_release_date?: number; is_coming_soon?: boolean };
+  // Valve's deck compatibility enum (returned with include_platforms): see DECK_COMPAT.
+  platforms?: { windows?: boolean; mac?: boolean; steam_deck_compat_category?: number };
   visible?: boolean;
 }
 export interface StoreItemsResponse {
   response?: { store_items?: StoreItem[] };
 }
 
-// Compact card from a store item (shared by get_items and discover_deals).
+// Steam Deck compatibility — Valve's enum on platforms.steam_deck_compat_category.
+const DECK_COMPAT: Record<number, string> = {
+  0: "unknown",
+  1: "unsupported",
+  2: "playable",
+  3: "verified",
+};
+function steamDeck(cat?: number): string {
+  return DECK_COMPAT[cat ?? 0] ?? "unknown";
+}
+// Map a user-facing deck filter to the minimum acceptable category: "verified"
+// keeps only Verified; "playable" keeps Playable or Verified (i.e. "runs on Deck").
+export const DECK_MIN: Record<string, number> = { verified: 3, playable: 2 };
+
+// Compact card from a store item (shared by get_items and discover_games).
 function storeCard(it: StoreItem): Record<string, unknown> {
   const bp = it.best_purchase_option;
   const rev = it.reviews?.summary_filtered;
@@ -669,6 +685,7 @@ function storeCard(it: StoreItem): Record<string, unknown> {
     review_percent: rev?.percent_positive ?? null,
     review_count: rev?.review_count ?? null,
     review_label: rev?.review_score_label ?? null,
+    steam_deck: steamDeck(it.platforms?.steam_deck_compat_category),
     release_date: it.release?.steam_release_date
       ? new Date(it.release.steam_release_date * 1000).toISOString().slice(0, 10)
       : null,
@@ -689,10 +706,24 @@ export interface StoreQueryResponse {
 // the returned page, since the Query API ignores those filters/sorts.
 export function summarizeDiscover(
   r: StoreQueryResponse,
-  opts: { minReview?: number; minReviews?: number },
+  opts: { minReview?: number; minReviews?: number; steamDeck?: string; releasedAfter?: number },
 ): Record<string, unknown> {
+  const deckMin = opts.steamDeck ? DECK_MIN[opts.steamDeck] : undefined;
   let rows = (r.response?.store_items ?? [])
-    .filter((it) => it.visible !== false && typeof it.appid === "number")
+    .filter((it) => {
+      if (it.visible === false || typeof it.appid !== "number") return false;
+      // Deck filter runs on the raw category (the Query API can't filter on it).
+      if (deckMin !== undefined && (it.platforms?.steam_deck_compat_category ?? 0) < deckMin)
+        return false;
+      // Recency filter (the Query API has no release-date sort/filter): keep only
+      // items released on/after the cutoff; drop ones with no known release date.
+      if (
+        opts.releasedAfter !== undefined &&
+        (it.release?.steam_release_date ?? 0) < opts.releasedAfter
+      )
+        return false;
+      return true;
+    })
     .map(storeCard);
   if (typeof opts.minReview === "number") {
     rows = rows.filter((x) => ((x.review_percent as number | null) ?? -1) >= opts.minReview!);
@@ -739,6 +770,7 @@ export function summarizeItems(r: StoreItemsResponse, appids: number[]): Record<
         review_percent: rev?.percent_positive ?? null,
         review_count: rev?.review_count ?? null,
         review_label: rev?.review_score_label ?? null,
+        steam_deck: steamDeck(it.platforms?.steam_deck_compat_category),
         release_date: it.release?.steam_release_date
           ? new Date(it.release.steam_release_date * 1000).toISOString().slice(0, 10)
           : null,

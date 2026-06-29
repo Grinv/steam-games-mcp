@@ -6,6 +6,45 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0]
+
+### Changed
+
+- **`discover_deals` merged into `discover_games`** (breaking). They were the same
+  catalog query with different presets, so they collapse into one tool. Pass
+  `min_discount` for deals, `released_after` / `released_within_days` for new
+  releases, `steam_deck` for Deck-capable games, and `min_review` / `min_reviews`
+  for rating — in any combination. Migration: replace
+  `discover_deals({ min_discount })` with `discover_games({ min_discount })`.
+
+### Added
+
+- `STEAM_ID` config (env / `.mcpb` user_config): set a default player — a 17-digit
+  SteamID64 or a vanity name (resolved once via the Web API) — so the player tools
+  (`get_wishlist`, `get_owned_games`, `get_recently_played`, `get_player_summary`,
+  `get_player_achievements`) default to you. Their `steamid` argument is now
+  optional and falls back to `STEAM_ID`; ask "my wishlist" without passing an ID.
+- `get_game` now accepts a `name` as an alternative to `appid` — a title is
+  resolved to the closest store match, so you can look a game up without an appid.
+- `get_player_achievements` gains a per-call `language` override for achievement
+  names/descriptions, matching `get_game_achievements` (falls back to `STEAM_LANGUAGE`).
+- `discover_games` — find games catalog-wide (keyless) by discount, release recency
+  (`released_after` / `released_within_days`), **Steam Deck** compatibility and
+  review quality, in any combination. Sorts the catalog by popularity so the scanned
+  window holds real games with genuine Deck ratings and review counts (the default
+  appid order surfaced Deck-untested shovelware). Answers both "games >80% off with
+  90%+ reviews" and "recent well-reviewed games that run on Steam Deck".
+- **Steam Deck compatibility** (`verified` / `playable` / `unsupported` / `unknown`)
+  is reported by `get_items` and `discover_games` (via `include_platforms`), with a
+  `steam_deck` filter on `discover_games`. Note: Steam's catalog API has no
+  server-side Deck filter or release-date sort, so the Deck/recency/review filters
+  are applied over the popularity-sorted page (raise `count` for stricter filters).
+
+### Docs
+
+- README: natural-language example queries and a step-by-step
+  "Getting your credentials" guide (API key, Steam ID, public profile).
+
 ## [0.2.0]
 
 ### Changed

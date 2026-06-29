@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "steam-games-mcp",
   "display_name": "Steam (Games & Players)",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Search Steam games and read store details, prices, reviews and discounts (no key), plus player profiles, libraries and achievements via the Steam Web API.",
   "author": {
     "name": "Grinv",
@@ -26,6 +26,7 @@
       "args": ["${__dirname}/dist/index.js"],
       "env": {
         "STEAM_API_KEY": "${user_config.steam_api_key}",
+        "STEAM_ID": "${user_config.steam_id}",
         "STEAM_COUNTRY": "${user_config.steam_country}",
         "STEAM_LANGUAGE": "${user_config.steam_language}"
       }
@@ -47,8 +48,8 @@
       "description": "Batch store card (price, review %, release) for many appids."
     },
     {
-      "name": "discover_deals",
-      "description": "Find catalog-wide discounts by min % (with review %)."
+      "name": "discover_games",
+      "description": "Find games catalog-wide by discount / recency / Steam Deck / review quality."
     },
     {
       "name": "get_game_achievements",
@@ -72,6 +73,12 @@
       "description": "Optional. Free key from https://steamcommunity.com/dev/apikey — enables player profile, library and achievement tools. Store/search tools work without it.",
       "required": false,
       "sensitive": true
+    },
+    "steam_id": {
+      "type": "string",
+      "title": "Default Steam ID",
+      "description": "Optional. Your 17-digit SteamID64 or vanity name (the part after /id/ in your profile URL). Lets the player tools default to you, so you can ask 'my wishlist' without passing an ID. A vanity name needs the API key to resolve.",
+      "required": false
     },
     "steam_country": {
       "type": "string",

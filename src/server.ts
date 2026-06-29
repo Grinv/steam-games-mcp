@@ -12,8 +12,9 @@ import { VERSION } from "./version.js";
 
 const INSTRUCTIONS =
   "Query Steam games and players. Store data needs no key: search_games → get_game / " +
-  "get_game_reviews for details, get_specials / get_featured / discover_deals for what's on sale " +
-  "(discover_deals finds all catalog discounts by min %, with review % included), get_items to " +
+  "get_game_reviews for details, get_specials / get_featured for curated store sections, " +
+  "discover_games to find titles catalog-wide by discount / recency / Steam Deck / review quality " +
+  "(e.g. deals, new releases, Deck-Verified games), get_items to " +
   "price- and rating-check a list of appids in one call, get_game_news and get_global_achievements " +
   "for a game's news and achievement rarity, get_current_players for live player counts. Player " +
   "data needs a free Steam Web API key (STEAM_API_KEY): get_player_summary, get_owned_games, " +

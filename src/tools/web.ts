@@ -20,7 +20,11 @@ const steamid = z
     /^\d{17}$/,
     "A SteamID64 is 17 digits. Use resolve_vanity_url to convert a custom profile name.",
   )
-  .describe("17-digit SteamID64. Convert a vanity/custom URL name with resolve_vanity_url first.");
+  .describe(
+    "17-digit SteamID64. Omit to use the STEAM_ID configured on the server. " +
+      "Convert a vanity/custom URL name with resolve_vanity_url first.",
+  )
+  .optional();
 
 const reply = (fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> =>
   guard(async () => jsonResult(await fn()));
@@ -75,9 +79,10 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
     {
       title: "Batch store card for many games",
       description:
-        "Get price/discount, review % (positive) and release date for a LIST of games by appid in " +
-        "ONE keyless call. The efficient way to price- and rating-check a wishlist or library " +
-        "without a request per game. Get appids from search_games / get_wishlist / get_owned_games.",
+        "Get price/discount, review % (positive), Steam Deck compatibility and release date for a " +
+        "LIST of games by appid in ONE keyless call. The efficient way to price-, rating- and " +
+        "Deck-check a wishlist or library without a request per game (each item carries a steam_deck " +
+        "field: verified/playable/unsupported/unknown). Get appids from search_games / get_wishlist / get_owned_games.",
       inputSchema: {
         appids: z
           .array(z.number().int().positive())
@@ -101,33 +106,61 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
   );
 
   server.registerTool(
-    "discover_deals",
+    "discover_games",
     {
-      title: "Discover discounted games (catalog-wide)",
+      title: "Discover games (deals, new releases, Steam Deck, rating)",
       description:
-        "Find games currently on sale across the whole Steam catalog (keyless) — filter by minimum " +
-        "discount, and optionally by review quality. Each result has discount %, price, review % and " +
-        "release date in one call. Use for 'all games >80% off with good reviews'. No appids needed " +
-        "(unlike get_items, which prices a list you already have).",
+        "Find games across the whole Steam catalog (keyless), filtered by ANY combination of: " +
+        "discount (min_discount — for 'what's on sale'), release recency (released_after / " +
+        "released_within_days — for 'new games'), Steam Deck compatibility (steam_deck), and review " +
+        "quality (min_review / min_reviews). Each result returns price/discount, review %, Steam Deck " +
+        "status and release date in one call. Examples: '>80% off with 90%+ reviews' → set min_discount " +
+        "+ min_review; 'recent well-reviewed games that run on Steam Deck' → set released_within_days + " +
+        "steam_deck + min_review; 'newest Deck-Verified games' → released_within_days + steam_deck. " +
+        "No appids needed — unlike get_items, which prices a list you already have. " +
+        "Note: the Steam catalog API has no release-date sort, so results are scanned popularity-first " +
+        "and these filters are applied over that window — great for popular titles; a niche release " +
+        "with very few reviews may fall outside the top `count` (raise count for stricter filters).",
       inputSchema: {
-        min_discount: z
+        released_after: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date, e.g. 2026-03-01.")
+          .describe("Keep only games released on/after this date (YYYY-MM-DD).")
+          .optional(),
+        released_within_days: z
           .number()
           .int()
           .min(1)
-          .max(100)
-          .describe("Minimum discount %, e.g. 80 for '80%+ off'."),
+          .describe("Alternative to released_after: released within the last N days.")
+          .optional(),
+        steam_deck: z
+          .enum(["playable", "verified"])
+          .describe(
+            "Keep only Deck-capable games: 'verified' = Deck-Verified only; 'playable' = Playable or Verified.",
+          )
+          .optional(),
         min_review: z
           .number()
           .int()
           .min(0)
           .max(100)
-          .describe("Minimum positive-review %, e.g. 90. Applied over the returned page.")
+          .describe("Minimum positive-review %, e.g. 85. Applied over the returned page.")
           .optional(),
         min_reviews: z
           .number()
           .int()
           .min(0)
-          .describe("Minimum review count (filters shovelware with few reviews).")
+          .describe("Minimum review count (filters out games with too few reviews).")
+          .optional(),
+        min_discount: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .describe(
+            "Minimum discount %, e.g. 80 for '80%+ off' — this is the 'deals' filter. " +
+              "Omit to include full-price games.",
+          )
           .optional(),
         count: z
           .number()
@@ -150,18 +183,38 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
       },
       annotations: READ_ONLY,
     },
-    ({ min_discount, min_review, min_reviews, count, start, country, language }) =>
-      reply(() =>
-        web.discoverDeals({
-          minDiscount: min_discount,
+    ({
+      released_after,
+      released_within_days,
+      steam_deck,
+      min_review,
+      min_reviews,
+      min_discount,
+      count,
+      start,
+      country,
+      language,
+    }) => {
+      // Resolve the recency cutoff (unix seconds): explicit date wins, else a
+      // rolling window of N days from now.
+      let releasedAfter: number | undefined;
+      if (released_after) releasedAfter = Math.floor(Date.parse(released_after) / 1000);
+      else if (released_within_days)
+        releasedAfter = Math.floor(Date.now() / 1000) - released_within_days * 86400;
+      return reply(() =>
+        web.discoverGames({
+          releasedAfter,
+          steamDeck: steam_deck,
           minReview: min_review,
           minReviews: min_reviews,
+          minDiscount: min_discount,
           count,
           start,
           country,
           language,
         }),
-      ),
+      );
+    },
   );
 
   server.registerTool(
@@ -189,7 +242,7 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
       inputSchema: { steamid },
       annotations: READ_ONLY,
     },
-    ({ steamid: id }) => reply(() => web.getWishlist(id)),
+    ({ steamid: id }) => reply(async () => web.getWishlist(await web.requireSteamId(id))),
   );
 
   // ---- player data (key required) -------------------------------------------
@@ -246,7 +299,7 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
       inputSchema: { steamid },
       annotations: READ_ONLY,
     },
-    ({ steamid: id }) => requireKey(() => web.getPlayerSummary(id)),
+    ({ steamid: id }) => requireKey(async () => web.getPlayerSummary(await web.requireSteamId(id))),
   );
 
   server.registerTool(
@@ -259,7 +312,7 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
       inputSchema: { steamid },
       annotations: READ_ONLY,
     },
-    ({ steamid: id }) => requireKey(() => web.getOwnedGames(id)),
+    ({ steamid: id }) => requireKey(async () => web.getOwnedGames(await web.requireSteamId(id))),
   );
 
   server.registerTool(
@@ -272,7 +325,8 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
       inputSchema: { steamid },
       annotations: READ_ONLY,
     },
-    ({ steamid: id }) => requireKey(() => web.getRecentlyPlayed(id)),
+    ({ steamid: id }) =>
+      requireKey(async () => web.getRecentlyPlayed(await web.requireSteamId(id))),
   );
 
   server.registerTool(
@@ -282,9 +336,20 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
       description:
         "Get a player's achievement progress for one game (unlocked count, % complete, per-achievement " +
         "unlock dates) by SteamID64 + appid. Requires STEAM_API_KEY and a public profile.",
-      inputSchema: { steamid, appid },
+      inputSchema: {
+        steamid,
+        appid,
+        language: z
+          .string()
+          .min(2)
+          .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
+          .optional(),
+      },
       annotations: READ_ONLY,
     },
-    ({ steamid: id, appid: app }) => requireKey(() => web.getPlayerAchievements(id, app)),
+    ({ steamid: id, appid: app, language }) =>
+      requireKey(async () =>
+        web.getPlayerAchievements(await web.requireSteamId(id), app, language),
+      ),
   );
 }
