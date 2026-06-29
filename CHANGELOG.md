@@ -20,10 +20,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The IsThereAnyDeal (ITAD) integration and `ITAD_API_KEY`: `get_deals`,
   `get_game_info`, `get_current_prices`, `get_price_history`. Deal discovery,
-  batch prices and review scores are now Steam-native and keyless (`discover_deals`
-  - `get_items` + `get_prices`), so the third-party dependency is gone. **Price
-    history is no longer offered** — Steam exposes no price-history API (only
-    SteamDB/ITAD track it), and we chose to stay Steam-only and dependency-free.
+  batch prices and review scores are now Steam-native and keyless via
+  `discover_deals`, `get_items` and `get_prices`, so the third-party dependency
+  is gone. **Price history is no longer offered** — Steam exposes no price-history
+  API (only SteamDB/ITAD track it), and we chose to stay Steam-only and
+  dependency-free.
 
 ## [0.1.0]
 
