@@ -6,6 +6,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0]
+
+### Changed
+
+- **Renamed the package to `steam-games-mcp`** (npm `steam-mcp` is taken by an
+  unrelated project). The GitHub repo, npm package, `.mcpb` and config snippets
+  all use `steam-games-mcp`; install with `npx -y steam-games-mcp`.
+
 ### Added
 
 - `discover_deals` — catalog-wide deal discovery via Steam's own keyless

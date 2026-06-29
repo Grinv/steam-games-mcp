@@ -3,7 +3,7 @@
   "name": "io.github.Grinv/steam-games-mcp",
   "description": "MCP server for Steam: game/store data (no key) plus player profiles, libraries and achievements via the Steam Web API.",
   "status": "active",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "repository": {
     "url": "https://github.com/Grinv/steam-games-mcp",
     "source": "github"
@@ -11,8 +11,8 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/Grinv/steam-games-mcp/releases/download/v0.1.0/steam-games-mcp.mcpb",
-      "version": "0.1.0",
+      "identifier": "https://github.com/Grinv/steam-games-mcp/releases/download/v0.2.0/steam-games-mcp.mcpb",
+      "version": "0.2.0",
       "transport": { "type": "stdio" }
     }
   ]
