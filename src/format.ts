@@ -616,3 +616,98 @@ export function summarizeReviewHistogram(r: ReviewHistogramResponse): Record<str
     recent: (res.recent ?? []).slice(-30).map(rollup),
   };
 }
+
+// ---- IsThereAnyDeal (deals + price history; needs an ITAD key) --------------
+
+export interface ItadLookupResponse {
+  found?: boolean;
+  game?: { id?: string; slug?: string; title?: string };
+}
+
+interface ItadPrice {
+  amount?: number;
+  currency?: string;
+}
+interface ItadDeal {
+  shop?: { id?: number; name?: string };
+  price?: ItadPrice;
+  regular?: ItadPrice;
+  cut?: number;
+  url?: string;
+  expiry?: string | null;
+}
+interface ItadDealItem {
+  id?: string;
+  slug?: string;
+  title?: string;
+  deal?: ItadDeal;
+}
+export interface ItadDealsResponse {
+  nextOffset?: number;
+  hasMore?: boolean;
+  list?: ItadDealItem[];
+}
+
+function itadMoney(p: ItadPrice | undefined): string | null {
+  if (!p || typeof p.amount !== "number") return null;
+  return p.currency ? `${p.amount.toFixed(2)} ${p.currency}` : p.amount.toFixed(2);
+}
+
+export function summarizeDeals(r: ItadDealsResponse): Record<string, unknown> {
+  const list = r.list ?? [];
+  return {
+    count: list.length,
+    has_more: r.hasMore ?? false,
+    next_offset: r.nextOffset ?? null,
+    deals: list.map((it) => {
+      const d = it.deal;
+      return {
+        title: it.title ?? null,
+        itad_id: it.id ?? null,
+        cut: d?.cut ?? 0,
+        price: itadMoney(d?.price),
+        regular: itadMoney(d?.regular),
+        shop: d?.shop?.name ?? null,
+        url: d?.url ?? null,
+        expiry: d?.expiry ?? null,
+      };
+    }),
+  };
+}
+
+interface ItadHistoryEntry {
+  timestamp?: string;
+  shop?: { id?: number; name?: string };
+  deal?: { price?: ItadPrice; regular?: ItadPrice; cut?: number };
+}
+// games/history/v2 returns a flat array of price-change entries.
+export type ItadHistoryResponse = ItadHistoryEntry[];
+
+export function summarizePriceHistory(
+  r: ItadHistoryResponse,
+  title: string | null,
+): Record<string, unknown> {
+  const entries = r ?? [];
+  const point = (e: ItadHistoryEntry): Record<string, unknown> => ({
+    date: e.timestamp ? e.timestamp.slice(0, 10) : null,
+    cut: e.deal?.cut ?? 0,
+    price: itadMoney(e.deal?.price),
+    shop: e.shop?.name ?? null,
+  });
+  // Track the all-time-low seen in this window in a single pass.
+  let lowAmount = Infinity;
+  let lowEntry: ItadHistoryEntry | null = null;
+  for (const e of entries) {
+    const amt = e.deal?.price?.amount;
+    if (typeof amt === "number" && amt < lowAmount) {
+      lowAmount = amt;
+      lowEntry = e;
+    }
+  }
+  return {
+    title,
+    count: entries.length,
+    lowest: lowEntry ? point(lowEntry) : null,
+    points: entries.map(point),
+  };
+}

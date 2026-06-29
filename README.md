@@ -39,28 +39,39 @@ credentials**; player tools need a free Steam Web API key.
 
 ## What it does
 
-| Tool                      | Key? | Purpose                                                           |
-| ------------------------- | ---- | ----------------------------------------------------------------- |
-| `search_games`            | –    | Find games by title → appid                                       |
-| `get_game`                | –    | Store details: price, genres, platforms, Metacritic, requirements |
-| `get_game_reviews`        | –    | Review summary + recent reviews                                   |
-| `get_specials`            | –    | Games currently discounted                                        |
-| `get_featured`            | –    | Featured sections (top sellers, new releases, …)                  |
-| `get_game_news`           | –    | Recent news / patch notes                                         |
-| `get_global_achievements` | –    | Global achievement unlock rates (rarity)                          |
-| `resolve_vanity_url`      | ✓    | Custom profile name → SteamID64                                   |
-| `get_player_summary`      | ✓    | Player public profile                                             |
-| `get_owned_games`         | ✓    | A player's games + playtime                                       |
-| `get_recently_played`     | ✓    | Games played in the last two weeks                                |
-| `get_player_achievements` | ✓    | A player's achievement progress in a game                         |
+Key: **–** no credentials · **K** Steam Web API key · **I** IsThereAnyDeal key.
 
-**Store vs. player.** Storefront data (`store.steampowered.com`) needs no key.
-Player data uses the official Web API (`api.steampowered.com`), which needs a free
-`STEAM_API_KEY` and a **public** target profile. Tools that need the key return a
-clear message when it is unset.
+| Tool                      | Key | Purpose                                                                            |
+| ------------------------- | --- | ---------------------------------------------------------------------------------- |
+| `search_games`            | –   | Find games by title → appid (with price)                                           |
+| `get_game`                | –   | Store details: price, genres, platforms, Metacritic, age rating, DLC, requirements |
+| `get_game_reviews`        | –   | Review summary + recent reviews                                                    |
+| `get_review_histogram`    | –   | Review trend over time (history + recent)                                          |
+| `get_prices`              | –   | Batch current price/discount for many appids                                       |
+| `get_specials`            | –   | Steam front-page discounts                                                         |
+| `get_featured`            | –   | Featured sections (top sellers, new releases, …)                                   |
+| `get_game_news`           | –   | Recent news / patch notes                                                          |
+| `get_global_achievements` | –   | Global achievement unlock rates (rarity)                                           |
+| `get_current_players`     | –   | Live concurrent player count                                                       |
+| `get_wishlist`            | –   | A player's wishlist appids (public profiles)                                       |
+| `get_game_achievements`   | K   | Full achievement list (names, descriptions) + rarity                               |
+| `resolve_vanity_url`      | K   | Custom profile name → SteamID64                                                    |
+| `get_player_summary`      | K   | Player public profile                                                              |
+| `get_owned_games`         | K   | A player's games + playtime                                                        |
+| `get_recently_played`     | K   | Games played in the last two weeks                                                 |
+| `get_player_achievements` | K   | A player's achievement progress in a game                                          |
+| `get_deals`               | I   | Catalog-wide current discounts (filter by `min_cut`)                               |
+| `get_price_history`       | I   | A game's price history + all-time low                                              |
+
+**Three tiers.** Storefront + keyless Web API tools (`store`/`api.steampowered.com`)
+need **no credentials**. Player tools need a free **`STEAM_API_KEY`** and a
+**public** profile. `get_deals` / `get_price_history` need a free
+**`ITAD_API_KEY`** ([IsThereAnyDeal](https://isthereanydeal.com/apps/)) — the
+catalog-wide discount/price-history features Steam's own APIs don't expose. Tools
+that need a key return a clear message when it is unset.
 
 > SteamDB is not used (no public API + scraping is disallowed). This product is
-> not affiliated with Valve or Steam.
+> not affiliated with Valve, Steam or IsThereAnyDeal.
 
 ## Develop
 

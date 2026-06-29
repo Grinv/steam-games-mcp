@@ -10,6 +10,8 @@
 const STORE = process.env.STEAM_STORE_BASE_URL ?? "https://store.steampowered.com";
 const API = process.env.STEAM_API_BASE_URL ?? "https://api.steampowered.com";
 const KEY = process.env.STEAM_API_KEY;
+const ITAD = process.env.ITAD_BASE_URL ?? "https://api.isthereanydeal.com";
+const ITAD_KEY = process.env.ITAD_API_KEY;
 const SPACING_MS = 400;
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -76,6 +78,18 @@ const checks = [
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
       const body = await res.json();
       if (!Array.isArray(body.response?.players)) throw new Error("missing response.players");
+    },
+  },
+  {
+    name: "itad deals/v2 (key)",
+    skip: ITAD_KEY ? undefined : "ITAD_API_KEY not set",
+    run: async () => {
+      const res = await fetch(`${ITAD}/deals/v2?key=${ITAD_KEY}&country=US&limit=1&shops=61`, {
+        headers: { Accept: "application/json" },
+      });
+      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+      const body = await res.json();
+      if (!Array.isArray(body.list)) throw new Error("missing `list` array");
     },
   },
 ];

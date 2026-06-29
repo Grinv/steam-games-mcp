@@ -19,6 +19,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   descriptions, hidden flag) merged with global unlock % (rarity). Requires a
   key (the schema endpoint needs one); `get_game` also now surfaces a keyless
   `achievements_highlighted` sample.
+- IsThereAnyDeal integration (optional `ITAD_API_KEY`): `get_deals` —
+  catalog-wide current discounts, biggest first, with a `min_cut` filter (e.g.
+  ">80% off"), scoped to Steam by default; and `get_price_history` — a game's
+  price history and all-time low by Steam appid. These cover the SteamDB-style
+  features the Steam APIs don't expose, without scraping.
 
 ### Changed
 

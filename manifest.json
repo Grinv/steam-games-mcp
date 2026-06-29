@@ -27,7 +27,8 @@
       "env": {
         "STEAM_API_KEY": "${user_config.steam_api_key}",
         "STEAM_COUNTRY": "${user_config.steam_country}",
-        "STEAM_LANGUAGE": "${user_config.steam_language}"
+        "STEAM_LANGUAGE": "${user_config.steam_language}",
+        "ITAD_API_KEY": "${user_config.itad_api_key}"
       }
     }
   },
@@ -51,7 +52,12 @@
     { "name": "get_player_summary", "description": "Player public profile (key)." },
     { "name": "get_owned_games", "description": "A player's games + playtime (key)." },
     { "name": "get_recently_played", "description": "Games played in the last 2 weeks (key)." },
-    { "name": "get_player_achievements", "description": "A player's achievements in a game (key)." }
+    {
+      "name": "get_player_achievements",
+      "description": "A player's achievements in a game (key)."
+    },
+    { "name": "get_deals", "description": "Catalog-wide current deals by discount (ITAD key)." },
+    { "name": "get_price_history", "description": "Price history & all-time low (ITAD key)." }
   ],
   "user_config": {
     "steam_api_key": {
@@ -74,6 +80,13 @@
       "description": "Optional. Store language, e.g. 'english', 'russian', 'german'. Defaults to english.",
       "required": false,
       "default": "english"
+    },
+    "itad_api_key": {
+      "type": "string",
+      "title": "IsThereAnyDeal API Key",
+      "description": "Optional. Free key from https://isthereanydeal.com/apps/ — enables catalog-wide deals (get_deals) and price history (get_price_history).",
+      "required": false,
+      "sensitive": true
     }
   }
 }
