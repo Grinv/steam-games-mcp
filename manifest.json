@@ -37,6 +37,7 @@
     { "name": "get_game", "description": "Game store details (price, genres, Metacritic, …)." },
     { "name": "get_game_reviews", "description": "Review summary + recent reviews." },
     { "name": "get_review_histogram", "description": "Review trend over time (history + recent)." },
+    { "name": "get_prices", "description": "Batch current price/discount for many appids." },
     { "name": "get_specials", "description": "Games currently on discount." },
     { "name": "get_featured", "description": "Featured store sections (top sellers, new, …)." },
     { "name": "get_game_news", "description": "Recent news / patch notes for a game." },

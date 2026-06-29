@@ -134,7 +134,7 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       description:
         "List games currently on special (discounted) on the Steam store front page, with the " +
         "discount % and original/final price. For ALL catalog discounts (not just the front page), " +
-        "use get_deals. No API key required.",
+        "use discover_deals. No API key required.",
       inputSchema: { country, language },
       annotations: READ_ONLY,
     },
