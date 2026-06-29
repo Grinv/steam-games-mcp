@@ -58,6 +58,10 @@
     },
     { "name": "get_deals", "description": "Catalog-wide current deals by discount (ITAD key)." },
     { "name": "get_game_info", "description": "Reviews, players, appid in one call (ITAD key)." },
+    {
+      "name": "get_current_prices",
+      "description": "Batch current prices for a list of appids (ITAD key)."
+    },
     { "name": "get_price_history", "description": "Price history & all-time low (ITAD key)." }
   ],
   "user_config": {

@@ -197,7 +197,25 @@ const ITAD_HISTORY = [
   },
 ];
 
+const ITAD_BULK = { "app/620": "uuid-1", "app/999": null };
+const ITAD_PRICES = [
+  {
+    id: "uuid-1",
+    deals: [
+      {
+        shop: { id: 61, name: "Steam" },
+        price: { amount: 1.99, currency: "USD" },
+        regular: { amount: 9.99, currency: "USD" },
+        cut: 80,
+        historyLow: { amount: 0.99, currency: "USD" },
+      },
+    ],
+  },
+];
+
 function router(url: string) {
+  if (url.includes("/lookup/id/shop/")) return jsonResponse(ITAD_BULK);
+  if (url.includes("/games/prices/v2")) return jsonResponse(ITAD_PRICES);
   if (url.includes("/deals/v2")) return jsonResponse(ITAD_DEALS);
   if (url.includes("/games/lookup/")) return jsonResponse(ITAD_LOOKUP);
   if (url.includes("/games/info/")) return jsonResponse(ITAD_INFO);
@@ -732,6 +750,63 @@ test("get_price_history forwards a since override", async () => {
     });
     const u = mock.calls.find((c) => c.url.includes("/games/history/"))!.url;
     assert.match(u, /since=2020-01-01/);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_current_prices batches lookup + prices (on_sale + not-on-sale + unmapped)", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer(ITAD_ENV);
+  try {
+    const res = await client.callTool({
+      name: "get_current_prices",
+      arguments: { appids: [620, 999] },
+    });
+    const s = res.structuredContent as {
+      count: number;
+      prices: {
+        appid: number;
+        available: boolean;
+        on_sale?: boolean;
+        cut?: number;
+        price?: string;
+      }[];
+    };
+    assert.equal(s.count, 2);
+    const p620 = s.prices.find((p) => p.appid === 620)!;
+    assert.equal(p620.on_sale, true);
+    assert.equal(p620.cut, 80);
+    assert.equal(p620.price, "1.99 USD");
+    // 999 maps to null in the bulk lookup → unavailable on ITAD.
+    assert.equal(s.prices.find((p) => p.appid === 999)!.available, false);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_owned_games reports found:false for a private profile", async () => {
+  const restore = installFetch(
+    mockFetch((url) =>
+      url.includes("GetOwnedGames") ? jsonResponse({ response: {} }) : jsonResponse({}),
+    ),
+  );
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as {
+      found: boolean;
+      reason: string;
+      game_count: number | null;
+    };
+    assert.equal(s.found, false);
+    assert.equal(s.game_count, null);
+    assert.match(s.reason, /private/i);
   } finally {
     restore();
     await close();

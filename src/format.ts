@@ -364,12 +364,24 @@ export interface OwnedGamesResponse {
   response?: { game_count?: number; games?: OwnedGame[] };
 }
 
+// Steam returns an empty `response: {}` (no game_count) when the profile or its
+// game-details are private — distinct from a public account with 0 games.
+const PRIVATE_REASON =
+  "Profile or game-details are private. Ask the owner to set Steam → Privacy → " +
+  "Game details = Public, or this data can't be read.";
+
+function isPrivate(r: OwnedGamesResponse): boolean {
+  return r.response?.game_count === undefined && r.response?.games === undefined;
+}
+
 // Sort by playtime desc and cap; a big library would otherwise blow the budget.
 export function summarizeOwnedGames(r: OwnedGamesResponse, max = 50): Record<string, unknown> {
+  if (isPrivate(r)) return { found: false, reason: PRIVATE_REASON, game_count: null, games: [] };
   const games = (r.response?.games ?? [])
     .slice()
     .sort((a, b) => (b.playtime_forever ?? 0) - (a.playtime_forever ?? 0));
   return {
+    found: true,
     game_count: r.response?.game_count ?? games.length,
     returned: Math.min(games.length, max),
     games: games.slice(0, max).map((g) => ({
@@ -382,7 +394,9 @@ export function summarizeOwnedGames(r: OwnedGamesResponse, max = 50): Record<str
 }
 
 export function summarizeRecentlyPlayed(r: OwnedGamesResponse): Record<string, unknown> {
+  if (isPrivate(r)) return { found: false, reason: PRIVATE_REASON, total: 0, games: [] };
   return {
+    found: true,
     total: r.response?.game_count ?? r.response?.games?.length ?? 0,
     games: (r.response?.games ?? []).map((g) => ({
       appid: g.appid,
@@ -681,6 +695,50 @@ export function summarizeDeals(r: ItadDealsResponse): Record<string, unknown> {
         shop: d?.shop?.name ?? null,
         url: d?.url ?? null,
         expiry: d?.expiry ?? null,
+      };
+    }),
+  };
+}
+
+// ---- IsThereAnyDeal: batch current prices for a list of Steam appids ---------
+
+export type ItadBulkLookup = Record<string, string | null>;
+interface ItadPricesEntry {
+  id?: string;
+  deals?: ItadDeal[];
+}
+export type ItadPricesResponse = ItadPricesEntry[];
+
+// One row per requested appid. `lookup` maps "app/<appid>" → ITAD id; `prices`
+// is the batch games/prices result (only games with a current deal appear, so a
+// missing entry means not on sale). Steam-scoped, so deals[0] is the Steam deal.
+export function summarizeCurrentPrices(
+  appids: number[],
+  lookup: ItadBulkLookup,
+  prices: ItadPricesResponse,
+): Record<string, unknown> {
+  const byId = new Map<string, ItadPricesEntry>();
+  for (const e of prices) if (e.id) byId.set(e.id, e);
+  return {
+    count: appids.length,
+    prices: appids.map((appid) => {
+      const id = lookup[`app/${appid}`];
+      if (!id) return { appid, available: false };
+      const deal = byId.get(id)?.deals?.[0];
+      if (!deal) return { appid, available: true, on_sale: false };
+      const atLow =
+        typeof deal.price?.amount === "number" &&
+        typeof deal.historyLow?.amount === "number" &&
+        deal.price.amount <= deal.historyLow.amount;
+      return {
+        appid,
+        available: true,
+        on_sale: (deal.cut ?? 0) > 0,
+        cut: deal.cut ?? 0,
+        price: itadMoney(deal.price),
+        regular: itadMoney(deal.regular),
+        historic_low: itadMoney(deal.historyLow ?? undefined),
+        is_historic_low: atLow,
       };
     }),
   };

@@ -105,6 +105,32 @@ export function registerItadTools(server: McpServer, itad: ItadClient): void {
   );
 
   server.registerTool(
+    "get_current_prices",
+    {
+      title: "Get current prices for many games (batch)",
+      description:
+        "Get the current Steam price/discount for a LIST of games by appid in one batch (two ITAD " +
+        "calls total, regardless of list size). Each row: cut, price, regular, historic_low, and " +
+        "on_sale (false when not currently discounted). Use for 'price-check my wishlist/library'. " +
+        "Requires ITAD_API_KEY. (For Steam-native batch pricing without a key, use get_prices.)",
+      inputSchema: {
+        appids: z
+          .array(z.number().int().positive())
+          .min(1)
+          .max(200)
+          .describe("Steam appids to price (1-200)."),
+        country: z
+          .string()
+          .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code.")
+          .describe("Country for prices; overrides STEAM_COUNTRY.")
+          .optional(),
+      },
+      annotations: READ_ONLY,
+    },
+    ({ appids, country }) => requireItad(() => itad.getCurrentPrices(appids, country)),
+  );
+
+  server.registerTool(
     "get_price_history",
     {
       title: "Get price history & all-time low",

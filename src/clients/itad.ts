@@ -9,13 +9,16 @@ import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
 import { ApiError } from "../lib/errors.js";
 import {
+  summarizeCurrentPrices,
   summarizeDeals,
   summarizeGameInfo,
   summarizePriceHistory,
+  type ItadBulkLookup,
   type ItadDealsResponse,
   type ItadGameInfoResponse,
   type ItadHistoryResponse,
   type ItadLookupResponse,
+  type ItadPricesResponse,
 } from "../format.js";
 import type { Logger } from "../lib/logger.js";
 import type { Config } from "../config.js";
@@ -60,6 +63,35 @@ export class ItadClient {
 
   #get<T>(path: string, query: Query): Promise<T> {
     return this.#http.getJson<T>(path, { query: { key: this.#key, ...query } });
+  }
+
+  // POST with a JSON body (ITAD's batch endpoints take an array of ids).
+  #post<T>(path: string, body: unknown, query: Query = {}): Promise<T> {
+    return this.#http.requestJson<T>(path, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+      query: { key: this.#key, ...query },
+    });
+  }
+
+  // Batch current Steam prices for a list of appids in two calls: a bulk
+  // appid→ITAD-id lookup, then a batch prices request. Games not on sale won't
+  // have a deal entry → reported as on_sale:false. Not cached (live prices).
+  async getCurrentPrices(appids: number[], country?: string): Promise<Record<string, unknown>> {
+    const cc = country ?? this.#country;
+    const lookup = await this.#post<ItadBulkLookup>(
+      `lookup/id/shop/${STEAM_SHOP_ID}/v1`,
+      appids.map((a) => `app/${a}`),
+    );
+    const ids = Object.values(lookup).filter((v): v is string => Boolean(v));
+    const prices = ids.length
+      ? await this.#post<ItadPricesResponse>("games/prices/v2", ids, {
+          country: cc,
+          shops: STEAM_SHOP_ID,
+        })
+      : [];
+    return summarizeCurrentPrices(appids, lookup, prices);
   }
 
   // Current deals across the catalog, biggest discount first. Scoped to Steam by

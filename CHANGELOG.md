@@ -29,6 +29,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   descriptions, hidden flag) merged with global unlock % (rarity). Requires a
   key (the schema endpoint needs one); `get_game` also now surfaces a keyless
   `achievements_highlighted` sample.
+- `get_current_prices` (ITAD) — batch current Steam price/discount for a LIST of
+  appids in two calls total (bulk appid→id lookup + batch prices), with
+  historic_low and on_sale per game. The array-input batch tool.
+- `get_owned_games` / `get_recently_played` now return `found: false` with a
+  clear reason when the profile/game-details are private (instead of a
+  misleading empty list); `get_player_summary` already exposes `visibility`.
 - `get_game_info` (ITAD) — one call returns the Steam appid, Steam review score
   (%) + count, Metacritic, current players (recent/peak), tags, developers and
   release date. Bridges `get_deals` → review-quality filtering by `itad_id`.
