@@ -35,6 +35,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `get_owned_games` / `get_recently_played` now return `found: false` with a
   clear reason when the profile/game-details are private (instead of a
   misleading empty list); `get_player_summary` already exposes `visibility`.
+- `get_player_achievements` now distinguishes a private profile from a game that
+  simply has no achievements: on failure it checks the game schema and reports a
+  precise reason (only on the failure path — the happy path stays one call).
 - `get_game_info` (ITAD) — one call returns the Steam appid, Steam review score
   (%) + count, Metacritic, current players (recent/peak), tags, developers and
   release date. Bridges `get_deals` → review-quality filtering by `itad_id`.

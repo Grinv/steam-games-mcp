@@ -7,6 +7,7 @@
 import { HttpClient } from "../lib/http.js";
 import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
+import { ApiError } from "../lib/errors.js";
 import {
   summarizeCurrentPlayers,
   summarizeGameSchema,
@@ -32,6 +33,10 @@ import type { Logger } from "../lib/logger.js";
 import type { Config } from "../config.js";
 
 type Query = Record<string, string | number | boolean | undefined>;
+
+const PRIVATE_PROFILE_REASON =
+  "Profile or game-details are private. Ask the owner to set Steam → Privacy → " +
+  "Game details = Public.";
 
 export class SteamWebClient {
   readonly #http: HttpClient;
@@ -86,11 +91,52 @@ export class SteamWebClient {
   }
 
   async getPlayerAchievements(steamid: string, appid: number): Promise<Record<string, unknown>> {
-    const res = await this.#get<PlayerAchievementsResponse>(
-      "ISteamUserStats/GetPlayerAchievements/v1/",
-      { steamid, appid, l: this.#l },
-    );
-    return summarizePlayerAchievements(res);
+    try {
+      const res = await this.#get<PlayerAchievementsResponse>(
+        "ISteamUserStats/GetPlayerAchievements/v1/",
+        { steamid, appid, l: this.#l },
+      );
+      if (res.playerstats?.success) return summarizePlayerAchievements(res);
+      // 200 but success:false — disambiguate private vs no-achievements.
+      return this.#explainNoPlayerAchievements(appid, res.playerstats?.error);
+    } catch (e) {
+      // Steam answers 403 for a private profile, 400 for an app with no stats /
+      // not owned. Turn both into a clear, actionable reason.
+      if (e instanceof ApiError && (e.code === "forbidden" || e.code === "unauthorized")) {
+        return { found: false, reason: PRIVATE_PROFILE_REASON };
+      }
+      if (e instanceof ApiError && (e.code === "bad_request" || e.code === "not_found")) {
+        return this.#explainNoPlayerAchievements(appid);
+      }
+      throw e;
+    }
+  }
+
+  // On failure, check the game's schema: if it HAS achievements the player data
+  // is hidden (private/not owned); if it has none, the game simply has no
+  // achievements. Only runs on the failure path, so the happy path stays 1 call.
+  async #explainNoPlayerAchievements(
+    appid: number,
+    apiError?: string,
+  ): Promise<Record<string, unknown>> {
+    if (apiError && /not public|private/i.test(apiError)) {
+      return { found: false, reason: PRIVATE_PROFILE_REASON };
+    }
+    try {
+      const schema = await this.#get<GameSchemaResponse>("ISteamUserStats/GetSchemaForGame/v2/", {
+        appid,
+        l: this.#l,
+      });
+      const has = (schema.game?.availableGameStats?.achievements?.length ?? 0) > 0;
+      return {
+        found: false,
+        reason: has
+          ? "This game has achievements, but the player's data is hidden (private game-details, or they don't own it)."
+          : "This game has no achievements.",
+      };
+    } catch {
+      return { found: false, reason: apiError || "Achievements unavailable." };
+    }
   }
 
   async resolveVanityUrl(vanity: string): Promise<Record<string, unknown>> {

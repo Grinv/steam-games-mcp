@@ -812,3 +812,78 @@ test("get_owned_games reports found:false for a private profile", async () => {
     await close();
   }
 });
+
+test("get_player_achievements: private profile (403) → clear private reason", async () => {
+  const restore = installFetch(
+    mockFetch((url) =>
+      url.includes("GetPlayerAchievements")
+        ? jsonResponse(
+            { playerstats: { error: "Profile is not public", success: false } },
+            { status: 403 },
+          )
+        : jsonResponse({}),
+    ),
+  );
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 620 },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /private/i);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_player_achievements: success:false + game has no achievements", async () => {
+  const restore = installFetch(
+    mockFetch((url) => {
+      if (url.includes("GetPlayerAchievements"))
+        return jsonResponse({ playerstats: { success: false } });
+      if (url.includes("GetSchemaForGame"))
+        return jsonResponse({ game: { availableGameStats: { achievements: [] } } });
+      return jsonResponse({});
+    }),
+  );
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 620 },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /no achievements/i);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_player_achievements: success:false but game HAS achievements → hidden/private", async () => {
+  const restore = installFetch(
+    mockFetch((url) => {
+      if (url.includes("GetPlayerAchievements"))
+        return jsonResponse({ playerstats: { success: false } });
+      if (url.includes("GetSchemaForGame")) return jsonResponse(SCHEMA); // 2 achievements
+      return jsonResponse({});
+    }),
+  );
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 620 },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /hidden|private/i);
+  } finally {
+    restore();
+    await close();
+  }
+});
