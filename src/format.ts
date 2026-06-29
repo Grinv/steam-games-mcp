@@ -56,7 +56,7 @@ export interface StoreApp {
   pc_requirements?: { minimum?: string; recommended?: string } | [];
   required_age?: number | string;
   dlc?: number[];
-  achievements?: { total?: number };
+  achievements?: { total?: number; highlighted?: { name?: string; path?: string }[] };
   controller_support?: string;
   content_descriptors?: { ids?: number[]; notes?: string | null };
   fullgame?: { appid?: string; name?: string };
@@ -110,6 +110,10 @@ export function detailApp(a: StoreApp): Record<string, unknown> {
     required_age: a.required_age ?? null,
     controller_support: a.controller_support ?? null,
     achievements_total: a.achievements?.total ?? null,
+    // A keyless sample of named achievements; use get_game_achievements for all.
+    achievements_highlighted: (a.achievements?.highlighted ?? [])
+      .map((h) => h.name)
+      .filter((n): n is string => Boolean(n)),
     supported_languages: stripHtml(a.supported_languages),
     dlc: a.dlc ?? [],
     demos: (a.demos ?? []).map((d) => d.appid).filter(Boolean),
@@ -440,6 +444,52 @@ export function summarizeGlobalAchievements(
       name: x.name,
       percent: typeof x.percent === "string" ? Number(x.percent) : (x.percent ?? null),
     })),
+  };
+}
+
+// ---- Web API: full achievement schema (key) + global rarity merge -----------
+
+export interface GameSchemaResponse {
+  game?: {
+    gameName?: string;
+    availableGameStats?: {
+      achievements?: {
+        name?: string; // internal apiname
+        displayName?: string;
+        description?: string;
+        hidden?: number;
+        icon?: string;
+      }[];
+    };
+  };
+}
+
+// Merge the full schema (names/descriptions/hidden) with global unlock % (keyed
+// by the internal apiname), so each achievement carries how rare it is.
+export function summarizeGameSchema(
+  schema: GameSchemaResponse,
+  global: GlobalAchievementsResponse,
+): Record<string, unknown> {
+  const pct = new Map<string, number>();
+  for (const x of global.achievementpercentages?.achievements ?? []) {
+    if (x.name != null) {
+      pct.set(x.name, typeof x.percent === "string" ? Number(x.percent) : (x.percent ?? 0));
+    }
+  }
+  const list = schema.game?.availableGameStats?.achievements ?? [];
+  return {
+    game: schema.game?.gameName ?? null,
+    total: list.length,
+    achievements: list.map((a) => {
+      const p = a.name != null ? pct.get(a.name) : undefined;
+      return {
+        api_name: a.name,
+        name: a.displayName || a.name || null,
+        description: a.description || null,
+        hidden: a.hidden === 1,
+        global_unlock_pct: typeof p === "number" ? Math.round(p * 10) / 10 : null,
+      };
+    }),
   };
 }
 

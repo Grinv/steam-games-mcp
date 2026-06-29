@@ -41,6 +41,10 @@
     { "name": "get_featured", "description": "Featured store sections (top sellers, new, …)." },
     { "name": "get_game_news", "description": "Recent news / patch notes for a game." },
     { "name": "get_global_achievements", "description": "Global achievement unlock rates." },
+    {
+      "name": "get_game_achievements",
+      "description": "Full achievement list w/ names + rarity (key)."
+    },
     { "name": "get_current_players", "description": "Live concurrent player count." },
     { "name": "get_wishlist", "description": "A player's wishlist appids (public profiles)." },
     { "name": "resolve_vanity_url", "description": "Vanity profile name → SteamID64 (key)." },

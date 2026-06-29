@@ -101,6 +101,21 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
   // ---- player data (key required) -------------------------------------------
 
   server.registerTool(
+    "get_game_achievements",
+    {
+      title: "Get a game's full achievement list",
+      description:
+        "List ALL achievements of a game by appid with their names, descriptions, hidden flag and " +
+        "global unlock % (rarity). Requires STEAM_API_KEY (the achievement schema needs a key). " +
+        "For just the rarity by internal id without a key, use get_global_achievements; for a few " +
+        "named highlights, see get_game's achievements_highlighted. Get the appid from search_games.",
+      inputSchema: { appid },
+      annotations: READ_ONLY,
+    },
+    ({ appid: id }) => requireKey(() => web.getGameAchievements(id)),
+  );
+
+  server.registerTool(
     "resolve_vanity_url",
     {
       title: "Resolve vanity URL to SteamID",

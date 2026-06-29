@@ -9,6 +9,7 @@ import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
 import {
   summarizeCurrentPlayers,
+  summarizeGameSchema,
   summarizeGlobalAchievements,
   summarizeNews,
   summarizeOwnedGames,
@@ -18,6 +19,7 @@ import {
   summarizeVanity,
   summarizeWishlist,
   type CurrentPlayersResponse,
+  type GameSchemaResponse,
   type GlobalAchievementsResponse,
   type NewsResponse,
   type OwnedGamesResponse,
@@ -132,5 +134,23 @@ export class SteamWebClient {
   async getWishlist(steamid: string): Promise<Record<string, unknown>> {
     const res = await this.#get<WishlistResponse>("IWishlistService/GetWishlist/v1/", { steamid });
     return summarizeWishlist(res);
+  }
+
+  // Full achievement list for a game (GetSchemaForGame needs a key), merged with
+  // the keyless global unlock % so each achievement carries its rarity. Cached.
+  async getGameAchievements(appid: number): Promise<Record<string, unknown>> {
+    return this.#cache.wrapStaleOnError(`schema:${appid}:${this.#l}`, async () => {
+      const [schema, global] = await Promise.all([
+        this.#get<GameSchemaResponse>("ISteamUserStats/GetSchemaForGame/v2/", {
+          appid,
+          l: this.#l,
+        }),
+        this.#get<GlobalAchievementsResponse>(
+          "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
+          { gameid: appid },
+        ),
+      ]);
+      return summarizeGameSchema(schema, global);
+    });
   }
 }

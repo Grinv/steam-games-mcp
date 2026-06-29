@@ -15,6 +15,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (no key; returns found:false when the wishlist/profile is private).
 - `get_prices` — batch current price + discount for many appids in one call
   (no key); efficient for checking a whole wishlist for deals.
+- `get_game_achievements` — the full achievement list for a game (names,
+  descriptions, hidden flag) merged with global unlock % (rarity). Requires a
+  key (the schema endpoint needs one); `get_game` also now surfaces a keyless
+  `achievements_highlighted` sample.
 
 ### Changed
 

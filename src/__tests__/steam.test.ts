@@ -32,7 +32,7 @@ const APP = {
   publishers: ["Valve"],
   recommendations: { total: 1000 },
   controller_support: "full",
-  achievements: { total: 51 },
+  achievements: { total: 51, highlighted: [{ name: "Wake Up Call", path: "x.jpg" }] },
   dlc: [12345],
   supported_languages: "English<strong>*</strong>, French",
   content_descriptors: { ids: [2, 5], notes: null },
@@ -79,6 +79,17 @@ const NEWS = {
   },
 };
 const GLOBAL = { achievementpercentages: { achievements: [{ name: "ACH_X", percent: "74.2" }] } };
+const SCHEMA = {
+  game: {
+    gameName: "Portal 2",
+    availableGameStats: {
+      achievements: [
+        { name: "ACH_X", displayName: "Wake Up Call", description: "Survive.", hidden: 0 },
+        { name: "ACH_Y", displayName: "Hidden One", description: "", hidden: 1 },
+      ],
+    },
+  },
+};
 const PLAYERS = {
   response: {
     players: [
@@ -140,6 +151,7 @@ function router(url: string) {
   if (url.includes("/appreviews/")) return jsonResponse(REVIEWS);
   if (url.includes("/api/featuredcategories")) return jsonResponse(FEATURED);
   if (url.includes("GetNewsForApp")) return jsonResponse(NEWS);
+  if (url.includes("GetSchemaForGame")) return jsonResponse(SCHEMA);
   if (url.includes("GetGlobalAchievementPercentagesForApp")) return jsonResponse(GLOBAL);
   if (url.includes("GetNumberOfCurrentPlayers")) return jsonResponse(CURRENT_PLAYERS);
   if (url.includes("GetWishlist")) return jsonResponse(WISHLIST);
@@ -196,6 +208,7 @@ test("get_game shapes price, platforms and metacritic", async () => {
       genres: string[];
       controller_support: string;
       achievements_total: number;
+      achievements_highlighted: string[];
       dlc: number[];
       supported_languages: string;
       content_descriptors: { ids: number[] };
@@ -208,6 +221,7 @@ test("get_game shapes price, platforms and metacritic", async () => {
     assert.deepEqual(s.genres, ["Action"]);
     assert.equal(s.controller_support, "full");
     assert.equal(s.achievements_total, 51);
+    assert.deepEqual(s.achievements_highlighted, ["Wake Up Call"]);
     assert.deepEqual(s.dlc, [12345]);
     assert.equal(s.supported_languages, "English * , French"); // HTML stripped
     assert.deepEqual(s.content_descriptors.ids, [2, 5]);
@@ -368,6 +382,36 @@ test("resolve_vanity_url returns the steamid", async () => {
     assert.ok(mock.calls.some((c) => c.url.includes("key=test-key")));
   } finally {
     restore();
+    await close();
+  }
+});
+
+test("get_game_achievements merges schema names with global rarity (needs key)", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
+    const s = res.structuredContent as {
+      total: number;
+      achievements: { name: string; hidden: boolean; global_unlock_pct: number | null }[];
+    };
+    assert.equal(s.total, 2);
+    assert.equal(s.achievements[0]!.name, "Wake Up Call");
+    assert.equal(s.achievements[0]!.global_unlock_pct, 74.2); // merged from global
+    assert.equal(s.achievements[1]!.hidden, true);
+    assert.equal(s.achievements[1]!.global_unlock_pct, null); // no global entry
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_game_achievements requires a key", async () => {
+  const { client, close } = await connectServer({});
+  try {
+    const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
+    assert.equal(res.isError, true);
+  } finally {
     await close();
   }
 });
