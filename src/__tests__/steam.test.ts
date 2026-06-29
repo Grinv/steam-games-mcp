@@ -595,3 +595,55 @@ test("ITAD tools error clearly without ITAD_API_KEY", async () => {
     await close();
   }
 });
+
+test("search_games forwards per-call country/language overrides", async () => {
+  const mock = mockFetch(router);
+  const restore = installFetch(mock);
+  const { client, close } = await connectServer(ENV);
+  try {
+    await client.callTool({
+      name: "search_games",
+      arguments: { term: "portal", country: "RU", language: "russian" },
+    });
+    const u = mock.calls.find((c) => c.url.includes("/api/storesearch"))!.url;
+    assert.match(u, /cc=RU/);
+    assert.match(u, /l=russian/);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_deals forwards sort and applies client-side max_price filter", async () => {
+  const mock = mockFetch(router);
+  const restore = installFetch(mock);
+  const { client, close } = await connectServer(ITAD_ENV);
+  try {
+    // The only mock deal is $1.99; max_price 1 should filter it out.
+    const res = await client.callTool({
+      name: "get_deals",
+      arguments: { sort: "price", max_price: 1 },
+    });
+    const s = res.structuredContent as { count: number };
+    assert.equal(s.count, 0);
+    const u = mock.calls.find((c) => c.url.includes("/deals/v2"))!.url;
+    assert.match(u, /sort=price/);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_price_history forwards a country override", async () => {
+  const mock = mockFetch(router);
+  const restore = installFetch(mock);
+  const { client, close } = await connectServer(ITAD_ENV);
+  try {
+    await client.callTool({ name: "get_price_history", arguments: { appid: 620, country: "DE" } });
+    const u = mock.calls.find((c) => c.url.includes("/games/history/"))!.url;
+    assert.match(u, /country=DE/);
+  } finally {
+    restore();
+    await close();
+  }
+});

@@ -6,6 +6,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Per-call overrides for the server defaults: `country` (and `language` where it
+  applies) on `search_games`, `get_game`, `get_specials`, `get_featured`,
+  `get_prices`, `get_game_achievements`, `get_deals`, `get_price_history` — so an
+  agent can e.g. compare prices across regions in one conversation. Unset → the
+  configured `STEAM_COUNTRY` / `STEAM_LANGUAGE` default applies.
+- `get_game_reviews` gains `review_language` and `type` (positive/negative);
+  `get_deals` gains `sort` and a client-side `max_price` filter.
+
 ### Added
 
 - `get_current_players` — live concurrent player count for a game (no key).

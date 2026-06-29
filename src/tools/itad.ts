@@ -39,6 +39,20 @@ export function registerItadTools(server: McpServer, itad: ItadClient): void {
           .max(100)
           .describe("Minimum discount percent, e.g. 80 means only deals of 80%+ off.")
           .optional(),
+        max_price: z
+          .number()
+          .min(0)
+          .describe(
+            "Only deals at or below this price. Note: applied client-side over the returned page, " +
+              "so combine with limit/offset for wide sweeps.",
+          )
+          .optional(),
+        sort: z
+          .enum(["-cut", "cut", "price", "-price", "-time", "time"])
+          .describe(
+            "Sort order. Default '-cut' (biggest discount first); 'price' = cheapest first.",
+          )
+          .optional(),
         steam_only: z
           .boolean()
           .describe("Limit to the Steam store (default true). Set false to include all stores.")
@@ -51,6 +65,11 @@ export function registerItadTools(server: McpServer, itad: ItadClient): void {
           .describe("Max deals to return (default 50).")
           .optional(),
         offset: z.number().int().min(0).describe("Pagination offset.").optional(),
+        country: z
+          .string()
+          .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code.")
+          .describe("Country for prices; overrides STEAM_COUNTRY.")
+          .optional(),
       },
       annotations: READ_ONLY,
     },
@@ -66,9 +85,14 @@ export function registerItadTools(server: McpServer, itad: ItadClient): void {
         "the 'is this discount actually good' check. Get the appid from search_games. Requires ITAD_API_KEY.",
       inputSchema: {
         appid: z.number().int().positive().describe("Steam application id (appid)."),
+        country: z
+          .string()
+          .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code.")
+          .describe("Country for prices; overrides STEAM_COUNTRY.")
+          .optional(),
       },
       annotations: READ_ONLY,
     },
-    ({ appid }) => requireItad(() => itad.getPriceHistory(appid)),
+    ({ appid, country }) => requireItad(() => itad.getPriceHistory(appid, country)),
   );
 }

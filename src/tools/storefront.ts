@@ -14,6 +14,17 @@ const appid = z
   .int()
   .positive()
   .describe("Steam application id (appid). Get it from search_games.");
+// Per-call overrides of the server defaults (STEAM_COUNTRY / STEAM_LANGUAGE).
+const country = z
+  .string()
+  .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code, e.g. US, RU, DE.")
+  .describe("Country (cc) for prices/currency; overrides STEAM_COUNTRY for this call.")
+  .optional();
+const language = z
+  .string()
+  .min(2)
+  .describe("Store language (e.g. english, russian); overrides STEAM_LANGUAGE for this call.")
+  .optional();
 
 const reply = (fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> =>
   guard(async () => jsonResult(await fn()));
@@ -25,11 +36,15 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Search games",
       description:
         "Search the Steam store by title; returns matches with their appid (needed by the other " +
-        "game tools), Metacritic score and platforms. No API key required.",
-      inputSchema: { term: z.string().min(1).describe("Game title to search for.") },
+        "game tools), price, Metacritic score and platforms. No API key required.",
+      inputSchema: {
+        term: z.string().min(1).describe("Game title to search for."),
+        country,
+        language,
+      },
       annotations: READ_ONLY,
     },
-    ({ term }) => reply(() => store.searchGames(term)),
+    ({ term, country: cc, language: l }) => reply(() => store.searchGames(term, cc, l)),
   );
 
   server.registerTool(
@@ -38,12 +53,12 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Get game details",
       description:
         "Get full store details for one game by appid: description, price/discount, genres, " +
-        "platforms, release date, developers/publishers, Metacritic and PC requirements. " +
-        "Get the appid from search_games. No API key required.",
-      inputSchema: { appid },
+        "platforms, release date, developers/publishers, Metacritic, age rating, DLC and PC " +
+        "requirements. Get the appid from search_games. No API key required.",
+      inputSchema: { appid, country, language },
       annotations: READ_ONLY,
     },
-    ({ appid: id }) => reply(() => store.getGame(id)),
+    ({ appid: id, country: cc, language: l }) => reply(() => store.getGame(id, cc, l)),
   );
 
   server.registerTool(
@@ -62,10 +77,19 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
           .max(20)
           .describe("How many recent reviews (1-20).")
           .optional(),
+        review_language: z
+          .string()
+          .describe("Filter reviews by language, e.g. 'english'. Default 'all'.")
+          .optional(),
+        type: z
+          .enum(["all", "positive", "negative"])
+          .describe("Only positive or negative reviews. Default 'all'.")
+          .optional(),
       },
       annotations: READ_ONLY,
     },
-    ({ appid: id, limit }) => reply(() => store.getReviews(id, limit ?? 5)),
+    ({ appid: id, limit, review_language, type }) =>
+      reply(() => store.getReviews(id, limit ?? 5, review_language ?? "all", type ?? "all")),
   );
 
   server.registerTool(
@@ -96,10 +120,11 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
           .min(1)
           .max(500)
           .describe("Steam appids to price (1-500)."),
+        country,
       },
       annotations: READ_ONLY,
     },
-    ({ appids }) => reply(() => store.getPrices(appids)),
+    ({ appids, country: cc }) => reply(() => store.getPrices(appids, cc)),
   );
 
   server.registerTool(
@@ -107,12 +132,13 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
     {
       title: "Get current discounts",
       description:
-        "List games currently on special (discounted) on the Steam store, with the discount % and " +
-        "original/final price. Good for 'what's on sale right now'. No API key required.",
-      inputSchema: {},
+        "List games currently on special (discounted) on the Steam store front page, with the " +
+        "discount % and original/final price. For ALL catalog discounts (not just the front page), " +
+        "use get_deals. No API key required.",
+      inputSchema: { country, language },
       annotations: READ_ONLY,
     },
-    () => reply(() => store.getSpecials()),
+    ({ country: cc, language: l }) => reply(() => store.getSpecials(cc, l)),
   );
 
   server.registerTool(
@@ -122,9 +148,9 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       description:
         "Get the Steam store's featured sections: specials, top sellers, new releases and coming " +
         "soon (each a list of games with appid and price). No API key required.",
-      inputSchema: {},
+      inputSchema: { country, language },
       annotations: READ_ONLY,
     },
-    () => reply(() => store.getFeatured()),
+    ({ country: cc, language: l }) => reply(() => store.getFeatured(cc, l)),
   );
 }

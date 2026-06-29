@@ -109,10 +109,17 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
         "global unlock % (rarity). Requires STEAM_API_KEY (the achievement schema needs a key). " +
         "For just the rarity by internal id without a key, use get_global_achievements; for a few " +
         "named highlights, see get_game's achievements_highlighted. Get the appid from search_games.",
-      inputSchema: { appid },
+      inputSchema: {
+        appid,
+        language: z
+          .string()
+          .min(2)
+          .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
+          .optional(),
+      },
       annotations: READ_ONLY,
     },
-    ({ appid: id }) => requireKey(() => web.getGameAchievements(id)),
+    ({ appid: id, language }) => requireKey(() => web.getGameAchievements(id, language)),
   );
 
   server.registerTool(

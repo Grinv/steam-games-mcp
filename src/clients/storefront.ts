@@ -47,17 +47,29 @@ export class StorefrontClient {
     this.#cache = new TtlCache(config.cacheTtlMs);
   }
 
-  async searchGames(term: string): Promise<Record<string, unknown>> {
+  // country (cc) and language (l) fall back to the configured defaults; tools
+  // expose them as optional per-call overrides (e.g. compare prices by region).
+  async searchGames(
+    term: string,
+    country?: string,
+    language?: string,
+  ): Promise<Record<string, unknown>> {
     const res = await this.#http.getJson<SearchResponse>("api/storesearch/", {
-      query: { term, l: this.#l, cc: this.#cc },
+      query: { term, l: language ?? this.#l, cc: country ?? this.#cc },
     });
     return summarizeSearch(res);
   }
 
-  async getGame(appid: number): Promise<Record<string, unknown>> {
-    return this.#cache.wrapStaleOnError(`app:${appid}:${this.#cc}:${this.#l}`, async () => {
+  async getGame(
+    appid: number,
+    country?: string,
+    language?: string,
+  ): Promise<Record<string, unknown>> {
+    const cc = country ?? this.#cc;
+    const l = language ?? this.#l;
+    return this.#cache.wrapStaleOnError(`app:${appid}:${cc}:${l}`, async () => {
       const res = await this.#http.getJson<AppDetailsResponse>("api/appdetails", {
-        query: { appids: appid, cc: this.#cc, l: this.#l },
+        query: { appids: appid, cc, l },
       });
       const entry = res[String(appid)];
       if (!entry?.success || !entry.data) {
@@ -67,10 +79,22 @@ export class StorefrontClient {
     });
   }
 
-  // Not cached: reviews are paginated and change as users post.
-  async getReviews(appid: number, max: number): Promise<Record<string, unknown>> {
+  // Not cached: reviews are paginated and change as users post. `reviewLanguage`
+  // filters by review language ("all" = any); `reviewType` = all|positive|negative.
+  async getReviews(
+    appid: number,
+    max: number,
+    reviewLanguage = "all",
+    reviewType = "all",
+  ): Promise<Record<string, unknown>> {
     const res = await this.#http.getJson<ReviewsResponse>(`appreviews/${appid}`, {
-      query: { json: 1, num_per_page: max, language: "all", purchase_type: "all" },
+      query: {
+        json: 1,
+        num_per_page: max,
+        language: reviewLanguage,
+        review_type: reviewType,
+        purchase_type: "all",
+      },
     });
     return summarizeReviews(res, max);
   }
@@ -78,13 +102,14 @@ export class StorefrontClient {
   // Batch prices for many appids in one place. appdetails accepts a comma-list
   // with filters=price_overview; we chunk to keep URLs/responses bounded and
   // merge. Not cached — prices change and the appid set varies per call.
-  async getPrices(appids: number[]): Promise<Record<string, unknown>> {
+  async getPrices(appids: number[], country?: string): Promise<Record<string, unknown>> {
+    const cc = country ?? this.#cc;
     const CHUNK = 100;
     const merged: PriceDetailsResponse = {};
     for (let i = 0; i < appids.length; i += CHUNK) {
       const chunk = appids.slice(i, i + CHUNK);
       const res = await this.#http.getJson<PriceDetailsResponse>("api/appdetails", {
-        query: { appids: chunk.join(","), cc: this.#cc, filters: "price_overview" },
+        query: { appids: chunk.join(","), cc, filters: "price_overview" },
       });
       Object.assign(merged, res);
     }
@@ -102,19 +127,23 @@ export class StorefrontClient {
   }
 
   // Featured/specials change often; cache briefly via the shared TTL.
-  async getFeatured(): Promise<Record<string, unknown>> {
-    return this.#cache.wrapStaleOnError(`featured:${this.#cc}:${this.#l}`, async () => {
+  async getFeatured(country?: string, language?: string): Promise<Record<string, unknown>> {
+    const cc = country ?? this.#cc;
+    const l = language ?? this.#l;
+    return this.#cache.wrapStaleOnError(`featured:${cc}:${l}`, async () => {
       const res = await this.#http.getJson<FeaturedResponse>("api/featuredcategories", {
-        query: { cc: this.#cc, l: this.#l },
+        query: { cc, l },
       });
       return summarizeFeatured(res);
     });
   }
 
-  async getSpecials(): Promise<Record<string, unknown>> {
-    return this.#cache.wrapStaleOnError(`specials:${this.#cc}:${this.#l}`, async () => {
+  async getSpecials(country?: string, language?: string): Promise<Record<string, unknown>> {
+    const cc = country ?? this.#cc;
+    const l = language ?? this.#l;
+    return this.#cache.wrapStaleOnError(`specials:${cc}:${l}`, async () => {
       const res = await this.#http.getJson<FeaturedResponse>("api/featuredcategories", {
-        query: { cc: this.#cc, l: this.#l },
+        query: { cc, l },
       });
       return summarizeSpecials(res);
     });

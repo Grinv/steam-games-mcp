@@ -25,9 +25,12 @@ const STEAM_SHOP_ID = 61;
 
 export interface DealsParams {
   min_cut?: number;
+  max_price?: number;
+  sort?: string;
   limit?: number;
   offset?: number;
   steam_only?: boolean;
+  country?: string;
 }
 
 export class ItadClient {
@@ -61,20 +64,27 @@ export class ItadClient {
   // default; `min_cut` filters by minimum discount %. Not cached (deals churn).
   async getDeals(p: DealsParams): Promise<Record<string, unknown>> {
     const query: Query = {
-      country: this.#country,
-      sort: "-cut",
+      country: p.country ?? this.#country,
+      // ITAD sort keys: -cut (default, biggest discount), price, -price, -time, …
+      sort: p.sort ?? "-cut",
       limit: p.limit ?? 50,
       offset: p.offset ?? 0,
     };
     if (p.steam_only !== false) query.shops = STEAM_SHOP_ID;
     if (typeof p.min_cut === "number") query.cut = p.min_cut;
     const res = await this.#get<ItadDealsResponse>("deals/v2", query);
+    // ITAD has no simple max-price query param, so cap client-side over the
+    // returned page (documented as such on the tool).
+    if (typeof p.max_price === "number" && Array.isArray(res.list)) {
+      res.list = res.list.filter((it) => (it.deal?.price?.amount ?? Infinity) <= p.max_price!);
+    }
     return summarizeDeals(res);
   }
 
   // Price history for a Steam game: resolve appid → ITAD id, then fetch history.
-  async getPriceHistory(appid: number): Promise<Record<string, unknown>> {
-    return this.#cache.wrapStaleOnError(`itad-hist:${appid}:${this.#country}`, async () => {
+  async getPriceHistory(appid: number, country?: string): Promise<Record<string, unknown>> {
+    const cc = country ?? this.#country;
+    return this.#cache.wrapStaleOnError(`itad-hist:${appid}:${cc}`, async () => {
       const lookup = await this.#get<ItadLookupResponse>("games/lookup/v1", { appid });
       if (!lookup.found || !lookup.game?.id) {
         throw new ApiError({
@@ -84,7 +94,7 @@ export class ItadClient {
       }
       const res = await this.#get<ItadHistoryResponse>("games/history/v2", {
         id: lookup.game.id,
-        country: this.#country,
+        country: cc,
         shops: STEAM_SHOP_ID,
       });
       return summarizePriceHistory(res, lookup.game.title ?? null);

@@ -138,12 +138,13 @@ export class SteamWebClient {
 
   // Full achievement list for a game (GetSchemaForGame needs a key), merged with
   // the keyless global unlock % so each achievement carries its rarity. Cached.
-  async getGameAchievements(appid: number): Promise<Record<string, unknown>> {
-    return this.#cache.wrapStaleOnError(`schema:${appid}:${this.#l}`, async () => {
+  async getGameAchievements(appid: number, language?: string): Promise<Record<string, unknown>> {
+    const l = language ?? this.#l;
+    return this.#cache.wrapStaleOnError(`schema:${appid}:${l}`, async () => {
       const [schema, global] = await Promise.all([
         this.#get<GameSchemaResponse>("ISteamUserStats/GetSchemaForGame/v2/", {
           appid,
-          l: this.#l,
+          l,
         }),
         this.#get<GlobalAchievementsResponse>(
           "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
