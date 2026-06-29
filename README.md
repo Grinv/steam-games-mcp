@@ -39,12 +39,14 @@ credentials**; player tools need a free Steam Web API key.
 
 ## What it does
 
-Key: **–** no credentials · **K** Steam Web API key · **I** IsThereAnyDeal key.
+Key: **–** no credentials · **K** Steam Web API key.
 
 | Tool                      | Key | Purpose                                                                            |
 | ------------------------- | --- | ---------------------------------------------------------------------------------- |
 | `search_games`            | –   | Find games by title → appid (with price)                                           |
 | `get_game`                | –   | Store details: price, genres, platforms, Metacritic, age rating, DLC, requirements |
+| `get_items`               | –   | Batch store card (price, review %, release) for a LIST of appids — one call        |
+| `discover_deals`          | –   | Find catalog-wide discounts by min % (with review %) — no appids needed            |
 | `get_game_reviews`        | –   | Review summary + recent reviews                                                    |
 | `get_review_histogram`    | –   | Review trend over time (history + recent)                                          |
 | `get_prices`              | –   | Batch current price/discount for many appids                                       |
@@ -60,18 +62,16 @@ Key: **–** no credentials · **K** Steam Web API key · **I** IsThereAnyDeal k
 | `get_owned_games`         | K   | A player's games + playtime                                                        |
 | `get_recently_played`     | K   | Games played in the last two weeks                                                 |
 | `get_player_achievements` | K   | A player's achievement progress in a game                                          |
-| `get_deals`               | I   | Catalog-wide current discounts (filter by `min_cut`)                               |
-| `get_price_history`       | I   | A game's price history + all-time low                                              |
 
-**Three tiers.** Storefront + keyless Web API tools (`store`/`api.steampowered.com`)
-need **no credentials**. Player tools need a free **`STEAM_API_KEY`** and a
-**public** profile. `get_deals` / `get_price_history` need a free
-**`ITAD_API_KEY`** ([IsThereAnyDeal](https://isthereanydeal.com/apps/)) — the
-catalog-wide discount/price-history features Steam's own APIs don't expose. Tools
-that need a key return a clear message when it is unset.
+**Two tiers.** Store/search + discovery tools (`store`/`api.steampowered.com`)
+need **no credentials** — including catalog-wide deal discovery (`discover_deals`)
+and batch price/review checks (`get_items`). Player tools need a free
+**`STEAM_API_KEY`** and a **public** profile; they return a clear message when the
+key is unset.
 
-> SteamDB is not used (no public API + scraping is disallowed). This product is
-> not affiliated with Valve, Steam or IsThereAnyDeal.
+> No third-party services: deal discovery and reviews come from Steam's own
+> (keyless) store APIs. SteamDB is not used (no public API + scraping disallowed).
+> Steam has no price-history API, so that isn't offered. Not affiliated with Valve.
 
 ## Develop
 

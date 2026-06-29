@@ -20,22 +20,30 @@ pattern: store/game reads go through the **Steam Storefront API**
 > threading ids between servers.
 
 > **Keyless caveat.** Valve states _all_ Web API use requires a key
-> (https://steamcommunity.com/dev). A couple of endpoints (`GetNewsForApp`,
-> `GetGlobalAchievementPercentagesForApp`) currently answer without one, so
-> `get_game_news` / `get_global_achievements` are exposed without the key gate —
-> but the key is still sent when present, in case Valve enforces later.
+> (https://steamcommunity.com/dev), but several endpoints answer without one and
+> we rely on that: `GetNewsForApp`, `GetGlobalAchievementPercentagesForApp`,
+> `GetNumberOfCurrentPlayers`, `IWishlistService/GetWishlist`, and the store-browse
+> services (`IStoreBrowseService/GetItems`, `IStoreQueryService/Query`). These tools
+> are exposed without the key gate; the key is still sent when present.
 
-> **No SteamDB.** SteamDB has no public API and forbids scraping. Its main draw
-> (price history) belongs to a separate provider (e.g. IsThereAnyDeal) if ever
-> added — do not scrape SteamDB.
+> **No SteamDB, no third-party deal service.** Catalog-wide deal discovery
+> (`discover_deals` via `IStoreQueryService/Query` with `price_filters.min_discount_percent`)
+> and batch price+review (`get_items` via `IStoreBrowseService/GetItems`) come from
+> Steam's own keyless store APIs — verified live. SteamDB has no public API and
+> forbids scraping (don't). **Price history is intentionally not offered**: Steam
+> exposes no price-history API (confirmed against the full method list), and the
+> only sources for it (SteamDB / IsThereAnyDeal) were deliberately dropped to keep
+> the server Steam-only and dependency-free.
 
 ### API references
 
-- Steam Web API: https://developer.valvesoftware.com/wiki/Steam_Web_API (official wiki)
-- Storefront API: **unofficial/undocumented** — community reference at
-  https://github.com/Revadike/InternalSteamWebAPI/wiki; `appreviews` is semi-official
-  (https://partner.steamgames.com/doc/store/getreviews). Field shapes were verified
-  against the live endpoints; `check:api` re-verifies them on each release.
+- Steam Web API: https://developer.valvesoftware.com/wiki/Steam_Web_API (official wiki);
+  the machine-readable method list is `ISteamWebAPIUtil/GetSupportedAPIList` (keyless
+  = the methods usable without a key).
+- Store services (`IStoreBrowseService/GetItems`, `IStoreQueryService/Query`) and the
+  Storefront API (`store.steampowered.com/api/*`) are **unofficial/undocumented** —
+  community reference at https://github.com/Revadike/InternalSteamWebAPI/wiki. All
+  field shapes were verified against the live endpoints; `check:api` re-verifies on release.
 
 ```
 src/

@@ -8,11 +8,6 @@ const ENV = {
   STEAM_STORE_MIN_INTERVAL_MS: "0",
   STEAM_API_MIN_INTERVAL_MS: "0",
 };
-const ITAD_ENV = {
-  ITAD_API_KEY: "itad-test",
-  STEAM_API_MIN_INTERVAL_MS: "0",
-  STEAM_STORE_MIN_INTERVAL_MS: "0",
-};
 
 const APP = {
   name: "Portal 2",
@@ -146,73 +141,6 @@ const WISHLIST = {
   },
 };
 
-const ITAD_LOOKUP = { found: true, game: { id: "uuid-1", slug: "portal-2", title: "Portal 2" } };
-const ITAD_DEALS = {
-  nextOffset: 50,
-  hasMore: true,
-  list: [
-    {
-      id: "uuid-1",
-      title: "Portal 2",
-      deal: {
-        shop: { id: 61, name: "Steam" },
-        price: { amount: 1.99, currency: "USD" },
-        regular: { amount: 9.99, currency: "USD" },
-        cut: 80,
-        storeLow: { amount: 1.99, currency: "USD" },
-        historyLow: { amount: 1.99, currency: "USD" },
-        url: "https://itad.link/abc",
-        expiry: null,
-      },
-    },
-  ],
-};
-const ITAD_INFO = {
-  id: "uuid-1",
-  title: "Portal 2",
-  type: "game",
-  appid: 620,
-  earlyAccess: false,
-  releaseDate: "2011-04-19",
-  tags: ["Puzzle", "Co-op"],
-  developers: [{ id: 1, name: "Valve" }],
-  publishers: [{ id: 1, name: "Valve" }],
-  reviews: [
-    { score: 98, source: "Steam", count: 1000 },
-    { score: 95, source: "Metacritic", count: 50 },
-  ],
-  players: { recent: 5000, day: 6000, week: 7000, peak: 90000 },
-  stats: { rank: 100, waitlisted: 10, collected: 20 },
-};
-const ITAD_HISTORY = [
-  {
-    timestamp: "2024-01-01T00:00:00Z",
-    shop: { id: 61, name: "Steam" },
-    deal: { price: { amount: 4.99, currency: "USD" }, cut: 50 },
-  },
-  {
-    timestamp: "2025-01-01T00:00:00Z",
-    shop: { id: 61, name: "Steam" },
-    deal: { price: { amount: 1.99, currency: "USD" }, cut: 80 },
-  },
-];
-
-const ITAD_BULK = { "app/620": "uuid-1", "app/999": null };
-const ITAD_PRICES = [
-  {
-    id: "uuid-1",
-    deals: [
-      {
-        shop: { id: 61, name: "Steam" },
-        price: { amount: 1.99, currency: "USD" },
-        regular: { amount: 9.99, currency: "USD" },
-        cut: 80,
-        historyLow: { amount: 0.99, currency: "USD" },
-      },
-    ],
-  },
-];
-
 const ITEMS = {
   response: {
     store_items: [
@@ -238,14 +166,37 @@ const ITEMS = {
   },
 };
 
+const DISCOVER = {
+  response: {
+    metadata: { total_matching_records: 14132, start: 0, count: 3 },
+    store_items: [
+      {
+        appid: 620,
+        name: "Portal 2",
+        visible: true,
+        best_purchase_option: {
+          discount_pct: 80,
+          formatted_final_price: "$1.99",
+          formatted_original_price: "$9.99",
+        },
+        reviews: { summary_filtered: { percent_positive: 98, review_count: 1000 } },
+        release: { steam_release_date: 1303186800 },
+      },
+      {
+        appid: 999,
+        name: "Shovelware",
+        visible: true,
+        best_purchase_option: { discount_pct: 90, formatted_final_price: "$0.10" },
+        reviews: { summary_filtered: { percent_positive: 40, review_count: 5 } },
+      },
+      { appid: 111, name: "Hidden", visible: false },
+    ],
+  },
+};
+
 function router(url: string) {
+  if (url.includes("IStoreQueryService/Query")) return jsonResponse(DISCOVER);
   if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(ITEMS);
-  if (url.includes("/lookup/id/shop/")) return jsonResponse(ITAD_BULK);
-  if (url.includes("/games/prices/v2")) return jsonResponse(ITAD_PRICES);
-  if (url.includes("/deals/v2")) return jsonResponse(ITAD_DEALS);
-  if (url.includes("/games/lookup/")) return jsonResponse(ITAD_LOOKUP);
-  if (url.includes("/games/info/")) return jsonResponse(ITAD_INFO);
-  if (url.includes("/games/history/")) return jsonResponse(ITAD_HISTORY);
   if (url.includes("/api/storesearch")) return jsonResponse(SEARCH);
   if (url.includes("/api/appdetails")) {
     const id = /appids=(\d+)/.exec(url)?.[1] ?? "620";
@@ -597,67 +548,6 @@ test("get_wishlist returns found:false when empty/private", async () => {
   }
 });
 
-test("get_deals scopes to Steam, sorts by cut, and filters by min_cut", async () => {
-  const mock = mockFetch(router);
-  const restore = installFetch(mock);
-  const { client, close } = await connectServer(ITAD_ENV);
-  try {
-    const res = await client.callTool({ name: "get_deals", arguments: { min_cut: 80 } });
-    const s = res.structuredContent as {
-      count: number;
-      has_more: boolean;
-      deals: { title: string; cut: number; price: string; shop: string }[];
-    };
-    assert.equal(s.count, 1);
-    assert.equal(s.has_more, true);
-    assert.equal(s.deals[0]!.cut, 80);
-    assert.equal(s.deals[0]!.price, "1.99 USD");
-    assert.equal(s.deals[0]!.shop, "Steam");
-    const u = mock.calls.find((c) => c.url.includes("/deals/v2"))!.url;
-    assert.match(u, /shops=61/);
-    assert.match(u, /sort=-cut/);
-    assert.match(u, /cut=80/);
-    assert.match(u, /key=itad-test/);
-  } finally {
-    restore();
-    await close();
-  }
-});
-
-test("get_price_history resolves appid then returns points + all-time low", async () => {
-  const mock = mockFetch(router);
-  const restore = installFetch(mock);
-  const { client, close } = await connectServer(ITAD_ENV);
-  try {
-    const res = await client.callTool({ name: "get_price_history", arguments: { appid: 620 } });
-    const s = res.structuredContent as {
-      count: number;
-      lowest: { price: string; cut: number };
-    };
-    assert.equal(s.count, 2);
-    assert.equal(s.lowest.price, "1.99 USD"); // cheapest of the two entries
-    assert.equal(s.lowest.cut, 80);
-    assert.ok(
-      mock.calls.some((c) => c.url.includes("/games/lookup/") && c.url.includes("appid=620")),
-    );
-  } finally {
-    restore();
-    await close();
-  }
-});
-
-test("ITAD tools error clearly without ITAD_API_KEY", async () => {
-  const { client, close } = await connectServer({});
-  try {
-    const res = await client.callTool({ name: "get_deals", arguments: { min_cut: 80 } });
-    assert.equal(res.isError, true);
-    const text = (res.content as { text: string }[])[0]!.text;
-    assert.match(text, /ITAD_API_KEY/);
-  } finally {
-    await close();
-  }
-});
-
 test("search_games forwards per-call country/language overrides", async () => {
   const mock = mockFetch(router);
   const restore = installFetch(mock);
@@ -670,143 +560,6 @@ test("search_games forwards per-call country/language overrides", async () => {
     const u = mock.calls.find((c) => c.url.includes("/api/storesearch"))!.url;
     assert.match(u, /cc=RU/);
     assert.match(u, /l=russian/);
-  } finally {
-    restore();
-    await close();
-  }
-});
-
-test("get_deals forwards sort and applies client-side max_price filter", async () => {
-  const mock = mockFetch(router);
-  const restore = installFetch(mock);
-  const { client, close } = await connectServer(ITAD_ENV);
-  try {
-    // The only mock deal is $1.99; max_price 1 should filter it out.
-    const res = await client.callTool({
-      name: "get_deals",
-      arguments: { sort: "price", max_price: 1 },
-    });
-    const s = res.structuredContent as { count: number };
-    assert.equal(s.count, 0);
-    const u = mock.calls.find((c) => c.url.includes("/deals/v2"))!.url;
-    assert.match(u, /sort=price/);
-  } finally {
-    restore();
-    await close();
-  }
-});
-
-test("get_price_history forwards a country override", async () => {
-  const mock = mockFetch(router);
-  const restore = installFetch(mock);
-  const { client, close } = await connectServer(ITAD_ENV);
-  try {
-    await client.callTool({ name: "get_price_history", arguments: { appid: 620, country: "DE" } });
-    const u = mock.calls.find((c) => c.url.includes("/games/history/"))!.url;
-    assert.match(u, /country=DE/);
-  } finally {
-    restore();
-    await close();
-  }
-});
-
-test("get_deals surfaces historic_low / is_historic_low", async () => {
-  const restore = installFetch(mockFetch(router));
-  const { client, close } = await connectServer(ITAD_ENV);
-  try {
-    const res = await client.callTool({ name: "get_deals", arguments: { min_cut: 80 } });
-    const s = res.structuredContent as {
-      deals: { historic_low: string; is_historic_low: boolean }[];
-    };
-    assert.equal(s.deals[0]!.historic_low, "1.99 USD");
-    assert.equal(s.deals[0]!.is_historic_low, true);
-  } finally {
-    restore();
-    await close();
-  }
-});
-
-test("get_game_info bundles appid + steam review + players (by appid)", async () => {
-  const mock = mockFetch(router);
-  const restore = installFetch(mock);
-  const { client, close } = await connectServer(ITAD_ENV);
-  try {
-    const res = await client.callTool({ name: "get_game_info", arguments: { appid: 620 } });
-    const s = res.structuredContent as {
-      appid: number;
-      steam_review: { score: number; count: number };
-      players: { peak: number };
-      tags: string[];
-    };
-    assert.equal(s.appid, 620);
-    assert.equal(s.steam_review.score, 98);
-    assert.equal(s.players.peak, 90000);
-    assert.ok(s.tags.includes("Puzzle"));
-    // appid path resolves via lookup, then info.
-    assert.ok(mock.calls.some((c) => c.url.includes("/games/lookup/")));
-    assert.ok(mock.calls.some((c) => c.url.includes("/games/info/")));
-  } finally {
-    restore();
-    await close();
-  }
-});
-
-test("get_game_info by itad_id skips the lookup", async () => {
-  const mock = mockFetch(router);
-  const restore = installFetch(mock);
-  const { client, close } = await connectServer(ITAD_ENV);
-  try {
-    await client.callTool({ name: "get_game_info", arguments: { itad_id: "uuid-1" } });
-    assert.ok(!mock.calls.some((c) => c.url.includes("/games/lookup/")), "should not look up");
-    assert.ok(mock.calls.some((c) => c.url.includes("/games/info/")));
-  } finally {
-    restore();
-    await close();
-  }
-});
-
-test("get_price_history forwards a since override", async () => {
-  const mock = mockFetch(router);
-  const restore = installFetch(mock);
-  const { client, close } = await connectServer(ITAD_ENV);
-  try {
-    await client.callTool({
-      name: "get_price_history",
-      arguments: { appid: 620, since: "2020-01-01" },
-    });
-    const u = mock.calls.find((c) => c.url.includes("/games/history/"))!.url;
-    assert.match(u, /since=2020-01-01/);
-  } finally {
-    restore();
-    await close();
-  }
-});
-
-test("get_current_prices batches lookup + prices (on_sale + not-on-sale + unmapped)", async () => {
-  const restore = installFetch(mockFetch(router));
-  const { client, close } = await connectServer(ITAD_ENV);
-  try {
-    const res = await client.callTool({
-      name: "get_current_prices",
-      arguments: { appids: [620, 999] },
-    });
-    const s = res.structuredContent as {
-      count: number;
-      prices: {
-        appid: number;
-        available: boolean;
-        on_sale?: boolean;
-        cut?: number;
-        price?: string;
-      }[];
-    };
-    assert.equal(s.count, 2);
-    const p620 = s.prices.find((p) => p.appid === 620)!;
-    assert.equal(p620.on_sale, true);
-    assert.equal(p620.cut, 80);
-    assert.equal(p620.price, "1.99 USD");
-    // 999 maps to null in the bulk lookup → unavailable on ITAD.
-    assert.equal(s.prices.find((p) => p.appid === 999)!.available, false);
   } finally {
     restore();
     await close();
@@ -936,6 +689,30 @@ test("get_items returns batch store cards (price, review %, release) keyless", a
     assert.equal(a.release_date, "2011-04-19");
     // 999 is absent from store_items → available:false.
     assert.equal(s.items.find((i) => i.appid === 999)!.available, false);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("discover_deals filters by min discount + review quality, skips hidden, keyless", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "discover_deals",
+      arguments: { min_discount: 80, min_review: 90, min_reviews: 100 },
+    });
+    const s = res.structuredContent as {
+      total_matching: number;
+      deals: { appid: number; discount_pct: number; review_percent: number }[];
+    };
+    assert.equal(s.total_matching, 14132);
+    // Only Portal 2 passes: shovelware (40%/5 reviews) and the hidden item drop out.
+    assert.equal(s.deals.length, 1);
+    assert.equal(s.deals[0]!.appid, 620);
+    assert.equal(s.deals[0]!.discount_pct, 80);
+    assert.equal(s.deals[0]!.review_percent, 98);
   } finally {
     restore();
     await close();

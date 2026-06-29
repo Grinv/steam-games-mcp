@@ -10,8 +10,6 @@
 const STORE = process.env.STEAM_STORE_BASE_URL ?? "https://store.steampowered.com";
 const API = process.env.STEAM_API_BASE_URL ?? "https://api.steampowered.com";
 const KEY = process.env.STEAM_API_KEY;
-const ITAD = process.env.ITAD_BASE_URL ?? "https://api.isthereanydeal.com";
-const ITAD_KEY = process.env.ITAD_API_KEY;
 const SPACING_MS = 400;
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -81,15 +79,21 @@ const checks = [
     },
   },
   {
-    name: "itad deals/v2 (key)",
-    skip: ITAD_KEY ? undefined : "ITAD_API_KEY not set",
+    name: "web IStoreQueryService/Query (discover)",
     run: async () => {
-      const res = await fetch(`${ITAD}/deals/v2?key=${ITAD_KEY}&country=US&limit=1&shops=61`, {
-        headers: { Accept: "application/json" },
-      });
+      const input = {
+        query: { start: 0, count: 1, filters: { price_filters: { min_discount_percent: 80 } } },
+        context: { language: "english", country_code: "US", steam_realm: 1 },
+        data_request: { include_basic_info: true },
+      };
+      const res = await fetch(
+        `${API}/IStoreQueryService/Query/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
+        { headers: { Accept: "application/json" } },
+      );
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
       const body = await res.json();
-      if (!Array.isArray(body.list)) throw new Error("missing `list` array");
+      if (typeof body.response?.metadata?.total_matching_records !== "number")
+        throw new Error("missing metadata.total_matching_records");
     },
   },
 ];

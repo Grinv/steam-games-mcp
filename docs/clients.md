@@ -39,10 +39,8 @@ Use the same stdio pattern:
 | Var                           | Default                          | Meaning                                                            |
 | ----------------------------- | -------------------------------- | ------------------------------------------------------------------ |
 | `STEAM_API_KEY`               | _(unset)_                        | Steam Web API key; enables player tools                            |
-| `ITAD_API_KEY`                | _(unset)_                        | IsThereAnyDeal key; enables get_deals / get_price_history          |
 | `STEAM_COUNTRY`               | `US`                             | ISO country code (cc) for store prices                             |
 | `STEAM_LANGUAGE`              | `english`                        | Store language (l)                                                 |
-| `ITAD_BASE_URL`               | `https://api.isthereanydeal.com` | IsThereAnyDeal API base URL                                        |
 | `STEAM_STORE_MIN_INTERVAL_MS` | `250`                            | Min spacing between Storefront calls (burst-sensitive; 0 disables) |
 | `STEAM_API_MIN_INTERVAL_MS`   | `0`                              | Min spacing between Web API calls                                  |
 | `CACHE_TTL_MS`                | `300000`                         | TTL for cached responses                                           |

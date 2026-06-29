@@ -631,208 +631,6 @@ export function summarizeReviewHistogram(r: ReviewHistogramResponse): Record<str
   };
 }
 
-// ---- IsThereAnyDeal (deals + price history; needs an ITAD key) --------------
-
-export interface ItadLookupResponse {
-  found?: boolean;
-  game?: { id?: string; slug?: string; title?: string };
-}
-
-interface ItadPrice {
-  amount?: number;
-  currency?: string;
-}
-interface ItadDeal {
-  shop?: { id?: number; name?: string };
-  price?: ItadPrice;
-  regular?: ItadPrice;
-  cut?: number;
-  storeLow?: ItadPrice | null;
-  historyLow?: ItadPrice | null;
-  url?: string;
-  expiry?: string | null;
-}
-interface ItadDealItem {
-  id?: string;
-  slug?: string;
-  title?: string;
-  deal?: ItadDeal;
-}
-export interface ItadDealsResponse {
-  nextOffset?: number;
-  hasMore?: boolean;
-  list?: ItadDealItem[];
-}
-
-function itadMoney(p: ItadPrice | undefined): string | null {
-  if (!p || typeof p.amount !== "number") return null;
-  return p.currency ? `${p.amount.toFixed(2)} ${p.currency}` : p.amount.toFixed(2);
-}
-
-export function summarizeDeals(r: ItadDealsResponse): Record<string, unknown> {
-  const list = r.list ?? [];
-  return {
-    count: list.length,
-    has_more: r.hasMore ?? false,
-    next_offset: r.nextOffset ?? null,
-    deals: list.map((it) => {
-      const d = it.deal;
-      // historyLow = all-time low across ITAD's history; flag when this deal
-      // matches it (i.e. a historic best price right now).
-      const histLow = itadMoney(d?.historyLow ?? undefined);
-      const atLow =
-        typeof d?.price?.amount === "number" &&
-        typeof d?.historyLow?.amount === "number" &&
-        d.price.amount <= d.historyLow.amount;
-      return {
-        title: it.title ?? null,
-        itad_id: it.id ?? null,
-        cut: d?.cut ?? 0,
-        price: itadMoney(d?.price),
-        regular: itadMoney(d?.regular),
-        historic_low: histLow,
-        is_historic_low: atLow,
-        shop: d?.shop?.name ?? null,
-        url: d?.url ?? null,
-        expiry: d?.expiry ?? null,
-      };
-    }),
-  };
-}
-
-// ---- IsThereAnyDeal: batch current prices for a list of Steam appids ---------
-
-export type ItadBulkLookup = Record<string, string | null>;
-interface ItadPricesEntry {
-  id?: string;
-  deals?: ItadDeal[];
-}
-export type ItadPricesResponse = ItadPricesEntry[];
-
-// One row per requested appid. `lookup` maps "app/<appid>" → ITAD id; `prices`
-// is the batch games/prices result (only games with a current deal appear, so a
-// missing entry means not on sale). Steam-scoped, so deals[0] is the Steam deal.
-export function summarizeCurrentPrices(
-  appids: number[],
-  lookup: ItadBulkLookup,
-  prices: ItadPricesResponse,
-): Record<string, unknown> {
-  const byId = new Map<string, ItadPricesEntry>();
-  for (const e of prices) if (e.id) byId.set(e.id, e);
-  return {
-    count: appids.length,
-    prices: appids.map((appid) => {
-      const id = lookup[`app/${appid}`];
-      if (!id) return { appid, available: false };
-      const deal = byId.get(id)?.deals?.[0];
-      if (!deal) return { appid, available: true, on_sale: false };
-      const atLow =
-        typeof deal.price?.amount === "number" &&
-        typeof deal.historyLow?.amount === "number" &&
-        deal.price.amount <= deal.historyLow.amount;
-      return {
-        appid,
-        available: true,
-        on_sale: (deal.cut ?? 0) > 0,
-        cut: deal.cut ?? 0,
-        price: itadMoney(deal.price),
-        regular: itadMoney(deal.regular),
-        historic_low: itadMoney(deal.historyLow ?? undefined),
-        is_historic_low: atLow,
-      };
-    }),
-  };
-}
-
-interface ItadHistoryEntry {
-  timestamp?: string;
-  shop?: { id?: number; name?: string };
-  deal?: { price?: ItadPrice; regular?: ItadPrice; cut?: number };
-}
-// games/history/v2 returns a flat array of price-change entries.
-export type ItadHistoryResponse = ItadHistoryEntry[];
-
-export function summarizePriceHistory(
-  r: ItadHistoryResponse,
-  title: string | null,
-): Record<string, unknown> {
-  const entries = r ?? [];
-  const point = (e: ItadHistoryEntry): Record<string, unknown> => ({
-    date: e.timestamp ? e.timestamp.slice(0, 10) : null,
-    cut: e.deal?.cut ?? 0,
-    price: itadMoney(e.deal?.price),
-    shop: e.shop?.name ?? null,
-  });
-  // Track the all-time-low seen in this window in a single pass.
-  let lowAmount = Infinity;
-  let lowEntry: ItadHistoryEntry | null = null;
-  for (const e of entries) {
-    const amt = e.deal?.price?.amount;
-    if (typeof amt === "number" && amt < lowAmount) {
-      lowAmount = amt;
-      lowEntry = e;
-    }
-  }
-  return {
-    title,
-    count: entries.length,
-    lowest: lowEntry ? point(lowEntry) : null,
-    points: entries.map(point),
-  };
-}
-
-// ---- IsThereAnyDeal: game info (appid + reviews + players, needs key) --------
-
-interface ItadReview {
-  score?: number | null;
-  source?: string;
-  count?: number;
-}
-export interface ItadGameInfoResponse {
-  id?: string;
-  slug?: string;
-  title?: string;
-  type?: string;
-  mature?: boolean;
-  appid?: number | null;
-  earlyAccess?: boolean;
-  achievements?: number | boolean;
-  releaseDate?: string | null;
-  tags?: string[];
-  developers?: { id?: number; name?: string }[];
-  publishers?: { id?: number; name?: string }[];
-  reviews?: ItadReview[];
-  players?: { recent?: number; day?: number; week?: number; peak?: number };
-  stats?: { rank?: number; waitlisted?: number; collected?: number };
-}
-
-// One ITAD call that bundles the Steam appid, review score (so deals can be
-// rating-filtered without a separate Steam call), current players, tags, etc.
-export function summarizeGameInfo(r: ItadGameInfoResponse): Record<string, unknown> {
-  const reviews = r.reviews ?? [];
-  const steam = reviews.find((x) => x.source === "Steam");
-  return {
-    itad_id: r.id ?? null,
-    appid: r.appid ?? null,
-    title: r.title ?? null,
-    type: r.type ?? null,
-    early_access: r.earlyAccess ?? false,
-    release_date: r.releaseDate ?? null,
-    steam_review:
-      steam && typeof steam.score === "number"
-        ? { score: steam.score, count: steam.count ?? null }
-        : null,
-    reviews: reviews
-      .filter((x) => typeof x.score === "number")
-      .map((x) => ({ source: x.source, score: x.score, count: x.count ?? null })),
-    players: r.players ? { recent: r.players.recent ?? null, peak: r.players.peak ?? null } : null,
-    tags: (r.tags ?? []).slice(0, 15),
-    developers: (r.developers ?? []).map((d) => d.name).filter(Boolean),
-    publishers: (r.publishers ?? []).map((p) => p.name).filter(Boolean),
-    rank: r.stats?.rank ?? null,
-  };
-}
-
 // ---- Steam IStoreBrowseService/GetItems (keyless batch store data) ----------
 
 interface StoreItem {
@@ -852,9 +650,62 @@ interface StoreItem {
     };
   };
   release?: { steam_release_date?: number; is_coming_soon?: boolean };
+  visible?: boolean;
 }
 export interface StoreItemsResponse {
   response?: { store_items?: StoreItem[] };
+}
+
+// Compact card from a store item (shared by get_items and discover_deals).
+function storeCard(it: StoreItem): Record<string, unknown> {
+  const bp = it.best_purchase_option;
+  const rev = it.reviews?.summary_filtered;
+  return {
+    appid: it.appid,
+    name: it.name ?? null,
+    discount_pct: bp?.discount_pct ?? 0,
+    price: bp?.formatted_final_price || null,
+    original: bp?.formatted_original_price || bp?.formatted_final_price || null,
+    review_percent: rev?.percent_positive ?? null,
+    review_count: rev?.review_count ?? null,
+    review_label: rev?.review_score_label ?? null,
+    release_date: it.release?.steam_release_date
+      ? new Date(it.release.steam_release_date * 1000).toISOString().slice(0, 10)
+      : null,
+  };
+}
+
+// ---- Steam IStoreQueryService/Query (keyless catalog discovery) -------------
+
+export interface StoreQueryResponse {
+  response?: {
+    metadata?: { total_matching_records?: number; start?: number; count?: number };
+    store_items?: StoreItem[];
+  };
+}
+
+// Catalog-wide deal discovery. The server filters by min discount; review
+// thresholds (percent / count) and discount-desc sorting are applied here over
+// the returned page, since the Query API ignores those filters/sorts.
+export function summarizeDiscover(
+  r: StoreQueryResponse,
+  opts: { minReview?: number; minReviews?: number },
+): Record<string, unknown> {
+  let rows = (r.response?.store_items ?? [])
+    .filter((it) => it.visible !== false && typeof it.appid === "number")
+    .map(storeCard);
+  if (typeof opts.minReview === "number") {
+    rows = rows.filter((x) => ((x.review_percent as number | null) ?? -1) >= opts.minReview!);
+  }
+  if (typeof opts.minReviews === "number") {
+    rows = rows.filter((x) => ((x.review_count as number | null) ?? 0) >= opts.minReviews!);
+  }
+  rows.sort((a, b) => (b.discount_pct as number) - (a.discount_pct as number));
+  return {
+    total_matching: r.response?.metadata?.total_matching_records ?? null,
+    returned: rows.length,
+    deals: rows,
+  };
 }
 
 // Batch store card per requested appid: price+discount, review %, release date —

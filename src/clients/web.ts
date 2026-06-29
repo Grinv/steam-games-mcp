@@ -12,6 +12,7 @@ import {
   summarizeCurrentPlayers,
   summarizeGameSchema,
   summarizeGlobalAchievements,
+  summarizeDiscover,
   summarizeItems,
   summarizeNews,
   summarizeOwnedGames,
@@ -28,6 +29,7 @@ import {
   type PlayerAchievementsResponse,
   type PlayerSummariesResponse,
   type StoreItemsResponse,
+  type StoreQueryResponse,
   type VanityResponse,
   type WishlistResponse,
 } from "../format.js";
@@ -197,6 +199,38 @@ export class SteamWebClient {
       input_json: JSON.stringify(input),
     });
     return summarizeItems(res, appids);
+  }
+
+  // Catalog-wide deal discovery (keyless) via the store query backend: find all
+  // games at/above a minimum discount, with price + review % in the same call.
+  // `minReview`/`minReviews` filter the returned page (the Query API ignores
+  // review filters), so widen `count` for stricter thresholds.
+  async discoverDeals(p: {
+    minDiscount: number;
+    count?: number;
+    start?: number;
+    minReview?: number;
+    minReviews?: number;
+    country?: string;
+    language?: string;
+  }): Promise<Record<string, unknown>> {
+    const input = {
+      query: {
+        start: p.start ?? 0,
+        count: p.count ?? 50,
+        filters: { price_filters: { min_discount_percent: p.minDiscount } },
+      },
+      context: {
+        language: p.language ?? this.#l,
+        country_code: p.country ?? this.#country,
+        steam_realm: 1,
+      },
+      data_request: { include_basic_info: true, include_reviews: true },
+    };
+    const res = await this.#get<StoreQueryResponse>("IStoreQueryService/Query/v1/", {
+      input_json: JSON.stringify(input),
+    });
+    return summarizeDiscover(res, { minReview: p.minReview, minReviews: p.minReviews });
   }
 
   // A player's wishlist (needs the wishlist/profile to be public). Keyless.

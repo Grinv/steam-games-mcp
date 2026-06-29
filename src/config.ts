@@ -14,11 +14,6 @@ const EnvSchema = z.object({
   STEAM_API_BASE_URL: z.string().url().default("https://api.steampowered.com"),
   // --- Steam Storefront API: no key; game/store data. ---
   STEAM_STORE_BASE_URL: z.string().url().default("https://store.steampowered.com"),
-  // --- IsThereAnyDeal: optional, for catalog-wide deals + price history (the
-  //     SteamDB-style features Steam's own APIs don't offer). Free key at
-  //     https://isthereanydeal.com/apps/ ---
-  ITAD_API_KEY: z.string().min(1).optional(),
-  ITAD_BASE_URL: z.string().url().default("https://api.isthereanydeal.com"),
 
   // Storefront is region/locale-aware: cc = ISO country (prices), l = language.
   STEAM_COUNTRY: z.string().min(2).max(2).default("US"),
@@ -40,8 +35,6 @@ export interface Config {
   steamApiBaseUrl: string;
   steamApiKey: string | undefined;
   steamStoreBaseUrl: string;
-  itadApiKey: string | undefined;
-  itadBaseUrl: string;
   country: string;
   language: string;
   httpTimeoutMs: number;
@@ -63,8 +56,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     steamApiBaseUrl: parsed.STEAM_API_BASE_URL,
     steamApiKey: parsed.STEAM_API_KEY,
     steamStoreBaseUrl: parsed.STEAM_STORE_BASE_URL,
-    itadApiKey: parsed.ITAD_API_KEY,
-    itadBaseUrl: parsed.ITAD_BASE_URL,
     country: parsed.STEAM_COUNTRY,
     language: parsed.STEAM_LANGUAGE,
     httpTimeoutMs: parsed.HTTP_TIMEOUT_MS,

@@ -6,28 +6,25 @@ import { loadConfig, type Config } from "./config.js";
 import { createLogger, type Logger } from "./lib/logger.js";
 import { StorefrontClient } from "./clients/storefront.js";
 import { SteamWebClient } from "./clients/web.js";
-import { ItadClient } from "./clients/itad.js";
 import { registerStorefrontTools } from "./tools/storefront.js";
 import { registerWebTools } from "./tools/web.js";
-import { registerItadTools } from "./tools/itad.js";
 import { VERSION } from "./version.js";
 
 const INSTRUCTIONS =
   "Query Steam games and players. Store data needs no key: search_games → get_game / " +
-  "get_game_reviews for details, get_specials / get_featured for what's on sale, get_game_news and " +
-  "get_global_achievements for a game's news and achievement rarity. Player data needs a free " +
-  "Steam Web API key (STEAM_API_KEY): get_player_summary, get_owned_games, get_recently_played and " +
-  "get_player_achievements take a 17-digit SteamID64 — use resolve_vanity_url to convert a custom " +
-  "profile name first, and note the target profile must be public. For catalog-wide discounts and " +
-  "price history (e.g. 'all games >80% off', 'is this a historic low'), use get_deals and " +
-  "get_price_history (need a free IsThereAnyDeal key, ITAD_API_KEY). Tools that need a key report " +
-  "clearly when it is unset.";
+  "get_game_reviews for details, get_specials / get_featured / discover_deals for what's on sale " +
+  "(discover_deals finds all catalog discounts by min %, with review % included), get_items to " +
+  "price- and rating-check a list of appids in one call, get_game_news and get_global_achievements " +
+  "for a game's news and achievement rarity, get_current_players for live player counts. Player " +
+  "data needs a free Steam Web API key (STEAM_API_KEY): get_player_summary, get_owned_games, " +
+  "get_recently_played and get_player_achievements take a 17-digit SteamID64 — use resolve_vanity_url " +
+  "to convert a custom profile name first, and note the target profile must be public. Tools that " +
+  "need the key report clearly when it is unset.";
 
 /** Construct a fully-registered MCP server. Shared by start() and tests. */
 export function buildServer(config: Config, logger: Logger): McpServer {
   const store = new StorefrontClient(config, logger);
   const web = new SteamWebClient(config, logger);
-  const itad = new ItadClient(config, logger);
 
   const server = new McpServer(
     { name: "steam-mcp", version: VERSION },
@@ -36,7 +33,6 @@ export function buildServer(config: Config, logger: Logger): McpServer {
 
   registerStorefrontTools(server, store);
   registerWebTools(server, web);
-  registerItadTools(server, itad);
   return server;
 }
 

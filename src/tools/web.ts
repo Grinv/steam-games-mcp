@@ -101,6 +101,70 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
   );
 
   server.registerTool(
+    "discover_deals",
+    {
+      title: "Discover discounted games (catalog-wide)",
+      description:
+        "Find games currently on sale across the whole Steam catalog (keyless) — filter by minimum " +
+        "discount, and optionally by review quality. Each result has discount %, price, review % and " +
+        "release date in one call. Use for 'all games >80% off with good reviews'. No appids needed " +
+        "(unlike get_items, which prices a list you already have).",
+      inputSchema: {
+        min_discount: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .describe("Minimum discount %, e.g. 80 for '80%+ off'."),
+        min_review: z
+          .number()
+          .int()
+          .min(0)
+          .max(100)
+          .describe("Minimum positive-review %, e.g. 90. Applied over the returned page.")
+          .optional(),
+        min_reviews: z
+          .number()
+          .int()
+          .min(0)
+          .describe("Minimum review count (filters shovelware with few reviews).")
+          .optional(),
+        count: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .describe("How many catalog entries to scan (default 50). Raise for stricter filters.")
+          .optional(),
+        start: z.number().int().min(0).describe("Pagination offset into the catalog.").optional(),
+        country: z
+          .string()
+          .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code.")
+          .describe("Country (cc) for prices; overrides STEAM_COUNTRY.")
+          .optional(),
+        language: z
+          .string()
+          .min(2)
+          .describe("Store language; overrides STEAM_LANGUAGE.")
+          .optional(),
+      },
+      annotations: READ_ONLY,
+    },
+    ({ min_discount, min_review, min_reviews, count, start, country, language }) =>
+      reply(() =>
+        web.discoverDeals({
+          minDiscount: min_discount,
+          minReview: min_review,
+          minReviews: min_reviews,
+          count,
+          start,
+          country,
+          language,
+        }),
+      ),
+  );
+
+  server.registerTool(
     "get_current_players",
     {
       title: "Get current player count",
