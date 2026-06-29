@@ -1,0 +1,27 @@
+# Everything not needed at runtime — the bundle ships the self-contained dist/.
+.git/
+.github/
+node_modules/
+src/
+scripts/
+dist-tests/
+docs/
+coverage/
+
+# Tooling / config
+tsconfig.json
+tsup.config.ts
+eslint.config.js
+.nvmrc
+.gitignore
+.mcpbignore
+.editorconfig
+.env
+.env.*
+
+# Tests & sourcemaps
+**/*.test.*
+**/*.map
+
+# OS
+.DS_Store

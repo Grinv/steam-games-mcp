@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.Grinv/steam-mcp",
+  "description": "MCP server for Steam: game/store data (no key) plus player profiles, libraries and achievements via the Steam Web API.",
+  "status": "active",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/Grinv/steam-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/Grinv/steam-mcp/releases/download/v0.1.0/steam-mcp.mcpb",
+      "version": "0.1.0",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # npm dependencies. `cooldown` delays PRs for newly published versions so we
+  # don't pull bleeding-edge (and potentially compromised) releases immediately.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      dev-dependencies:
+        dependency-type: development
+
+  # GitHub Actions are pinned by commit SHA; Dependabot keeps the SHAs current.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

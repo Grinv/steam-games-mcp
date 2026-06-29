@@ -1,0 +1,18 @@
+node_modules/
+dist/
+dist-tests/
+coverage/
+*.mcpb
+
+# Local secrets / dev env
+.env
+.env.*
+!.env.example
+
+# Signing material
+*.pem
+*.key
+
+# Logs / OS
+*.log
+.DS_Store

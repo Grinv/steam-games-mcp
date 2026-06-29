@@ -1,0 +1,72 @@
+{
+  "manifest_version": "0.3",
+  "name": "steam-mcp",
+  "display_name": "Steam (Games & Players)",
+  "version": "0.1.0",
+  "description": "Search Steam games and read store details, prices, reviews and discounts (no key), plus player profiles, libraries and achievements via the Steam Web API.",
+  "author": {
+    "name": "Grinv",
+    "email": "4070730+Grinv@users.noreply.github.com",
+    "url": "https://github.com/Grinv"
+  },
+  "homepage": "https://github.com/Grinv/steam-mcp",
+  "documentation": "https://github.com/Grinv/steam-mcp#readme",
+  "support": "https://github.com/Grinv/steam-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Grinv/steam-mcp"
+  },
+  "license": "MIT",
+  "keywords": ["mcp", "steam", "games"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"],
+      "env": {
+        "STEAM_API_KEY": "${user_config.steam_api_key}",
+        "STEAM_COUNTRY": "${user_config.steam_country}",
+        "STEAM_LANGUAGE": "${user_config.steam_language}"
+      }
+    }
+  },
+  "tools_generated": false,
+  "tools": [
+    { "name": "search_games", "description": "Search the Steam store by title." },
+    { "name": "get_game", "description": "Game store details (price, genres, Metacritic, …)." },
+    { "name": "get_game_reviews", "description": "Review summary + recent reviews." },
+    { "name": "get_specials", "description": "Games currently on discount." },
+    { "name": "get_featured", "description": "Featured store sections (top sellers, new, …)." },
+    { "name": "get_game_news", "description": "Recent news / patch notes for a game." },
+    { "name": "get_global_achievements", "description": "Global achievement unlock rates." },
+    { "name": "resolve_vanity_url", "description": "Vanity profile name → SteamID64 (key)." },
+    { "name": "get_player_summary", "description": "Player public profile (key)." },
+    { "name": "get_owned_games", "description": "A player's games + playtime (key)." },
+    { "name": "get_recently_played", "description": "Games played in the last 2 weeks (key)." },
+    { "name": "get_player_achievements", "description": "A player's achievements in a game (key)." }
+  ],
+  "user_config": {
+    "steam_api_key": {
+      "type": "string",
+      "title": "Steam Web API Key",
+      "description": "Optional. Free key from https://steamcommunity.com/dev/apikey — enables player profile, library and achievement tools. Store/search tools work without it.",
+      "required": false,
+      "sensitive": true
+    },
+    "steam_country": {
+      "type": "string",
+      "title": "Store country (cc)",
+      "description": "Optional. Two-letter ISO country code for store prices, e.g. 'US', 'GB', 'DE'. Defaults to US.",
+      "required": false,
+      "default": "US"
+    },
+    "steam_language": {
+      "type": "string",
+      "title": "Store language",
+      "description": "Optional. Store language, e.g. 'english', 'russian', 'german'. Defaults to english.",
+      "required": false,
+      "default": "english"
+    }
+  }
+}

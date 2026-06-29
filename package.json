@@ -1,0 +1,69 @@
+{
+  "name": "steam-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Steam: game/store data (no key) plus player profiles, libraries and achievements via the Steam Web API.",
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "Grinv",
+    "email": "4070730+Grinv@users.noreply.github.com",
+    "url": "https://github.com/Grinv"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "steam",
+    "steamworks",
+    "games"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Grinv/steam-mcp.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "steam-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && tsup",
+    "build:tests": "node scripts/build-tests.mjs",
+    "test": "npm run build:tests && node scripts/run-tests.mjs",
+    "test:coverage": "npm run build:tests && node scripts/run-tests.mjs --coverage",
+    "lint": "eslint .",
+    "check:api": "node scripts/check-api.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "start": "node dist/index.js",
+    "inspector": "npm run build && npx @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.0.1",
+    "esbuild": "0.28.1",
+    "eslint": "10.6.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.0",
+    "tsup": "8.5.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.62.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "esbuild@0.27.7": true
+  }
+}
