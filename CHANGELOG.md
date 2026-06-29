@@ -6,6 +6,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `get_current_players` — live concurrent player count for a game (no key).
+- `get_review_histogram` — review trend over time: long-term (monthly) history
+  plus recent per-day breakdown with positive % (no key).
+- `get_wishlist` — a player's wishlist appids by SteamID64, sorted by priority
+  (no key; returns found:false when the wishlist/profile is private).
+
 ## [0.1.0]
 
 ### Added

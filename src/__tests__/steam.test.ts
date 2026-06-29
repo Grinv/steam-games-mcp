@@ -107,6 +107,23 @@ const ACHIEVEMENTS = {
   },
 };
 const VANITY = { response: { success: 1, steamid: "76561197960287930" } };
+const CURRENT_PLAYERS = { response: { player_count: 12345, result: 1 } };
+const HISTOGRAM = {
+  success: 1,
+  results: {
+    rollup_type: "month",
+    rollups: [{ date: 1301616000, recommendations_up: 754, recommendations_down: 1 }],
+    recent: [{ date: 1780185600, recommendations_up: 66, recommendations_down: 2 }],
+  },
+};
+const WISHLIST = {
+  response: {
+    items: [
+      { appid: 660, priority: 2, date_added: 1397058887 },
+      { appid: 620, priority: 1, date_added: 1400000000 },
+    ],
+  },
+};
 
 function router(url: string) {
   if (url.includes("/api/storesearch")) return jsonResponse(SEARCH);
@@ -114,10 +131,13 @@ function router(url: string) {
     const id = /appids=(\d+)/.exec(url)?.[1] ?? "620";
     return jsonResponse({ [id]: { success: true, data: APP } });
   }
+  if (url.includes("/appreviewhistogram/")) return jsonResponse(HISTOGRAM);
   if (url.includes("/appreviews/")) return jsonResponse(REVIEWS);
   if (url.includes("/api/featuredcategories")) return jsonResponse(FEATURED);
   if (url.includes("GetNewsForApp")) return jsonResponse(NEWS);
   if (url.includes("GetGlobalAchievementPercentagesForApp")) return jsonResponse(GLOBAL);
+  if (url.includes("GetNumberOfCurrentPlayers")) return jsonResponse(CURRENT_PLAYERS);
+  if (url.includes("GetWishlist")) return jsonResponse(WISHLIST);
   if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
   if (url.includes("GetOwnedGames")) return jsonResponse(OWNED);
   if (url.includes("GetRecentlyPlayedGames")) return jsonResponse(OWNED);
@@ -331,6 +351,83 @@ test("resolve_vanity_url returns the steamid", async () => {
     assert.equal(s.found, true);
     assert.equal(s.steamid, "76561197960287930");
     assert.ok(mock.calls.some((c) => c.url.includes("key=test-key")));
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_current_players works without a key and returns the count", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({ name: "get_current_players", arguments: { appid: 730 } });
+    const s = res.structuredContent as { appid: number; player_count: number };
+    assert.equal(s.appid, 730);
+    assert.equal(s.player_count, 12345);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_review_histogram returns history and recent with positive %", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_STORE_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({ name: "get_review_histogram", arguments: { appid: 620 } });
+    const s = res.structuredContent as {
+      rollup_type: string;
+      history: { positive_pct: number }[];
+      recent: { up: number; down: number; positive_pct: number }[];
+    };
+    assert.equal(s.rollup_type, "month");
+    assert.equal(s.history[0]!.positive_pct, 100); // 754 up / 1 down → 100%
+    assert.equal(s.recent[0]!.up, 66);
+    assert.equal(s.recent[0]!.positive_pct, 97); // 66 / 68
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_wishlist sorts by priority (no key) and reports private as not-found", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353" },
+    });
+    const s = res.structuredContent as {
+      found: boolean;
+      total: number;
+      items: { appid: number }[];
+    };
+    assert.equal(s.found, true);
+    assert.equal(s.total, 2);
+    assert.equal(s.items[0]!.appid, 620); // priority 1 sorts first
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_wishlist returns found:false when empty/private", async () => {
+  const restore = installFetch(
+    mockFetch((url) =>
+      url.includes("GetWishlist") ? jsonResponse({ response: {} }) : jsonResponse({}),
+    ),
+  );
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /private/);
   } finally {
     restore();
     await close();

@@ -10,10 +10,12 @@ import { ApiError } from "../lib/errors.js";
 import {
   detailApp,
   summarizeFeatured,
+  summarizeReviewHistogram,
   summarizeReviews,
   summarizeSearch,
   summarizeSpecials,
   type FeaturedResponse,
+  type ReviewHistogramResponse,
   type ReviewsResponse,
   type SearchResponse,
   type StoreApp,
@@ -69,6 +71,16 @@ export class StorefrontClient {
       query: { json: 1, num_per_page: max, language: "all", purchase_type: "all" },
     });
     return summarizeReviews(res, max);
+  }
+
+  // Review trend over time (monthly history + recent daily). Cached briefly.
+  async getReviewHistogram(appid: number): Promise<Record<string, unknown>> {
+    return this.#cache.wrapStaleOnError(`hist:${appid}:${this.#l}`, async () => {
+      const res = await this.#http.getJson<ReviewHistogramResponse>(`appreviewhistogram/${appid}`, {
+        query: { l: this.#l },
+      });
+      return summarizeReviewHistogram(res);
+    });
   }
 
   // Featured/specials change often; cache briefly via the shared TTL.

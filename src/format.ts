@@ -409,3 +409,86 @@ export function summarizeVanity(r: VanityResponse): Record<string, unknown> {
   if (v?.success === 1 && v.steamid) return { found: true, steamid: v.steamid };
   return { found: false, reason: v?.message ?? "No match for that vanity name" };
 }
+
+// ---- Web API: current players (keyless) -------------------------------------
+
+export interface CurrentPlayersResponse {
+  response?: { player_count?: number; result?: number };
+}
+
+export function summarizeCurrentPlayers(
+  r: CurrentPlayersResponse,
+  appid: number,
+): Record<string, unknown> {
+  return { appid, player_count: r.response?.player_count ?? null };
+}
+
+// ---- Web API: wishlist (keyless; needs a public wishlist) -------------------
+
+export interface WishlistResponse {
+  response?: { items?: { appid?: number; priority?: number; date_added?: number }[] };
+}
+
+function isoDay(ts: number | undefined): string | null {
+  return ts ? new Date(ts * 1000).toISOString().slice(0, 10) : null;
+}
+
+// A wishlist can hold tens of thousands of items; sort by priority (1 = top of
+// the list) and cap. Names aren't included — use get_game per appid for details.
+export function summarizeWishlist(r: WishlistResponse, max = 100): Record<string, unknown> {
+  const items = r.response?.items ?? [];
+  if (items.length === 0) {
+    return {
+      found: false,
+      reason: "Empty wishlist, or the profile/wishlist is private.",
+      total: 0,
+      items: [],
+    };
+  }
+  const sorted = items.slice().sort((a, b) => (a.priority ?? 1e9) - (b.priority ?? 1e9));
+  return {
+    found: true,
+    total: items.length,
+    returned: Math.min(items.length, max),
+    items: sorted.slice(0, max).map((i) => ({
+      appid: i.appid,
+      priority: i.priority ?? null,
+      added: isoDay(i.date_added),
+    })),
+  };
+}
+
+// ---- Storefront: review histogram -------------------------------------------
+
+interface Rollup {
+  date?: number;
+  recommendations_up?: number;
+  recommendations_down?: number;
+}
+export interface ReviewHistogramResponse {
+  success?: number;
+  results?: { rollup_type?: string; rollups?: Rollup[]; recent?: Rollup[] };
+}
+
+function rollup(x: Rollup): Record<string, unknown> {
+  const up = x.recommendations_up ?? 0;
+  const down = x.recommendations_down ?? 0;
+  const total = up + down;
+  return {
+    date: isoDay(x.date),
+    up,
+    down,
+    positive_pct: total ? Math.round((up / total) * 100) : null,
+  };
+}
+
+// `rollups` is the long-term trend (monthly here); `recent` is per-day for the
+// last ~30 days. Cap both so the response stays bounded.
+export function summarizeReviewHistogram(r: ReviewHistogramResponse): Record<string, unknown> {
+  const res = r.results ?? {};
+  return {
+    rollup_type: res.rollup_type ?? null,
+    history: (res.rollups ?? []).slice(-24).map(rollup),
+    recent: (res.recent ?? []).slice(-30).map(rollup),
+  };
+}

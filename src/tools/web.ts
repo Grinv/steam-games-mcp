@@ -70,6 +70,34 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
     ({ appid: id }) => reply(() => web.getGlobalAchievements(id)),
   );
 
+  server.registerTool(
+    "get_current_players",
+    {
+      title: "Get current player count",
+      description:
+        "Get how many people are playing a game right now (live concurrent player count) by appid. " +
+        "Get the appid from search_games. Works without a key.",
+      inputSchema: { appid },
+      annotations: READ_ONLY,
+    },
+    ({ appid: id }) => reply(() => web.getCurrentPlayers(id)),
+  );
+
+  server.registerTool(
+    "get_wishlist",
+    {
+      title: "Get a player's wishlist",
+      description:
+        "List the appids on a player's Steam wishlist (sorted by their priority) by SteamID64. " +
+        "Works without a key, but only if that player's wishlist/profile is public — otherwise it " +
+        "returns found:false. Items carry no names; use get_game per appid for details. " +
+        "Convert a vanity name with resolve_vanity_url first.",
+      inputSchema: { steamid },
+      annotations: READ_ONLY,
+    },
+    ({ steamid: id }) => reply(() => web.getWishlist(id)),
+  );
+
   // ---- player data (key required) -------------------------------------------
 
   server.registerTool(

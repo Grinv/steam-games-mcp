@@ -69,6 +69,20 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
   );
 
   server.registerTool(
+    "get_review_histogram",
+    {
+      title: "Get review trend over time",
+      description:
+        "Get how a game's reviews trend over time by appid: a long-term (monthly) history and the " +
+        "recent per-day breakdown, each with positive/negative counts and positive %. Good for " +
+        "'are reviews improving / did an update hurt reception'. Get the appid from search_games. No key.",
+      inputSchema: { appid },
+      annotations: READ_ONLY,
+    },
+    ({ appid: id }) => reply(() => store.getReviewHistogram(id)),
+  );
+
+  server.registerTool(
     "get_specials",
     {
       title: "Get current discounts",

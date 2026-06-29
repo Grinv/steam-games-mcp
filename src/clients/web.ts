@@ -8,6 +8,7 @@ import { HttpClient } from "../lib/http.js";
 import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
 import {
+  summarizeCurrentPlayers,
   summarizeGlobalAchievements,
   summarizeNews,
   summarizeOwnedGames,
@@ -15,12 +16,15 @@ import {
   summarizePlayerAchievements,
   summarizeRecentlyPlayed,
   summarizeVanity,
+  summarizeWishlist,
+  type CurrentPlayersResponse,
   type GlobalAchievementsResponse,
   type NewsResponse,
   type OwnedGamesResponse,
   type PlayerAchievementsResponse,
   type PlayerSummariesResponse,
   type VanityResponse,
+  type WishlistResponse,
 } from "../format.js";
 import type { Logger } from "../lib/logger.js";
 import type { Config } from "../config.js";
@@ -113,5 +117,20 @@ export class SteamWebClient {
       );
       return summarizeGlobalAchievements(res);
     });
+  }
+
+  // Current concurrent player count for a game. Not cached — it's a live number.
+  async getCurrentPlayers(appid: number): Promise<Record<string, unknown>> {
+    const res = await this.#get<CurrentPlayersResponse>(
+      "ISteamUserStats/GetNumberOfCurrentPlayers/v1/",
+      { appid },
+    );
+    return summarizeCurrentPlayers(res, appid);
+  }
+
+  // A player's wishlist (needs the wishlist/profile to be public). Keyless.
+  async getWishlist(steamid: string): Promise<Record<string, unknown>> {
+    const res = await this.#get<WishlistResponse>("IWishlistService/GetWishlist/v1/", { steamid });
+    return summarizeWishlist(res);
   }
 }
