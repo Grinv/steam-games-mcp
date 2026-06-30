@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-30
+
 ### Added
 
 - **Published to the official MCP Registry** (`registry.modelcontextprotocol.io`)
