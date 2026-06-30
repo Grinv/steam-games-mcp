@@ -6,6 +6,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-06-30
+
+### Fixed
+
+- **Unfilled `.mcpb` optional fields leaked as literal `${user_config.x}`.** When
+  an optional field (Steam ID, API key) is left blank in the Claude Desktop
+  install form, `.mcpb` passes the **unsubstituted placeholder string** (not "")
+  as the env var. A non-empty placeholder was taken as a real value: an unset key
+  became `STEAM_API_KEY="${user_config.steam_api_key}"`, so `web.configured` went
+  true and the server sent garbage to Steam → **403**; an unset `STEAM_ID` became
+  a bogus default player. `loadConfig` now treats `${...}` placeholders as unset
+  (like empty strings). Adds `config.test.ts`.
+
 ## [0.4.5] - 2026-06-30
 
 ### Fixed

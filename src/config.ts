@@ -3,8 +3,8 @@
 // Web API (player profiles, library, achievements — needs a free key from
 // https://steamcommunity.com/dev/apikey). The key is optional so the server
 // always starts and the store + keyless tools work; player tools report a clear
-// error at call time when it is missing. Empty strings are treated as unset so
-// .mcpb (which passes "" for unconfigured user_config fields) does not crash.
+// error at call time when it is missing. Empty strings AND unsubstituted .mcpb
+// placeholders (e.g. "${user_config.steam_id}") are treated as unset.
 import { z } from "zod";
 import type { LogLevel } from "./lib/logger.js";
 
@@ -50,10 +50,19 @@ export interface Config {
   logLevel: LogLevel;
 }
 
+// .mcpb leaves an UNFILLED optional user_config field as the literal,
+// unsubstituted placeholder (e.g. "${user_config.steam_id}") rather than "".
+// Such a value is non-empty, so without this it would be taken as a real key /
+// SteamID — making web.configured true and sending garbage to Steam (→ 403).
+const UNSUBSTITUTED_PLACEHOLDER = /^\$\{[^}]*\}$/;
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  // Drop empty-string values so defaults apply and the optional key stays unset.
+  // Drop empty strings and unsubstituted ${...} placeholders so defaults apply
+  // and optional fields (key, STEAM_ID) stay genuinely unset.
   const cleaned = Object.fromEntries(
-    Object.entries(env).filter(([, v]) => v !== undefined && v !== ""),
+    Object.entries(env).filter(
+      ([, v]) => v !== undefined && v !== "" && !UNSUBSTITUTED_PLACEHOLDER.test(v),
+    ),
   );
   const parsed = EnvSchema.parse(cleaned);
 
