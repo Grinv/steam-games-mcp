@@ -13,14 +13,64 @@
       "identifier": "steam-games-mcp",
       "version": "0.4.2",
       "runtimeHint": "npx",
-      "transport": { "type": "stdio" }
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "STEAM_API_KEY",
+          "description": "Free Steam Web API key (optional). Unlocks player profile, library and achievement tools.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "STEAM_ID",
+          "description": "Default player: 17-digit SteamID64 or vanity name (the part after /id/).",
+          "isRequired": false
+        },
+        {
+          "name": "STEAM_COUNTRY",
+          "description": "Two-letter ISO country code for store prices (e.g. US, GB, DE).",
+          "isRequired": false,
+          "default": "US"
+        },
+        {
+          "name": "STEAM_LANGUAGE",
+          "description": "Store language (e.g. english, russian, german).",
+          "isRequired": false,
+          "default": "english"
+        }
+      ]
     },
     {
       "registryType": "mcpb",
       "identifier": "https://github.com/Grinv/steam-games-mcp/releases/download/v0.4.2/steam-games-mcp.mcpb",
       "version": "0.4.2",
       "fileSha256": "6fef1ed0b0b5a7f676fc6715888e4e5352bf900d9602b45427b3435b3c318773",
-      "transport": { "type": "stdio" }
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "STEAM_API_KEY",
+          "description": "Free Steam Web API key (optional). Unlocks player profile, library and achievement tools.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "STEAM_ID",
+          "description": "Default player: 17-digit SteamID64 or vanity name (the part after /id/).",
+          "isRequired": false
+        },
+        {
+          "name": "STEAM_COUNTRY",
+          "description": "Two-letter ISO country code for store prices (e.g. US, GB, DE).",
+          "isRequired": false,
+          "default": "US"
+        },
+        {
+          "name": "STEAM_LANGUAGE",
+          "description": "Store language (e.g. english, russian, german).",
+          "isRequired": false,
+          "default": "english"
+        }
+      ]
     }
   ]
 }
