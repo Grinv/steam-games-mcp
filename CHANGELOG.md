@@ -6,11 +6,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-06-30
+
+### Fixed
+
+- **MCP Registry publish.** The v0.4.1 registry publish failed schema validation —
+  `server.json`'s `description` was 118 chars but the registry caps it at 100.
+  Shortened it (npm/manifest are unaffected) and added a `version.test.ts` guard.
+  This is the first release to actually land in the registry.
+
 ## [0.4.1] - 2026-06-30
 
 ### Added
 
-- **Published to the official MCP Registry** (`registry.modelcontextprotocol.io`)
+- **MCP Registry publishing setup** (`registry.modelcontextprotocol.io`)
   as `io.github.Grinv/steam-games-mcp`, listing both the npm and `.mcpb` packages.
   `package.json` gains an `mcpName` marker (npm ownership verification) and
   `server.json` lists both packages with the `.mcpb` `fileSha256`. The release
