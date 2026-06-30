@@ -12,6 +12,7 @@ const pkg = readJson("package.json") as { version: string; mcpName: string };
 const manifest = readJson("manifest.json") as { version: string };
 const server = readJson("server.json") as {
   name: string;
+  description: string;
   version: string;
   packages: { registryType: string; version: string; identifier: string }[];
 };
@@ -40,4 +41,13 @@ test("server.json versions (+ mcpb release URL) match package.json", () => {
 // the published server name, so these must stay identical.
 test("package.json mcpName matches server.json name", () => {
   assert.equal(pkg.mcpName, server.name);
+});
+
+// The MCP Registry server.schema caps description at 100 chars (npm/manifest
+// have no such limit, so server.json's may differ from package.json's).
+test("server.json description fits the MCP Registry 100-char limit", () => {
+  assert.ok(
+    server.description.length <= 100,
+    `server.json description is ${server.description.length} chars (max 100)`,
+  );
 });
