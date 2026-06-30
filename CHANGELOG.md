@@ -6,6 +6,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Internal
+
+- Added an **e2e smoke test** that drives the real built bundle the way a client
+  does — a spawned `node dist/index.js` over stdio, run from a dir with no
+  node_modules — asserting it handshakes, registers all tools, and gates player
+  tools. Covers the integration boundary that the recent 0.4.4–0.4.6 bugs hid in
+  (in-memory unit tests never ran the actual artifact).
+
 ## [0.4.6] - 2026-06-30
 
 ### Fixed
