@@ -9,12 +9,20 @@ const root = join(process.cwd(), "..");
 const readJson = (rel: string) => JSON.parse(readFileSync(join(root, rel), "utf8"));
 
 const pkg = readJson("package.json") as { version: string; mcpName: string };
-const manifest = readJson("manifest.json") as { version: string };
+const manifest = readJson("manifest.json") as {
+  version: string;
+  user_config: Record<string, unknown>;
+};
 const server = readJson("server.json") as {
   name: string;
   description: string;
   version: string;
-  packages: { registryType: string; version: string; identifier: string }[];
+  packages: {
+    registryType: string;
+    version: string;
+    identifier: string;
+    environmentVariables?: { name: string; description: string }[];
+  }[];
 };
 
 // package.json is the single source of truth; scripts/sync-version.mjs (the npm
@@ -50,4 +58,27 @@ test("server.json description fits the MCP Registry 100-char limit", () => {
     server.description.length <= 100,
     `server.json description is ${server.description.length} chars (max 100)`,
   );
+});
+
+// User-facing config is declared in both manifest.json (the .mcpb install form)
+// and server.json (the registry entry). They must list the same variables, so a
+// new/renamed config option can't silently land in one but not the other.
+// (config.ts is the upstream source; AGENTS.md covers keeping it in sync too.)
+test("server.json environmentVariables match manifest.json user_config", () => {
+  const expected = new Set(Object.keys(manifest.user_config).map((k) => k.toUpperCase()));
+  for (const p of server.packages) {
+    const got = new Set((p.environmentVariables ?? []).map((e) => e.name));
+    assert.deepEqual(
+      got,
+      expected,
+      `package ${p.registryType} environmentVariables must match manifest user_config`,
+    );
+  }
+  // Registry schema caps each description at 100 chars too.
+  for (const p of server.packages)
+    for (const e of p.environmentVariables ?? [])
+      assert.ok(
+        e.description.length <= 100,
+        `${e.name} description is ${e.description.length} > 100`,
+      );
 });

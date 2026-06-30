@@ -141,6 +141,16 @@ The namespace `io.github.Grinv/*` is authorized by GitHub OIDC from this repo, s
 no registry token/secret is needed. To publish manually instead:
 `mcp-publisher login github && mcp-publisher publish`.
 
+**Keep config in three places in sync.** A user-facing env var is declared in
+`config.ts` (the source of truth), `manifest.json` `user_config` (the `.mcpb`
+install form), and `server.json` `packages[].environmentVariables` (the registry
+entry). When you add/rename/remove one in `config.ts`, update the other two —
+`version.test.ts` guards that `manifest.json` and `server.json` agree, but it
+can't see `config.ts`, so the `config.ts` → descriptors step is on you. Keep
+`server.json` descriptions ≤ 100 chars (registry schema cap). Purely internal
+tunables (timeouts, cache, rate limits, `LOG_LEVEL`) stay env-only — they don't
+belong in the install form or registry entry.
+
 ## Reuse / shared architecture
 
 Generated from the **`mcp-server-template`** repository: a generic carcass
