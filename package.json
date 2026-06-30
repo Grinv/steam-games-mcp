@@ -1,6 +1,6 @@
 {
   "name": "steam-games-mcp",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "mcpName": "io.github.Grinv/steam-games-mcp",
   "description": "MCP server for Steam: game/store data (no key) plus player profiles, libraries and achievements via the Steam Web API.",
   "type": "module",

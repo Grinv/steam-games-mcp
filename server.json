@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Grinv/steam-games-mcp",
   "description": "Steam store/game data (no key) plus player profiles, libraries and achievements (Steam Web API).",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "repository": {
     "url": "https://github.com/Grinv/steam-games-mcp",
     "source": "github"
@@ -11,7 +11,7 @@
     {
       "registryType": "npm",
       "identifier": "steam-games-mcp",
-      "version": "0.4.4",
+      "version": "0.4.5",
       "runtimeHint": "npx",
       "transport": { "type": "stdio" },
       "environmentVariables": [
@@ -42,8 +42,8 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/Grinv/steam-games-mcp/releases/download/v0.4.4/steam-games-mcp.mcpb",
-      "version": "0.4.4",
+      "identifier": "https://github.com/Grinv/steam-games-mcp/releases/download/v0.4.5/steam-games-mcp.mcpb",
+      "version": "0.4.5",
       "fileSha256": "6fef1ed0b0b5a7f676fc6715888e4e5352bf900d9602b45427b3435b3c318773",
       "transport": { "type": "stdio" },
       "environmentVariables": [
