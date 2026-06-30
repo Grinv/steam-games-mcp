@@ -50,8 +50,9 @@ src/
   index.ts        # bin entry — calls start()
   server.ts       # buildServer() + start(); registers everything
   config.ts       # env → validated Config (zod)
-  format.ts       # raw Steam payloads → trimmed, agent-facing shapes
-  lib/            # GENERIC carcass: http, rateLimit, cache, errors, logger, result, tokenStore
+  format/         # raw Steam payloads → trimmed, agent-facing shapes: storefront.ts,
+                  #   web.ts (incl. keyless store services), shared.ts (generic helpers)
+  lib/            # GENERIC carcass: http, rateLimit, cache, errors, logger, result
   clients/        # storefront.ts (keyless store), web.ts (Web API; key optional)
   tools/          # storefront.ts, web.ts (player tools gated on the key), guard.ts
   __tests__/      # node:test (*.test.ts) + helpers.ts
@@ -75,13 +76,18 @@ npm run inspector      # run under the MCP Inspector
 - **Docs and in-code text are English** (README, docs, comments, tool
   descriptions, error messages).
 - Runtime floor is **Node ≥ 18** (global `fetch`); tsup targets `node18`.
-- Log to **stderr only** — stdout is the MCP protocol channel. Use the logger;
-  it redacts credentials (the Web API key travels as a `key` query param).
+- **Never write to stdout** — it is the MCP protocol channel. Use the logger,
+  which writes to **stderr** and redacts credentials (the Web API key travels as
+  a `key` query param). The logger also mirrors each line to the MCP client as a
+  `notifications/message` (the server declares the `logging` capability); that
+  travels as proper JSON-RPC over the transport, not as raw stdout. To add a log
+  destination, pass a `sink` to `createLogger` rather than calling `console.*`.
 - Tool failures return `{ isError: true }` results (via `guard()` / `result.ts`),
   never thrown — the agent should get an actionable message.
 - Keep clients fetch+cache only; all raw→agent-facing shaping lives in
-  `src/format.ts`. Trim responses for token efficiency (cap big lists like a
-  player's library or a game's achievements).
+  `src/format/` (`storefront.ts` / `web.ts`, generic helpers in `shared.ts`).
+  Trim responses for token efficiency (cap big lists like a player's library or
+  a game's achievements).
 - Write tool `description`s and per-field `.describe()` text for the calling
   model: explain when to use a tool and what each parameter means.
 - Keep dependencies minimal. New deps need a clear justification (supply-chain).

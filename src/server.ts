@@ -3,7 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig, type Config } from "./config.js";
-import { createLogger, type Logger } from "./lib/logger.js";
+import { createLogger, type Logger, type LogLevel, type LogSink } from "./lib/logger.js";
 import { StorefrontClient } from "./clients/storefront.js";
 import { SteamWebClient } from "./clients/web.js";
 import { registerStorefrontTools } from "./tools/storefront.js";
@@ -29,7 +29,9 @@ export function buildServer(config: Config, logger: Logger): McpServer {
 
   const server = new McpServer(
     { name: "steam-games-mcp", version: VERSION },
-    { instructions: INSTRUCTIONS },
+    // Declare the logging capability so the SDK registers `logging/setLevel`
+    // and lets us push `notifications/message` to the client (see start()).
+    { capabilities: { logging: {} }, instructions: INSTRUCTIONS },
   );
 
   registerStorefrontTools(server, store);
@@ -37,11 +39,40 @@ export function buildServer(config: Config, logger: Logger): McpServer {
   return server;
 }
 
+// Internal levels → MCP (syslog-style) levels for notifications/message.
+const MCP_LOG_LEVELS = {
+  debug: "debug",
+  info: "info",
+  warn: "warning",
+  error: "error",
+} as const satisfies Record<Exclude<LogLevel, "silent">, string>;
+
+/** A {@link LogSink} that mirrors each log line onto the MCP client as a
+ *  `notifications/message`. Best-effort: sends are dropped silently when there
+ *  is no transport yet, when the client filtered the level via `logging/setLevel`,
+ *  or after disconnect — logging must never break the server. */
+export function mcpLoggingSink(server: McpServer): LogSink {
+  return (level, message) => {
+    void server.server
+      .sendLoggingMessage({
+        level: MCP_LOG_LEVELS[level],
+        logger: "steam-games-mcp",
+        data: message,
+      })
+      .catch(() => {});
+  };
+}
+
 /** Load config, build the server, and serve over stdio until terminated. */
 export async function start(): Promise<void> {
   const config = loadConfig();
-  const logger = createLogger(config.logLevel);
+
+  // Forward-ref via a holder: the logger is needed to build the server, but the
+  // sink needs the server, so we fill it in once the server exists.
+  const ref: { sink?: LogSink } = {};
+  const logger = createLogger(config.logLevel, (level, message) => ref.sink?.(level, message));
   const server = buildServer(config, logger);
+  ref.sink = mcpLoggingSink(server);
 
   await server.connect(new StdioServerTransport());
   logger.info(`steam-games-mcp ${VERSION} ready`);

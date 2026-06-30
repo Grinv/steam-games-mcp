@@ -39,6 +39,7 @@
     "build:tests": "node scripts/build-tests.mjs",
     "test": "npm run build:tests && node scripts/run-tests.mjs",
     "test:coverage": "npm run build:tests && node scripts/run-tests.mjs --coverage",
+    "version": "node scripts/sync-version.mjs && git add src/version.ts manifest.json server.json",
     "lint": "eslint .",
     "check:api": "node scripts/check-api.mjs",
     "format": "prettier --write .",

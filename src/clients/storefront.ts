@@ -2,7 +2,7 @@
 // API is unofficial but public and needs no key — it backs all the game/store
 // tools. Region/locale-aware via cc (country) and l (language). Wraps the
 // generic HttpClient with a polite rate limiter (the store is burst-sensitive)
-// and a TTL cache; all shaping lives in ../format.js.
+// and a TTL cache; all shaping lives in ../format/storefront.js.
 import { HttpClient } from "../lib/http.js";
 import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
@@ -21,7 +21,7 @@ import {
   type ReviewsResponse,
   type SearchResponse,
   type StoreApp,
-} from "../format.js";
+} from "../format/storefront.js";
 import type { Logger } from "../lib/logger.js";
 import type { Config } from "../config.js";
 

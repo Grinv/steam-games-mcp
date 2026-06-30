@@ -39,10 +39,8 @@ jobs:
       - run: npm run build
       - run: npm run lint
       - run: npm run format:check
-      - run: npm run build:tests
       - name: Coverage gate (lines >= 80%)
-        working-directory: dist-tests
-        run: node --experimental-test-coverage --test-coverage-lines=80 --test
+        run: npm run test:coverage
       - name: Validate .mcpb manifest
         run: npx mcpb validate manifest.json
       - name: Audit (production deps)

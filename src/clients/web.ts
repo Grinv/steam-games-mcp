@@ -32,7 +32,7 @@ import {
   type StoreQueryResponse,
   type VanityResponse,
   type WishlistResponse,
-} from "../format.js";
+} from "../format/web.js";
 import type { Logger } from "../lib/logger.js";
 import type { Config } from "../config.js";
 

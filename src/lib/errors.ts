@@ -49,9 +49,11 @@ export function classifyStatus(status: number): { code: ApiErrorCode; retryable:
   return { code: "unknown", retryable: false };
 }
 
-/** Strip anything that looks like a credential before logging. */
+/** Strip anything that looks like a credential before logging. The Steam Web
+ *  API key travels as a `key` query param (e.g. logged request URLs), so it is
+ *  redacted alongside the OAuth-style token params. */
 export function redact(input: string): string {
   return input
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer ***")
-    .replace(/\b(access_token|refresh_token|client_secret|client_id)=([^&\s"]+)/gi, "$1=***");
+    .replace(/\b(access_token|refresh_token|client_secret|client_id|key)=([^&\s"]+)/gi, "$1=***");
 }

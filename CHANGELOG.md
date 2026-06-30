@@ -6,6 +6,37 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-30
+
+### Added
+
+- **MCP logging capability.** The server now declares the `logging` capability and
+  mirrors its stderr log lines to the connected client as `notifications/message`,
+  so MCP hosts can surface server logs in their UI and adjust verbosity at runtime
+  via `logging/setLevel`. stderr logging is unchanged; the new channel is
+  best-effort, credential-redacted, and gated by the same `LOG_LEVEL` threshold.
+
+### Changed
+
+- **Internal: `src/format.ts` split into `src/format/`** (`storefront.ts`, `web.ts`,
+  shared helpers in `shared.ts`), mirroring the `clients/` and `tools/` layout. No
+  behavior change; public tool output is identical.
+- `npm run test:coverage` now enforces the 80%-lines gate locally (previously only
+  in CI), so coverage regressions are caught before pushing. Falls back to
+  report-only on Node < 22.8 (the threshold flag's minimum).
+
+### Fixed
+
+- Logger stderr prefix said `[mal-mcp]` (template leftover); now `[steam-games-mcp]`.
+- `redact()` now masks the Steam Web API `key` query param. It travels in request
+  URLs that are logged at debug level, so it could previously leak into logs (and,
+  with the new MCP logging channel, to clients).
+
+### Removed
+
+- Dead `src/lib/tokenStore.ts` — a MAL OAuth-token persistence leftover from the
+  template, unused here (Steam auth is a single env key, no token rotation).
+
 ## [0.3.0]
 
 ### Changed

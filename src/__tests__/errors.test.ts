@@ -21,4 +21,9 @@ test("redact removes bearer tokens and credential params", () => {
   assert.match(redact("grant&refresh_token=SECRET&x=1"), /refresh_token=\*\*\*/);
   assert.ok(!redact("client_secret=zzz999").includes("zzz999"));
   assert.ok(!redact("access_token=TOK").includes("TOK"));
+  // The Steam Web API key rides as a `key` query param in logged URLs.
+  const url = redact("https://api.steampowered.com/x?key=DEADBEEFKEY&steamid=1");
+  assert.ok(!url.includes("DEADBEEFKEY"));
+  assert.match(url, /key=\*\*\*/);
+  assert.match(url, /steamid=1/); // other params survive
 });

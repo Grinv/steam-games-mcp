@@ -1,8 +1,14 @@
-// Minimal leveled logger. Writes to stderr ONLY — stdout is reserved for the
-// MCP stdio protocol. All messages are redacted of credentials.
+// Minimal leveled logger. Always writes to stderr (stdout is reserved for the
+// MCP stdio protocol); an optional sink can mirror each line onto a second
+// channel (e.g. MCP `notifications/message`). All messages are redacted of
+// credentials before either channel sees them.
 import { redact } from "./errors.js";
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
+
+/** A secondary log destination. Receives the level and the already-redacted
+ *  message, gated by the same threshold as stderr. Must never throw. */
+export type LogSink = (level: Exclude<LogLevel, "silent">, message: string) => void;
 
 const ORDER: Record<LogLevel, number> = {
   debug: 10,
@@ -19,13 +25,22 @@ export interface Logger {
   error(msg: string, ...args: unknown[]): void;
 }
 
-export function createLogger(level: LogLevel): Logger {
+export function createLogger(level: LogLevel, sink?: LogSink): Logger {
   const threshold = ORDER[level];
 
   function emit(lvl: Exclude<LogLevel, "silent">, msg: string, args: unknown[]): void {
     if (ORDER[lvl] < threshold) return;
     const extra = args.length ? " " + redact(args.map((a) => safeString(a)).join(" ")) : "";
-    console.error(`[mal-mcp] ${lvl}: ${redact(msg)}${extra}`);
+    const text = `${redact(msg)}${extra}`;
+    console.error(`[steam-games-mcp] ${lvl}: ${text}`);
+    if (sink) {
+      // The sink must never break logging (or the app); swallow anything it throws.
+      try {
+        sink(lvl, text);
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   return {
