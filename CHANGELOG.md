@@ -6,6 +6,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-06-30
+
+### Added
+
+- **Self-describing registry entry.** `server.json` now declares
+  `environmentVariables` (`STEAM_API_KEY`, `STEAM_ID`, `STEAM_COUNTRY`,
+  `STEAM_LANGUAGE`) on both packages, so registry consumers (agents, installers)
+  can surface every config option — previously only `STEAM_API_KEY` showed up
+  (and only because tools inferred it).
+
 ## [0.4.2] - 2026-06-30
 
 ### Fixed
