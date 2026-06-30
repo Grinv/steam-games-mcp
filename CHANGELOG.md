@@ -6,6 +6,23 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-06-30
+
+### Fixed
+
+- **`.mcpb` bundle was not self-contained.** Despite `bundle: true`, tsup leaves
+  `dependencies` external, so `dist/index.js` still imported `@modelcontextprotocol/sdk`
+  and `zod` at runtime — but the `.mcpb` ships no `node_modules`, so the server
+  crashed standalone with `ERR_MODULE_NOT_FOUND` (masked only where the client
+  installs deps for us). Added `noExternal` to inline all runtime deps; a new
+  `bundle.test.ts` guards that the build stays self-contained.
+
+### Changed
+
+- Build is now **minified** with **no sourcemap** → `dist/index.js` ~1.1 MB → ~620 KB,
+  leaner npm tarball and `.mcpb`. (We log `err.message`, not raw stacks, so
+  diagnostics are unaffected.)
+
 ## [0.4.4] - 2026-06-30
 
 ### Fixed
