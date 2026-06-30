@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, copyFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, copyFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -25,6 +25,11 @@ test("e2e: built bundle runs standalone, handshakes, lists all tools, gates play
   const sandbox = join(tmpdir(), `steam-mcp-e2e-${process.pid}`);
   mkdirSync(sandbox, { recursive: true });
   copyFileSync(distPath, join(sandbox, "index.js"));
+  // The bundle is ESM; ship the package.json that flags it as such, exactly as
+  // the real npm/.mcpb artifact does. Without it a bare `.js` is parsed as CJS
+  // on Node < 20.19 (which lacks ESM syntax auto-detection) and the child dies
+  // with "Cannot use import statement outside a module".
+  writeFileSync(join(sandbox, "package.json"), JSON.stringify({ type: "module" }));
 
   // Inherit env but force the player credentials unset, to test the key gate.
   const env: Record<string, string> = {};

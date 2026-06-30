@@ -13,6 +13,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   node_modules — asserting it handshakes, registers all tools, and gates player
   tools. Covers the integration boundary that the recent 0.4.4–0.4.6 bugs hid in
   (in-memory unit tests never ran the actual artifact).
+- Fixed that e2e smoke test failing on **Node 18**: the sandbox ran the ESM
+  bundle as a bare `index.js` with no `package.json`, so Node < 20.19 (no ESM
+  syntax auto-detection) parsed it as CommonJS and the child died with "Cannot
+  use import statement outside a module". The sandbox now ships a
+  `{"type":"module"}` package.json, mirroring the real npm/.mcpb artifact.
 
 ## [0.4.6] - 2026-06-30
 
