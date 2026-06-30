@@ -102,9 +102,28 @@ npm run inspector      # run under the MCP Inspector
 Run `npm run build && npm test && npm run lint && npm run format:check`.
 Update `CHANGELOG.md` (Unreleased section).
 
+## Releasing
+
+`package.json` is the **single source of truth** for the version. The npm
+`version` lifecycle hook runs `scripts/sync-version.mjs`, which propagates it to
+`src/version.ts`, `manifest.json` and `server.json` (incl. the `.mcpb` release-asset
+URL); `version.test.ts` guards that they never drift. So a release is:
+
+```sh
+# 1. land your changes; move CHANGELOG.md's [Unreleased] notes under a new
+#    [X.Y.Z] - YYYY-MM-DD heading and commit.
+npm version <patch|minor|major>   # bumps + syncs every file + commits "release: vX.Y.Z" + tags vX.Y.Z
+git push --follow-tags            # pushing the tag triggers .github/workflows/release.yml
+```
+
+The tag push (`v*`) runs the **Release** workflow: `check:api` gate → build → test
+→ pack `.mcpb` → GitHub Release → `npm publish` (OIDC trusted publishing, with
+provenance — no token). Never hand-edit the version in the derived files; bump
+`package.json` via `npm version` and let the hook sync the rest.
+
 ## Reuse / shared architecture
 
 Generated from the **`mcp-server-template`** repository: a generic carcass
 (`src/lib/` + build tooling, tests infra, CI) plus a thin domain layer
-(`config.ts`, `format.ts`, `clients/`, domain `tools/`, `check-api.mjs`). When
+(`config.ts`, `format/`, `clients/`, domain `tools/`, `check-api.mjs`). When
 fixing carcass bugs, consider whether the fix belongs upstream in the template.
