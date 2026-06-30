@@ -66,8 +66,16 @@ credentials**; player tools need a free Steam Web API key.
 > Replace each value with your own; remove the optional lines you don't need.
 > A free key comes from <https://steamcommunity.com/dev/apikey>. **From source:**
 > `npm ci && npm run build`, then use `"command": "node"`,
-> `"args": ["/ABS/PATH/steam-games-mcp/dist/index.js"]`. **As a `.mcpb` bundle:** grab it
-> from the [latest release](https://github.com/Grinv/steam-games-mcp/releases/latest).
+> `"args": ["/ABS/PATH/steam-games-mcp/dist/index.js"]`.
+
+### One-click install (Claude Desktop)
+
+Download [**`steam-games-mcp.mcpb`**](https://github.com/Grinv/steam-games-mcp/releases/latest/download/steam-games-mcp.mcpb)
+(always the latest release) and open it in Claude Desktop — **Settings → Extensions** — then
+fill the optional fields (API key, Steam ID, country, language) in the install form. No JSON editing.
+
+Also listed in the [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.Grinv/steam-games-mcp&version=latest)
+as `io.github.Grinv/steam-games-mcp`.
 
 ## Getting your credentials
 

@@ -6,6 +6,22 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-06-30
+
+### Fixed
+
+- **Server disconnected immediately in strict clients (e.g. Claude Desktop).** The
+  MCP logging sink (added in 0.4.0) mirrored the startup "ready" line to the client
+  as a `notifications/message` right after `connect()` — i.e. **before** the
+  `initialize` handshake completed, violating the MCP lifecycle, so strict clients
+  dropped the connection. Client log mirroring now activates only after
+  `initialized`; pre-init logs go to stderr only. Regression test added.
+
+### Changed
+
+- README: direct one-click `.mcpb` download link + Claude Desktop / MCP Registry
+  install notes.
+
 ## [0.4.3] - 2026-06-30
 
 ### Added

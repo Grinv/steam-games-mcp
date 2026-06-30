@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { LoggingMessageNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
-import { createLogger, type LogLevel } from "../lib/logger.js";
-import { buildServer, mcpLoggingSink } from "../server.js";
+import { createLogger, type LogLevel, type LogSink } from "../lib/logger.js";
+import { buildServer, mcpLoggingSink, activateClientLoggingOnInitialize } from "../server.js";
 import { loadConfig } from "../config.js";
 import { connectServer, silentLogger } from "./helpers.js";
 
@@ -142,6 +142,37 @@ test("mcpLoggingSink delivers a notifications/message with the mapped MCP level"
   } finally {
     await cap.close();
   }
+});
+
+test("logs are NOT mirrored to the client before initialize, only after", async () => {
+  // Regression: sending notifications/message before the client's `initialized`
+  // violates the MCP lifecycle and strict clients (Claude Desktop) disconnect.
+  const ref: { sink?: LogSink } = {};
+  const logger = createLogger("info", (level, message) => ref.sink?.(level, message));
+  const server = buildServer(loadConfig({}), logger);
+  activateClientLoggingOnInitialize(server, ref);
+
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const notes: unknown[] = [];
+  clientTransport.onmessage = (m) => {
+    const msg = m as { method?: string; params?: { data?: unknown } };
+    if (msg.method === "notifications/message") notes.push(msg.params?.data);
+  };
+  await clientTransport.start();
+  await server.connect(serverTransport);
+
+  // Before initialize: must go to stderr only, never to the client.
+  captureStderr(() => logger.info("before init"));
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(notes, [], "no client log notification before initialize");
+
+  // Simulate the client's `initialized` (what the SDK invokes on receipt).
+  server.server.oninitialized?.();
+  captureStderr(() => logger.info("after init"));
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(notes, ["after init"], "logs mirrored once initialized");
+
+  await server.close();
 });
 
 test("a client setLevel filters lower-severity logs before they reach it", async () => {

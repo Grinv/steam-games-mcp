@@ -63,16 +63,33 @@ export function mcpLoggingSink(server: McpServer): LogSink {
   };
 }
 
+/** Mirror logs to the client, but ONLY after the initialize handshake completes.
+ *  Sending a `notifications/message` before `initialized` violates the MCP
+ *  lifecycle, and strict clients (e.g. Claude Desktop) drop the connection — so
+ *  `ref.sink` stays unset (stderr-only) until then. Pass the same holder the
+ *  logger reads from. */
+export function activateClientLoggingOnInitialize(
+  server: McpServer,
+  ref: { sink?: LogSink },
+): void {
+  const priorOnInitialized = server.server.oninitialized;
+  server.server.oninitialized = () => {
+    priorOnInitialized?.();
+    ref.sink = mcpLoggingSink(server);
+  };
+}
+
 /** Load config, build the server, and serve over stdio until terminated. */
 export async function start(): Promise<void> {
   const config = loadConfig();
 
   // Forward-ref via a holder: the logger is needed to build the server, but the
-  // sink needs the server, so we fill it in once the server exists.
+  // sink needs the server, so we fill it in once the server exists — and only
+  // once the client has initialized (see activateClientLoggingOnInitialize).
   const ref: { sink?: LogSink } = {};
   const logger = createLogger(config.logLevel, (level, message) => ref.sink?.(level, message));
   const server = buildServer(config, logger);
-  ref.sink = mcpLoggingSink(server);
+  activateClientLoggingOnInitialize(server, ref);
 
   await server.connect(new StdioServerTransport());
   logger.info(`steam-games-mcp ${VERSION} ready`);
