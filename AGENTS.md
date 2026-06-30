@@ -118,8 +118,28 @@ git push --follow-tags            # pushing the tag triggers .github/workflows/r
 
 The tag push (`v*`) runs the **Release** workflow: `check:api` gate → build → test
 → pack `.mcpb` → GitHub Release → `npm publish` (OIDC trusted publishing, with
-provenance — no token). Never hand-edit the version in the derived files; bump
-`package.json` via `npm version` and let the hook sync the rest.
+provenance — no token) → **publish to the official MCP Registry** (`mcp-publisher`,
+GitHub OIDC). Never hand-edit the version in the derived files; bump `package.json`
+via `npm version` and let the hook sync the rest.
+
+### MCP Registry
+
+The server is listed at `registry.modelcontextprotocol.io` as
+`io.github.Grinv/steam-games-mcp` (`server.json`), exposing **both** packages:
+the npm package (`steam-games-mcp`, run via `npx`) and the `.mcpb` GitHub-release
+bundle. Ownership is verified per package type:
+
+- **npm** → the `mcpName` field in `package.json` must equal `server.json`'s `name`
+  (guarded by `version.test.ts`). It ships in the published package, so it is
+  set once and every release just works.
+- **mcpb** → `server.json` needs the artifact's `fileSha256`. Because `.mcpb`
+  (a zip) isn't byte-reproducible, the release workflow recomputes it from the
+  just-packed bundle and injects it before `mcp-publisher publish` — the committed
+  value is only a placeholder. The asset URL must contain "mcp" (it does).
+
+The namespace `io.github.Grinv/*` is authorized by GitHub OIDC from this repo, so
+no registry token/secret is needed. To publish manually instead:
+`mcp-publisher login github && mcp-publisher publish`.
 
 ## Reuse / shared architecture
 

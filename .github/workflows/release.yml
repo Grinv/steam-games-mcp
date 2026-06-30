@@ -37,3 +37,22 @@ jobs:
         run: npm install -g npm@latest
       - name: Publish to npm (trusted publishing + provenance)
         run: npm publish --provenance --access public
+
+      # Publish to the official MCP Registry (registry.modelcontextprotocol.io).
+      # Runs after npm publish so the npm package (with its mcpName marker) is
+      # live for the registry's ownership check. The mcpb entry's fileSha256 is
+      # injected from the just-packed bundle so it always matches the release
+      # asset (zip mtimes make .mcpb non-reproducible, so a committed hash drifts).
+      - name: Inject .mcpb SHA-256 into server.json
+        run: |
+          SHA=$(sha256sum steam-games-mcp.mcpb | cut -d' ' -f1)
+          jq --arg sha "$SHA" \
+            '(.packages[] | select(.registryType=="mcpb")).fileSha256 = $sha' \
+            server.json > server.json.tmp && mv server.json.tmp server.json
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+      - name: Authenticate to MCP Registry (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish

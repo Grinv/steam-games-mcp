@@ -6,6 +6,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Published to the official MCP Registry** (`registry.modelcontextprotocol.io`)
+  as `io.github.Grinv/steam-games-mcp`, listing both the npm and `.mcpb` packages.
+  `package.json` gains an `mcpName` marker (npm ownership verification) and
+  `server.json` lists both packages with the `.mcpb` `fileSha256`. The release
+  workflow now publishes to the registry automatically via `mcp-publisher` with
+  GitHub OIDC (no token), injecting the freshly-packed bundle's hash.
+
 ## [0.4.0] - 2026-06-30
 
 ### Added
