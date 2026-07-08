@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "steam-games-mcp",
   "display_name": "Steam (Games & Players)",
-  "version": "0.4.6",
+  "version": "0.5.0",
   "description": "Search Steam games and read store details, prices, reviews and discounts (no key), plus player profiles, libraries and achievements via the Steam Web API.",
   "author": {
     "name": "Grinv",
