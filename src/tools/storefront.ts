@@ -5,29 +5,9 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StorefrontClient } from "../clients/storefront.js";
-import { errorResult, jsonResult, type ToolResult } from "../lib/result.js";
+import { errorResult, jsonResult } from "../lib/result.js";
 import { guard } from "./guard.js";
-
-const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
-const appid = z
-  .number()
-  .int()
-  .positive()
-  .describe("Steam application id (appid). Get it from search_games.");
-// Per-call overrides of the server defaults (STEAM_COUNTRY / STEAM_LANGUAGE).
-const country = z
-  .string()
-  .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code, e.g. US, RU, DE.")
-  .describe("Country (cc) for prices/currency; overrides STEAM_COUNTRY for this call.")
-  .optional();
-const language = z
-  .string()
-  .min(2)
-  .describe("Store language (e.g. english, russian); overrides STEAM_LANGUAGE for this call.")
-  .optional();
-
-const reply = (fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> =>
-  guard(async () => jsonResult(await fn()));
+import { READ_ONLY, appid, country, language, reply } from "./common.js";
 
 export function registerStorefrontTools(server: McpServer, store: StorefrontClient): void {
   server.registerTool(

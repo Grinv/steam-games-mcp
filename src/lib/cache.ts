@@ -11,6 +11,11 @@ export class TtlCache<T> {
   readonly #ttlMs: number;
   readonly #max: number;
   readonly #map = new Map<string, Entry<T>>();
+  // In-flight compute() promises, keyed like #map. Without this, two callers
+  // racing on the same cold/expired key (e.g. two tools reading the same
+  // cached dictionary at once) would each fire their own upstream request;
+  // the second now shares the first's promise instead.
+  readonly #pending = new Map<string, Promise<T>>();
 
   constructor(ttlMs: number, max = 500) {
     this.#ttlMs = ttlMs;
@@ -42,9 +47,7 @@ export class TtlCache<T> {
   async wrap(key: string, compute: () => Promise<T>): Promise<T> {
     const cached = this.get(key);
     if (cached !== undefined) return cached;
-    const value = await compute();
-    this.set(key, value);
-    return value;
+    return this.#dedupe(key, compute);
   }
 
   /**
@@ -56,13 +59,29 @@ export class TtlCache<T> {
     const fresh = this.get(key);
     if (fresh !== undefined) return fresh;
     try {
-      const value = await compute();
-      this.set(key, value);
-      return value;
+      return await this.#dedupe(key, compute);
     } catch (err) {
       const stale = this.getStale(key);
       if (stale !== undefined) return stale;
       throw err;
     }
+  }
+
+  // Share one in-flight compute() promise across concurrent callers of the
+  // same key, so a cold/expired key triggers exactly one upstream fetch no
+  // matter how many callers race on it. The resolved value is cached exactly
+  // once (by the shared promise's own .then, not per-caller); a rejection
+  // propagates to every waiter and clears the slot so the next call retries.
+  #dedupe(key: string, compute: () => Promise<T>): Promise<T> {
+    const inFlight = this.#pending.get(key);
+    if (inFlight) return inFlight;
+    const promise = compute()
+      .then((value) => {
+        this.set(key, value);
+        return value;
+      })
+      .finally(() => this.#pending.delete(key));
+    this.#pending.set(key, promise);
+    return promise;
   }
 }

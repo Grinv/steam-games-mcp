@@ -2,7 +2,7 @@
 // the fields an agent needs. Clients fetch + cache; all raw→agent-facing shaping
 // lives here. Companion to ./web.ts (official Web API) and ./shared.ts (helpers).
 
-import { hours, isoDay, money, names, stripHtml } from "./shared.js";
+import { hours, isoDay, money, names, storeUrl, stripHtml } from "./shared.js";
 
 // ---- Storefront: appdetails -------------------------------------------------
 
@@ -46,20 +46,24 @@ export interface StoreApp {
   ext_user_account_notice?: string;
 }
 
-function price(
-  p: PriceOverview | undefined,
-  isFree: boolean | undefined,
-): Record<string, unknown> | null {
-  if (isFree) return { is_free: true };
-  if (!p) return null;
+// The formatted price fields shared by detailApp's price() and summarizePrices.
+function formattedPrice(p: PriceOverview): Record<string, unknown> {
   return {
-    is_free: false,
     currency: p.currency ?? null,
     final: p.final_formatted ?? null,
     // Steam leaves initial_formatted empty when there's no discount.
     initial: p.initial_formatted || p.final_formatted || null,
     discount_percent: p.discount_percent ?? 0,
   };
+}
+
+function price(
+  p: PriceOverview | undefined,
+  isFree: boolean | undefined,
+): Record<string, unknown> | null {
+  if (isFree) return { is_free: true };
+  if (!p) return null;
+  return { is_free: false, ...formattedPrice(p) };
 }
 
 function platforms(p: StoreApp["platforms"]): string[] {
@@ -113,7 +117,7 @@ export function detailApp(a: StoreApp): Record<string, unknown> {
     pc_requirements_min: stripHtml(reqs?.minimum),
     website: a.website || null,
     header_image: a.header_image || null,
-    store_url: a.steam_appid ? `https://store.steampowered.com/app/${a.steam_appid}` : null,
+    store_url: storeUrl(a.steam_appid),
   };
 }
 
@@ -156,7 +160,7 @@ export function summarizeSearch(r: SearchResponse): Record<string, unknown> {
       price: searchPrice(i.price),
       metascore: i.metascore || null,
       platforms: platforms(i.platforms),
-      store_url: i.id ? `https://store.steampowered.com/app/${i.id}` : null,
+      store_url: storeUrl(i.id),
     })),
   };
 }
@@ -182,15 +186,7 @@ export function summarizePrices(
     const po = data && !Array.isArray(data) ? data.price_overview : undefined;
     if (!entry?.success) return { appid: id, available: false };
     if (!po) return { appid: id, available: true, is_free: true };
-    return {
-      appid: id,
-      available: true,
-      is_free: false,
-      currency: po.currency ?? null,
-      final: po.final_formatted ?? null,
-      initial: po.initial_formatted || po.final_formatted || null,
-      discount_percent: po.discount_percent ?? 0,
-    };
+    return { appid: id, available: true, is_free: false, ...formattedPrice(po) };
   });
   return { count: prices.length, prices };
 }
@@ -262,7 +258,7 @@ function featuredItems(items: FeaturedItem[] | undefined): Record<string, unknow
     discount_percent: i.discount_percent ?? 0,
     original_price: money(i.original_price, i.currency),
     final_price: money(i.final_price, i.currency),
-    store_url: i.id ? `https://store.steampowered.com/app/${i.id}` : null,
+    store_url: storeUrl(i.id),
   }));
 }
 

@@ -6,8 +6,111 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-09
+
+Richer store cards and catalog/wishlist discovery for the SteamOS / Steam Machine
+era: three hardware-compatibility ratings, native-platform and user-tag filters,
+a one-call enriched wishlist, discount expiry and clickable store links — all
+keyless. Plus a substantial DRY/KISS refactor of the store-service layer.
+
+### Added
+
+- **SteamOS and Steam Frame compatibility.** Valve's store API now returns two
+  compatibility ratings alongside `steam_deck_compat_category`:
+  `steam_os_compat_category` (SteamOS in general — any SteamOS device, including
+  the new Steam Machine, not just it) and `steam_frame_compat_category` (the Steam
+  Frame VR headset). `get_items` and `discover_games` now surface both as
+  `steam_os` / `steam_frame` (same `verified`/`playable`/`unsupported`/`unknown`
+  scale as `steam_deck`), and `discover_games` gains matching `steam_os` /
+  `steam_frame` filters. So "games that run on the Steam Machine / SteamOS" and
+  "Frame-Verified VR games" are now answerable.
+- **Popular user tags.** `get_items` and `discover_games` now surface each game's
+  top user tags (e.g. `Roguelike`, `Souls-like`, `Deckbuilding`) as readable
+  names — resolved keyless from Steam's tag dictionary
+  (`IStoreService/GetTagList`, cached per language). `discover_games` also gains a
+  `tags` filter (AND, case-insensitive), so "roguelike deckbuilders on sale" is a
+  single call. Like the other `discover_games` filters it runs over the
+  popularity-first scan window (Steam's catalog API silently ignores tag filters),
+  so raise `count` when combining niche tags.
+- **Native-platform (`platform`) filter + `platforms` field.** Store cards
+  (`get_items`, `discover_games`, `get_wishlist` detailed) now list each game's
+  native OS builds as `platforms` (`windows`/`mac`/`linux`), and `discover_games` /
+  `get_wishlist` gain a `platform` filter to keep only games with a native build
+  for that OS. Note: `linux` means a native Linux/SteamOS build — distinct from
+  `steam_os` (SteamOS Proton compatibility), which is a separate filter.
+- **Enriched, filterable wishlist in one call.** `get_wishlist` gains
+  `include_details` — full store cards per item (name, price/discount, review %,
+  Deck/SteamOS/Frame compat, tags, release) via
+  `IWishlistService/GetWishlistSortedFiltered`, so "my wishlist with prices" no
+  longer needs a follow-up `get_items`. Narrow it in the same call with `tags`,
+  `platform` (native build), `steam_deck` / `steam_os` / `steam_frame` (Proton
+  compatibility), `min_review` and `min_discount` / `on_sale_only` (e.g. "top
+  metroidvanias on my wishlist, on sale, well-reviewed, that run on SteamOS") —
+  filters run over the whole wishlist before the output cap, and `matched` reports
+  the pre-cap count. The default (no flags) still returns the light appid list.
+- **`discount_end` — when a deal expires.** Store cards (`get_items`,
+  `discover_games`, `get_wishlist` detailed) now include `discount_end` (ISO 8601
+  UTC) for discounted games, so "how long is this discount valid?" is answerable
+  and "deals ending soon" is sortable. Sourced from the store service's
+  `active_discounts`; the Storefront-backed `get_game` / `get_prices` don't carry
+  it.
+- **Clickable `store_url` on every card.** `get_items`, `discover_games` and
+  `get_wishlist` (both light and detailed) now include a `store_url` linking
+  straight to each game's Steam store page — so results are one click away from the
+  page (the storefront tools already carried it; the store-service tools didn't).
+
+### Fixed
+
+- **A failed tag lookup no longer masquerades as "no games matched."** If
+  Steam's tag dictionary (`IStoreService/GetTagList`) is temporarily
+  unavailable, `discover_games` and `get_wishlist`'s `tags` filter used to
+  silently return zero results (an empty dictionary made every tag comparison
+  fail) with no indication anything was wrong. Both now return a clear,
+  actionable error instead when a `tags` filter can't be reliably applied;
+  tag _display_ (no filter requested) still degrades gracefully to an empty
+  `tags` list, unaffected.
+- **`get_wishlist`'s `country`/`language` no longer silently no-op.** Passing
+  either without any other filter used to fall through to the light,
+  appid-only response, which carries no price and therefore ignored both
+  parameters. Setting `country` or `language` now switches to the detailed
+  (store-card) view, same as any other filter.
+- **`check:api` now also verifies `IWishlistService/GetWishlistSortedFiltered`**,
+  the endpoint backing `get_wishlist`'s `include_details`/filters — previously
+  the only new store service from this release without a live release-gate check.
+
 ### Internal
 
+- **Refactored the grown store-service layer (DRY/KISS), no behaviour change.**
+  Split the 660-line `format/web.ts` into `format/web.ts` (official Web API / player
+  data) and `format/store.ts` (keyless store services); extracted a shared
+  `baseCard` so `get_items` and `discover_games`/wishlist cards stop duplicating ~10
+  fields (and `get_items` now also carries the native `platforms` list);
+  centralised the tool param schemas + `reply()` wrapper in `tools/common.ts`
+  (killing duplicate `READ_ONLY`/`appid`/`country`/`language`/compat defs across the
+  two registration files); folded the repeated client `data_request` block into one
+  helper; and unified the client-side filtering (compat / native platform / tags /
+  review / discount / recency) that `discover_games` and the wishlist detailed view
+  both apply into a single `storeItemFilter` predicate. A second pass over the
+  storefront layer: shared `formattedPrice` / `storeUrl` helpers (dropped a stray
+  inline URL), a `#search` helper behind `searchGames`/`resolveAppId`, and — since
+  `getFeatured` and `getSpecials` hit the same endpoint — caching the raw
+  `featuredcategories` payload once so the two share a single upstream call per
+  region. A follow-up pass extracted `priceFields` so `get_items`'s nested price
+  block and the other cards' flat one share one `discount_pct`/`discount_end`/
+  original-price-fallback derivation instead of two hand-written copies.
+- **`TtlCache` now shares one in-flight fetch across concurrent callers of the
+  same key**, instead of each starting its own. This mattered in practice once
+  `get_items`/`discover_games`/`get_wishlist` all began fetching the same
+  `tags:${language}` tag-dictionary cache key: two of those tools called at once
+  on a cold cache used to trigger two redundant `GetTagList` requests against the
+  keyless, rate-limited endpoint; now the second call reuses the first's promise.
+- **Expanded test coverage** to ~94% lines (112 tests): direct unit tests for the
+  store card builders and `discountEnd`, the shared `storeItemFilter` (one case per
+  filter dimension), the new cache in-flight dedup, sparse-/malformed-payload
+  fallbacks in the storefront and Web API formatters, and regressions for the
+  `tags`-filter/`country`-`language` fixes above. Added `check:api` guards for
+  the compat + tag fields and the `GetTagList` dictionary (see also the
+  `GetWishlistSortedFiltered` guard under Fixed).
 - Added an **e2e smoke test** that drives the real built bundle the way a client
   does — a spawned `node dist/index.js` over stdio, run from a dir with no
   node_modules — asserting it handshakes, registers all tools, and gates player
@@ -18,6 +121,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   syntax auto-detection) parsed it as CommonJS and the child died with "Cannot
   use import statement outside a module". The sandbox now ships a
   `{"type":"module"}` package.json, mirroring the real npm/.mcpb artifact.
+
+### Dependencies
+
+- Dev-dependency bumps: `@types/node` 26.1.1, `prettier` 3.9.4,
+  `typescript-eslint` 8.63.0. (TypeScript 7 deferred — `typescript-eslint` isn't
+  compatible with it yet.)
 
 ## [0.4.6] - 2026-06-30
 

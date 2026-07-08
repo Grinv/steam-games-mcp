@@ -79,6 +79,83 @@ const checks = [
     },
   },
   {
+    name: "web IStoreBrowseService/GetItems (compat + tags)",
+    run: async () => {
+      // Guards the platforms.* compat enums and the tag list get_items /
+      // discover_games surface: steam_deck (long-standing) plus steam_os (SteamOS)
+      // and steam_frame (Steam Frame VR), and popular user tags (tagids resolved
+      // via GetTagList below). Portal 2 carries all of them; a drift that drops one
+      // should fail the release, not silently blank the field.
+      const input = {
+        ids: [{ appid: APPID }],
+        context: { language: "english", country_code: "US" },
+        data_request: { include_platforms: true, include_tag_count: 5 },
+      };
+      const res = await fetch(
+        `${API}/IStoreBrowseService/GetItems/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+      const body = await res.json();
+      const item = body.response?.store_items?.[0];
+      const platforms = item?.platforms;
+      if (!platforms) throw new Error("missing store_items[0].platforms");
+      for (const field of [
+        "steam_deck_compat_category",
+        "steam_os_compat_category",
+        "steam_frame_compat_category",
+      ]) {
+        if (typeof platforms[field] !== "number") throw new Error(`missing platforms.${field}`);
+      }
+      if (!Array.isArray(item.tags) || typeof item.tags[0]?.tagid !== "number")
+        throw new Error("missing store_items[0].tags[].tagid");
+    },
+  },
+  {
+    name: "web IStoreService/GetTagList (tag names)",
+    run: async () => {
+      // The keyless tag dictionary that resolves store_items' numeric tagids to
+      // readable names. Without it get_items / discover_games would emit empty tags.
+      const res = await fetch(`${API}/IStoreService/GetTagList/v1/?language=english`, {
+        headers: { Accept: "application/json" },
+      });
+      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+      const body = await res.json();
+      const tags = body.response?.tags;
+      if (!Array.isArray(tags) || !tags.length) throw new Error("missing response.tags");
+      if (typeof tags[0]?.tagid !== "number" || typeof tags[0]?.name !== "string")
+        throw new Error("tags[] missing tagid/name");
+    },
+  },
+  {
+    name: "web IWishlistService/GetWishlistSortedFiltered (enriched wishlist)",
+    run: async () => {
+      // Guards the shape get_wishlist's include_details relies on: each item
+      // embeds a store_item card (same shape as GetItems). Uses the maintainer's
+      // own public wishlist (stable, non-empty) so the check exercises the real
+      // nested store_item fields, not just the top-level envelope.
+      const WISHLIST_STEAMID = "76561198040603064";
+      const input = {
+        steamid: WISHLIST_STEAMID,
+        context: { language: "english", country_code: "US" },
+        data_request: { include_basic_info: true },
+      };
+      const res = await fetch(
+        `${API}/IWishlistService/GetWishlistSortedFiltered/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+      const body = await res.json();
+      const items = body.response?.items;
+      if (!Array.isArray(items) || !items.length)
+        throw new Error("missing response.items — is the test wishlist still public/non-empty?");
+      const item = items[0];
+      if (typeof item.appid !== "number") throw new Error("missing items[0].appid");
+      if (typeof item.store_item?.appid !== "number")
+        throw new Error("missing items[0].store_item.appid");
+    },
+  },
+  {
     name: "web IStoreQueryService/Query (discover)",
     run: async () => {
       const input = {

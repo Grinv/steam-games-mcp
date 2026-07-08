@@ -141,6 +141,47 @@ const WISHLIST = {
   },
 };
 
+// GetWishlistSortedFiltered: each entry embeds a full store_item card. 620 is on
+// sale (80%); 660 is full price — so on_sale_only keeps only 620.
+const WISHLIST_DETAILED = {
+  response: {
+    items: [
+      {
+        appid: 660,
+        priority: 2,
+        date_added: 1397058887,
+        store_item: {
+          appid: 660,
+          name: "Full Price Game",
+          best_purchase_option: { discount_pct: 0, formatted_final_price: "$19.99" },
+          reviews: { summary_filtered: { percent_positive: 80, review_count: 500 } },
+          platforms: { windows: true, steam_deck_compat_category: 2, steam_os_compat_category: 1 },
+          tags: [{ tagid: 30, weight: 700 }],
+          release: { steam_release_date: 1400000000 },
+        },
+      },
+      {
+        appid: 620,
+        priority: 1,
+        date_added: 1400000000,
+        store_item: {
+          appid: 620,
+          name: "Portal 2",
+          best_purchase_option: {
+            discount_pct: 80,
+            formatted_final_price: "$1.99",
+            formatted_original_price: "$9.99",
+          },
+          reviews: { summary_filtered: { percent_positive: 98, review_count: 1000 } },
+          platforms: { windows: true, steam_deck_compat_category: 3, steam_os_compat_category: 2 },
+          tags: [{ tagid: 10, weight: 900 }],
+          release: { steam_release_date: 1303186800 },
+        },
+      },
+    ],
+  },
+};
+
 const ITEMS = {
   response: {
     store_items: [
@@ -152,6 +193,7 @@ const ITEMS = {
           formatted_final_price: "$1.99",
           formatted_original_price: "$9.99",
           discount_pct: 80,
+          active_discounts: [{ discount_end_date: 1783616400 }],
         },
         reviews: {
           summary_filtered: {
@@ -160,7 +202,16 @@ const ITEMS = {
             review_score_label: "Overwhelmingly Positive",
           },
         },
-        platforms: { windows: true, steam_deck_compat_category: 3 },
+        platforms: {
+          windows: true,
+          steam_deck_compat_category: 3,
+          steam_os_compat_category: 2,
+          steam_frame_compat_category: 0,
+        },
+        tags: [
+          { tagid: 10, weight: 900 },
+          { tagid: 20, weight: 500 },
+        ],
         release: { steam_release_date: 1303186800, is_coming_soon: false },
       },
     ],
@@ -179,9 +230,20 @@ const DISCOVER = {
           discount_pct: 80,
           formatted_final_price: "$1.99",
           formatted_original_price: "$9.99",
+          active_discounts: [{ discount_end_date: 1783616400 }],
         },
         reviews: { summary_filtered: { percent_positive: 98, review_count: 1000 } },
-        platforms: { windows: true, steam_deck_compat_category: 3 },
+        platforms: {
+          windows: true,
+          steamos_linux: true,
+          steam_deck_compat_category: 3,
+          steam_os_compat_category: 2,
+          steam_frame_compat_category: 0,
+        },
+        tags: [
+          { tagid: 10, weight: 900 },
+          { tagid: 20, weight: 500 },
+        ],
         release: { steam_release_date: 1303186800 },
       },
       {
@@ -190,14 +252,34 @@ const DISCOVER = {
         visible: true,
         best_purchase_option: { discount_pct: 90, formatted_final_price: "$0.10" },
         reviews: { summary_filtered: { percent_positive: 40, review_count: 5 } },
-        platforms: { windows: true, steam_deck_compat_category: 1 },
+        platforms: {
+          windows: true,
+          steam_deck_compat_category: 1,
+          steam_os_compat_category: 1,
+          steam_frame_compat_category: 0,
+        },
+        tags: [{ tagid: 50, weight: 100 }],
       },
       { appid: 111, name: "Hidden", visible: false },
     ],
   },
 };
 
+const TAGLIST = {
+  response: {
+    version_hash: "test-hash",
+    tags: [
+      { tagid: 10, name: "Puzzle" },
+      { tagid: 20, name: "Co-op" },
+      { tagid: 30, name: "Action Roguelike" },
+      { tagid: 40, name: "Deckbuilding" },
+      { tagid: 50, name: "Shooter" },
+    ],
+  },
+};
+
 function router(url: string) {
+  if (url.includes("IStoreService/GetTagList")) return jsonResponse(TAGLIST);
   if (url.includes("IStoreQueryService/Query")) return jsonResponse(DISCOVER);
   if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(ITEMS);
   if (url.includes("/api/storesearch")) return jsonResponse(SEARCH);
@@ -212,6 +294,7 @@ function router(url: string) {
   if (url.includes("GetSchemaForGame")) return jsonResponse(SCHEMA);
   if (url.includes("GetGlobalAchievementPercentagesForApp")) return jsonResponse(GLOBAL);
   if (url.includes("GetNumberOfCurrentPlayers")) return jsonResponse(CURRENT_PLAYERS);
+  if (url.includes("GetWishlistSortedFiltered")) return jsonResponse(WISHLIST_DETAILED);
   if (url.includes("GetWishlist")) return jsonResponse(WISHLIST);
   if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
   if (url.includes("GetOwnedGames")) return jsonResponse(OWNED);
@@ -547,6 +630,206 @@ test("get_wishlist sorts by priority (no key) and reports private as not-found",
   }
 });
 
+test("get_wishlist include_details returns full store cards (name, price, tags) in one call", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353", include_details: true },
+    });
+    const s = res.structuredContent as {
+      found: boolean;
+      total: number;
+      items: { appid: number; name: string; discount_pct: number; tags: string[] }[];
+    };
+    assert.equal(s.found, true);
+    assert.equal(s.total, 2);
+    // Both items returned, priority order (620 priority 1 first), with resolved cards.
+    assert.equal(s.items[0]!.appid, 620);
+    assert.equal(s.items[0]!.name, "Portal 2");
+    assert.equal(s.items[0]!.discount_pct, 80);
+    assert.deepEqual(s.items[0]!.tags, ["Puzzle"]); // tagid 10 → Puzzle
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_wishlist on_sale_only keeps only discounted items, ranked by discount", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353", on_sale_only: true },
+    });
+    const s = res.structuredContent as {
+      found: boolean;
+      matched: number;
+      items: { appid: number; discount_pct: number }[];
+    };
+    // 660 (0% off) drops out; only 620 (80%) remains.
+    assert.equal(s.matched, 1);
+    assert.equal(s.items.length, 1);
+    assert.equal(s.items[0]!.appid, 620);
+    assert.equal(s.items[0]!.discount_pct, 80);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_wishlist filters detailed items by tag + min_discount over the whole wishlist", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    // "Puzzle games on my wishlist with a good discount" — 620 (Puzzle, 80% off)
+    // matches; 660 (Action Roguelike, 0% off) fails both the tag and the discount.
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353", tags: ["puzzle"], min_discount: 50 },
+    });
+    const s = res.structuredContent as {
+      total: number;
+      matched: number;
+      items: { appid: number; tags: string[]; discount_pct: number }[];
+    };
+    assert.equal(s.total, 2); // whole wishlist scanned
+    assert.equal(s.matched, 1); // one match before the cap
+    assert.equal(s.items[0]!.appid, 620);
+    assert.deepEqual(s.items[0]!.tags, ["Puzzle"]);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_wishlist filters by steam_os (Proton) compatibility, distinct from native platform", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353", steam_os: "playable" },
+    });
+    const s = res.structuredContent as {
+      matched: number;
+      items: { appid: number; steam_os: string; platforms: string[] }[];
+    };
+    // 620 is SteamOS-Playable (cat 2); 660 (cat 1, unsupported) drops out.
+    assert.equal(s.matched, 1);
+    assert.equal(s.items[0]!.appid, 620);
+    assert.equal(s.items[0]!.steam_os, "playable");
+    // steam_os is a Proton rating — the game has no native linux build here.
+    assert.ok(!s.items[0]!.platforms.includes("linux"));
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_wishlist tag filter matches the FULL tag set, not the capped display list", async () => {
+  // Regression: filtering must see every fetched tag. "Deep Cut" has 9 tags with
+  // Metroidvania the lowest-weighted (rank 9), so it falls outside the top-8 the
+  // card displays — but a tags:["Metroidvania"] filter must still match it.
+  const tagNames = {
+    1: "Action",
+    2: "Adventure",
+    3: "Indie",
+    4: "Singleplayer",
+    5: "Great Soundtrack",
+    6: "Difficult",
+    7: "Atmospheric",
+    8: "Pixel Graphics",
+    9: "Metroidvania",
+  };
+  const detailed = {
+    response: {
+      items: [
+        {
+          appid: 5001,
+          priority: 1,
+          store_item: {
+            appid: 5001,
+            name: "Deep Cut",
+            best_purchase_option: {
+              discount_pct: 75,
+              formatted_final_price: "$4.99",
+              formatted_original_price: "$19.99",
+            },
+            reviews: { summary_filtered: { percent_positive: 92, review_count: 3000 } },
+            // Metroidvania (9) has the lowest weight → past the 8-tag display cap.
+            tags: [
+              { tagid: 1, weight: 900 },
+              { tagid: 2, weight: 850 },
+              { tagid: 3, weight: 800 },
+              { tagid: 4, weight: 750 },
+              { tagid: 5, weight: 700 },
+              { tagid: 6, weight: 650 },
+              { tagid: 7, weight: 600 },
+              { tagid: 8, weight: 550 },
+              { tagid: 9, weight: 100 },
+            ],
+          },
+        },
+        {
+          appid: 5002,
+          priority: 2,
+          store_item: {
+            appid: 5002,
+            name: "Not A Metroidvania",
+            best_purchase_option: { discount_pct: 80, formatted_final_price: "$1.99" },
+            reviews: { summary_filtered: { percent_positive: 95, review_count: 9000 } },
+            tags: [
+              { tagid: 1, weight: 900 },
+              { tagid: 2, weight: 800 },
+            ],
+          },
+        },
+      ],
+    },
+  };
+  const restore = installFetch(
+    mockFetch((url) => {
+      if (url.includes("GetTagList"))
+        return jsonResponse({
+          response: {
+            tags: Object.entries(tagNames).map(([id, name]) => ({ tagid: Number(id), name })),
+          },
+        });
+      if (url.includes("GetWishlistSortedFiltered")) return jsonResponse(detailed);
+      return jsonResponse({});
+    }),
+  );
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: {
+        steamid: "76561198028121353",
+        tags: ["Metroidvania"],
+        min_discount: 50,
+        min_review: 80,
+      },
+    });
+    const s = res.structuredContent as {
+      matched: number;
+      items: { appid: number; tags: string[] }[];
+    };
+    // Only Deep Cut matches (5002 has 80% off + 95% but isn't a Metroidvania).
+    assert.equal(s.matched, 1);
+    assert.equal(s.items[0]!.appid, 5001);
+    // The card's displayed tags are capped at 8 and therefore DON'T include the
+    // low-weighted Metroidvania tag it was matched on — proving the fix.
+    assert.equal(s.items[0]!.tags.length, 8);
+    assert.ok(!s.items[0]!.tags.includes("Metroidvania"));
+  } finally {
+    restore();
+    await close();
+  }
+});
+
 test("get_wishlist returns found:false when empty/private", async () => {
   const restore = installFetch(
     mockFetch((url) =>
@@ -697,17 +980,27 @@ test("get_items returns batch store cards (price, review %, release) keyless", a
       items: {
         appid: number;
         available?: boolean;
-        price?: { discount_pct: number };
+        store_url?: string;
+        price?: { discount_pct: number; discount_end?: string };
         review_percent?: number;
         steam_deck?: string;
+        steam_os?: string;
+        steam_frame?: string;
+        tags?: string[];
         release_date?: string;
       }[];
     };
     assert.equal(s.count, 2);
     const a = s.items.find((i) => i.appid === 620)!;
+    assert.equal(a.store_url, "https://store.steampowered.com/app/620");
     assert.equal(a.price!.discount_pct, 80);
+    assert.equal(a.price!.discount_end, "2026-07-09T17:00:00Z"); // from active_discounts end date
     assert.equal(a.review_percent, 98);
     assert.equal(a.steam_deck, "verified"); // steam_deck_compat_category 3 → verified
+    assert.equal(a.steam_os, "playable"); // steam_os_compat_category 2 → playable
+    assert.equal(a.steam_frame, "unknown"); // steam_frame_compat_category 0 → unknown
+    // tagids 10,20 resolved via GetTagList, ordered by weight (900 > 500).
+    assert.deepEqual(a.tags, ["Puzzle", "Co-op"]);
     assert.equal(a.release_date, "2011-04-19");
     // 999 is absent from store_items → available:false.
     assert.equal(s.items.find((i) => i.appid === 999)!.available, false);
@@ -819,7 +1112,12 @@ test("discover_games filters by min discount + review quality, skips hidden, key
     });
     const s = res.structuredContent as {
       total_matching: number;
-      deals: { appid: number; discount_pct: number; review_percent: number }[];
+      deals: {
+        appid: number;
+        discount_pct: number;
+        review_percent: number;
+        discount_end: string;
+      }[];
     };
     assert.equal(s.total_matching, 14132);
     // Only Portal 2 passes: shovelware (40%/5 reviews) and the hidden item drop out.
@@ -827,6 +1125,7 @@ test("discover_games filters by min discount + review quality, skips hidden, key
     assert.equal(s.deals[0]!.appid, 620);
     assert.equal(s.deals[0]!.discount_pct, 80);
     assert.equal(s.deals[0]!.review_percent, 98);
+    assert.equal(s.deals[0]!.discount_end, "2026-07-09T17:00:00Z"); // active_discounts end date
   } finally {
     restore();
     await close();
@@ -888,6 +1187,174 @@ test("discover_games filters by Steam Deck compatibility and tags each result", 
     assert.equal(s.deals.length, 1);
     assert.equal(s.deals[0]!.appid, 620);
     assert.equal(s.deals[0]!.steam_deck, "verified");
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("discover_games filters by SteamOS compatibility and tags each result", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "discover_games",
+      arguments: { min_discount: 80, steam_os: "playable" },
+    });
+    const s = res.structuredContent as {
+      deals: { appid: number; steam_os: string; steam_frame: string }[];
+    };
+    // Portal 2 is SteamOS-Playable (cat 2 ≥ 2); the shovelware (cat 1) drops out.
+    assert.equal(s.deals.length, 1);
+    assert.equal(s.deals[0]!.appid, 620);
+    assert.equal(s.deals[0]!.steam_os, "playable");
+    assert.equal(s.deals[0]!.steam_frame, "unknown"); // frame cat 0 → unknown
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("discover_games filters by native platform and surfaces the platforms list", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "discover_games",
+      arguments: { min_discount: 80, platform: "linux" },
+    });
+    const s = res.structuredContent as {
+      deals: { appid: number; platforms: string[] }[];
+    };
+    // Portal 2 has a native Linux build; the windows-only shovelware drops out.
+    assert.equal(s.deals.length, 1);
+    assert.equal(s.deals[0]!.appid, 620);
+    assert.deepEqual(s.deals[0]!.platforms, ["windows", "linux"]);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("discover_games surfaces resolved tags and filters by tag (client-side, case-insensitive)", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "discover_games",
+      arguments: { min_discount: 80, tags: ["puzzle"] },
+    });
+    const s = res.structuredContent as {
+      deals: { appid: number; tags: string[] }[];
+    };
+    // Portal 2 (tagids 10,20 → Puzzle, Co-op) matches "puzzle"; the shovelware
+    // (tagid 50 → Shooter) has no Puzzle tag and drops out.
+    assert.equal(s.deals.length, 1);
+    assert.equal(s.deals[0]!.appid, 620);
+    assert.deepEqual(s.deals[0]!.tags, ["Puzzle", "Co-op"]);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+// A GetTagList outage must not make a `tags` filter silently return zero
+// matches — it should surface as an actionable error instead.
+function routerWithBrokenTagList(url: string) {
+  if (url.includes("IStoreService/GetTagList")) return jsonResponse({}, { status: 500 });
+  return router(url);
+}
+
+test("discover_games: tags filter errors clearly when GetTagList is unavailable (no silent empty result)", async () => {
+  const restore = installFetch(mockFetch(routerWithBrokenTagList));
+  const { client, close } = await connectServer({
+    STEAM_API_MIN_INTERVAL_MS: "0",
+    HTTP_RETRIES: "0",
+  });
+  try {
+    const res = await client.callTool({
+      name: "discover_games",
+      arguments: { min_discount: 80, tags: ["puzzle"] },
+    });
+    assert.equal(res.isError, true);
+    const text = (res.content as { type: string; text: string }[])[0]?.text ?? "";
+    assert.match(text, /tag dictionary/i);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_wishlist: tags filter errors clearly when GetTagList is unavailable (no silent empty result)", async () => {
+  const restore = installFetch(mockFetch(routerWithBrokenTagList));
+  const { client, close } = await connectServer({
+    STEAM_API_MIN_INTERVAL_MS: "0",
+    HTTP_RETRIES: "0",
+  });
+  try {
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353", tags: ["Metroidvania"] },
+    });
+    assert.equal(res.isError, true);
+    const text = (res.content as { type: string; text: string }[])[0]?.text ?? "";
+    assert.match(text, /tag dictionary/i);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("discover_games: still succeeds without a tags filter even when GetTagList is unavailable", async () => {
+  const restore = installFetch(mockFetch(routerWithBrokenTagList));
+  const { client, close } = await connectServer({
+    STEAM_API_MIN_INTERVAL_MS: "0",
+    HTTP_RETRIES: "0",
+  });
+  try {
+    const res = await client.callTool({
+      name: "discover_games",
+      arguments: { min_discount: 80 },
+    });
+    const s = res.structuredContent as { deals: { appid: number; tags: string[] }[] };
+    // Portal 2 (80% off) and the shovelware (90% off) both pass min_discount:80
+    // with no tags filter active — no error, just empty `tags` on every card.
+    assert.equal(s.deals.length, 2);
+    assert.ok(s.deals.every((d) => d.tags.length === 0));
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_items: still succeeds when GetTagList is unavailable (tags are display-only there)", async () => {
+  const restore = installFetch(mockFetch(routerWithBrokenTagList));
+  const { client, close } = await connectServer({
+    STEAM_API_MIN_INTERVAL_MS: "0",
+    HTTP_RETRIES: "0",
+  });
+  try {
+    const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
+    const s = res.structuredContent as { items: { appid: number; tags: string[] }[] };
+    assert.equal(s.items[0]!.tags.length, 0);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_wishlist: country/language alone switch to detailed mode (not silently ignored)", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
+  try {
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353", country: "DE" },
+    });
+    const s = res.structuredContent as { items: { appid: number; name?: string }[] };
+    // The light path has no `name` field; getting one back proves country
+    // triggered the detailed (store-card) path instead of being dropped.
+    assert.equal(s.items[0]!.name, "Portal 2");
   } finally {
     restore();
     await close();

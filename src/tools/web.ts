@@ -5,15 +5,19 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SteamWebClient } from "../clients/web.js";
-import { jsonResult, errorResult, type ToolResult } from "../lib/result.js";
-import { guard } from "./guard.js";
+import { errorResult, type ToolResult } from "../lib/result.js";
+import {
+  READ_ONLY,
+  appid,
+  country,
+  language,
+  platform,
+  reply,
+  steamDeck,
+  steamFrame,
+  steamOs,
+} from "./common.js";
 
-const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
-const appid = z
-  .number()
-  .int()
-  .positive()
-  .describe("Steam application id (appid). Get it from search_games.");
 const steamid = z
   .string()
   .regex(
@@ -25,9 +29,6 @@ const steamid = z
       "Convert a vanity/custom URL name with resolve_vanity_url first.",
   )
   .optional();
-
-const reply = (fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> =>
-  guard(async () => jsonResult(await fn()));
 
 export function registerWebTools(server: McpServer, web: SteamWebClient): void {
   // Gate player tools on the key; one clear message instead of a round-trip 403.
@@ -79,26 +80,23 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
     {
       title: "Batch store card for many games",
       description:
-        "Get price/discount, review % (positive), Steam Deck compatibility and release date for a " +
-        "LIST of games by appid in ONE keyless call. The efficient way to price-, rating- and " +
-        "Deck-check a wishlist or library without a request per game (each item carries a steam_deck " +
-        "field: verified/playable/unsupported/unknown). Get appids from search_games / get_wishlist / get_owned_games.",
+        "Get price/discount, review % (positive), hardware compatibility, popular user tags and " +
+        "release date for a LIST of games by appid in ONE keyless call. The efficient way to price-, " +
+        "rating-, tag- and compat-check a wishlist or library without a request per game. Each item " +
+        "carries three compatibility fields, each verified/playable/unsupported/unknown: steam_deck " +
+        "(Steam Deck), steam_os (SteamOS — any SteamOS device incl. the Steam Machine), and " +
+        "steam_frame (Steam Frame VR headset); a `tags` list (top user tags like 'Roguelike', " +
+        "'Souls-like', most-relevant first); a clickable `store_url` to the game's Steam page; and, " +
+        "when on sale, `discount_end` (ISO UTC time the discount expires — for 'how long is this deal " +
+        "valid'). Get appids from search_games / get_wishlist / get_owned_games.",
       inputSchema: {
         appids: z
           .array(z.number().int().positive())
           .min(1)
           .max(100)
           .describe("Steam appids (1-100)."),
-        country: z
-          .string()
-          .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code.")
-          .describe("Country (cc) for prices; overrides STEAM_COUNTRY.")
-          .optional(),
-        language: z
-          .string()
-          .min(2)
-          .describe("Store language; overrides STEAM_LANGUAGE.")
-          .optional(),
+        country,
+        language,
       },
       annotations: READ_ONLY,
     },
@@ -112,15 +110,20 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
       description:
         "Find games across the whole Steam catalog (keyless), filtered by ANY combination of: " +
         "discount (min_discount — for 'what's on sale'), release recency (released_after / " +
-        "released_within_days — for 'new games'), Steam Deck compatibility (steam_deck), and review " +
-        "quality (min_review / min_reviews). Each result returns price/discount, review %, Steam Deck " +
-        "status and release date in one call. Examples: '>80% off with 90%+ reviews' → set min_discount " +
-        "+ min_review; 'recent well-reviewed games that run on Steam Deck' → set released_within_days + " +
-        "steam_deck + min_review; 'newest Deck-Verified games' → released_within_days + steam_deck. " +
-        "No appids needed — unlike get_items, which prices a list you already have. " +
-        "Note: the Steam catalog API has no release-date sort, so results are scanned popularity-first " +
-        "and these filters are applied over that window — great for popular titles; a niche release " +
-        "with very few reviews may fall outside the top `count` (raise count for stricter filters).",
+        "released_within_days — for 'new games'), hardware compatibility (steam_deck for Steam Deck, " +
+        "steam_os for SteamOS / the Steam Machine, steam_frame for the Steam Frame VR headset), " +
+        "native OS build (platform — windows/mac/linux), review quality (min_review / min_reviews), " +
+        "and user tags (tags — e.g. ['Roguelike', " +
+        "'Deckbuilding'] for 'games like X'). Each result returns price/discount, review %, all three " +
+        "compat statuses, popular tags, a clickable store_url, discount_end (when a deal expires) and " +
+        "release date in one call. Examples: '>80% off with 90%+ " +
+        "reviews' → set min_discount + min_review; 'recent well-reviewed games that run on Steam Deck' " +
+        "→ set released_within_days + steam_deck + min_review; 'roguelike deckbuilders on sale' → " +
+        "tags:['Roguelike','Deckbuilding'] + min_discount; 'games that run on the Steam Machine / " +
+        "SteamOS' → steam_os. No appids needed — unlike get_items, which prices a list you already have. " +
+        "Note: the Steam catalog API has no release-date/tag sort or filter, so results are scanned " +
+        "popularity-first and the recency, compat and tag filters are applied over that window — great " +
+        "for popular titles; a niche match may fall outside the top `count` (raise count for stricter filters).",
       inputSchema: {
         released_after: z
           .string()
@@ -133,10 +136,17 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
           .min(1)
           .describe("Alternative to released_after: released within the last N days.")
           .optional(),
-        steam_deck: z
-          .enum(["playable", "verified"])
+        steam_deck: steamDeck,
+        steam_os: steamOs,
+        steam_frame: steamFrame,
+        platform,
+        tags: z
+          .array(z.string().min(1))
+          .min(1)
           .describe(
-            "Keep only Deck-capable games: 'verified' = Deck-Verified only; 'playable' = Playable or Verified.",
+            "Keep only games carrying ALL of these user tags (case-insensitive), e.g. " +
+              "['Roguelike','Deckbuilding']. Use exact Steam tag names. Applied over the scanned " +
+              "popularity window, so raise `count` when combining niche tags.",
           )
           .optional(),
         min_review: z
@@ -170,16 +180,8 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
           .describe("How many catalog entries to scan (default 50). Raise for stricter filters.")
           .optional(),
         start: z.number().int().min(0).describe("Pagination offset into the catalog.").optional(),
-        country: z
-          .string()
-          .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code.")
-          .describe("Country (cc) for prices; overrides STEAM_COUNTRY.")
-          .optional(),
-        language: z
-          .string()
-          .min(2)
-          .describe("Store language; overrides STEAM_LANGUAGE.")
-          .optional(),
+        country,
+        language,
       },
       annotations: READ_ONLY,
     },
@@ -187,6 +189,10 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
       released_after,
       released_within_days,
       steam_deck,
+      steam_os,
+      steam_frame,
+      platform: plat,
+      tags,
       min_review,
       min_reviews,
       min_discount,
@@ -205,6 +211,10 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
         web.discoverGames({
           releasedAfter,
           steamDeck: steam_deck,
+          steamOs: steam_os,
+          steamFrame: steam_frame,
+          platform: plat,
+          tags,
           minReview: min_review,
           minReviews: min_reviews,
           minDiscount: min_discount,
@@ -235,14 +245,124 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
     {
       title: "Get a player's wishlist",
       description:
-        "List the appids on a player's Steam wishlist (sorted by their priority) by SteamID64. " +
-        "Works without a key, but only if that player's wishlist/profile is public — otherwise it " +
-        "returns found:false. Items carry no names; use get_game per appid for details. " +
+        "List a player's Steam wishlist by SteamID64. Works without a key, but only if that player's " +
+        "wishlist/profile is public — otherwise it returns found:false. By default returns a light " +
+        "list of appids (sorted by priority, no names). Set include_details for full store cards in " +
+        "ONE call (name, price/discount, review %, Deck/SteamOS/Frame compat, tags, release) — no " +
+        "need to follow up with get_items. Narrow it in the SAME call with tags (e.g. " +
+        "['Metroidvania']), platform (NATIVE windows/mac/linux build), steam_deck / steam_os / " +
+        "steam_frame (Proton compatibility — distinct from a native build), min_review and " +
+        "min_discount / on_sale_only, or country / language (the light appid list carries no price, " +
+        "so setting either implies include_details too) — these are applied over the " +
+        "WHOLE wishlist before the output cap, so a deeply-discounted niche match is never hidden by " +
+        "the cap (e.g. 'top metroidvanias on my wishlist with a good discount and reviews' → " +
+        "tags:['Metroidvania'] + min_discount + min_review). Results ranked by discount when a " +
+        "discount filter is set, else by wishlist priority; `matched` reports the pre-cap count. " +
         "Convert a vanity name with resolve_vanity_url first.",
-      inputSchema: { steamid },
+      inputSchema: {
+        steamid,
+        include_details: z
+          .boolean()
+          .describe(
+            "Return full store cards (name, price, discount, reviews, compatibility, tags) per item " +
+              "in one call, instead of just appids. Implied by any filter below.",
+          )
+          .optional(),
+        on_sale_only: z
+          .boolean()
+          .describe(
+            "Only wishlist items currently discounted, ranked by discount %. Implies include_details.",
+          )
+          .optional(),
+        tags: z
+          .array(z.string().min(1))
+          .min(1)
+          .describe(
+            "Keep only wishlist items carrying ALL of these user tags (case-insensitive), e.g. " +
+              "['Metroidvania']. Implies include_details.",
+          )
+          .optional(),
+        min_review: z
+          .number()
+          .int()
+          .min(0)
+          .max(100)
+          .describe(
+            "Keep only items with at least this positive-review %. Implies include_details.",
+          )
+          .optional(),
+        min_discount: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .describe(
+            "Keep only items discounted at least this %, ranked by discount. Implies include_details.",
+          )
+          .optional(),
+        platform,
+        steam_deck: steamDeck,
+        steam_os: steamOs,
+        steam_frame: steamFrame,
+        country: country.describe(
+          "Country (cc) for prices; overrides STEAM_COUNTRY. Only meaningful for store cards, so " +
+            "setting it implies include_details — the light appid list carries no price.",
+        ),
+        language: language.describe(
+          "Store language; overrides STEAM_LANGUAGE. Only meaningful for store cards, so setting it " +
+            "implies include_details — the light appid list carries no price.",
+        ),
+      },
       annotations: READ_ONLY,
     },
-    ({ steamid: id }) => reply(async () => web.getWishlist(await web.requireSteamId(id))),
+    ({
+      steamid: id,
+      include_details,
+      on_sale_only,
+      tags,
+      min_review,
+      min_discount,
+      platform: plat,
+      steam_deck,
+      steam_os,
+      steam_frame,
+      country,
+      language,
+    }) =>
+      reply(async () => {
+        const sid = await web.requireSteamId(id);
+        // Any filter (or an explicit flag) switches to the enriched card view.
+        // country/language are included here too — the light appid list carries
+        // no price, so those params are a no-op unless detailed mode is on.
+        const detailed =
+          include_details ||
+          on_sale_only ||
+          [
+            tags,
+            min_review,
+            min_discount,
+            plat,
+            steam_deck,
+            steam_os,
+            steam_frame,
+            country,
+            language,
+          ].some((v) => v !== undefined);
+        return detailed
+          ? web.getWishlistDetailed(sid, {
+              onSaleOnly: on_sale_only,
+              tags,
+              minReview: min_review,
+              minDiscount: min_discount,
+              platform: plat,
+              steamDeck: steam_deck,
+              steamOs: steam_os,
+              steamFrame: steam_frame,
+              country,
+              language,
+            })
+          : web.getWishlist(sid);
+      }),
   );
 
   // ---- player data (key required) -------------------------------------------

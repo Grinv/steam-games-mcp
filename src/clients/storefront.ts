@@ -47,25 +47,27 @@ export class StorefrontClient {
     this.#cache = new TtlCache(config.cacheTtlMs);
   }
 
-  // country (cc) and language (l) fall back to the configured defaults; tools
-  // expose them as optional per-call overrides (e.g. compare prices by region).
+  // storesearch backs both title search and name→appid resolution. country (cc)
+  // and language (l) fall back to the configured defaults; tools expose them as
+  // optional per-call overrides (e.g. compare prices by region).
+  #search(term: string, country?: string, language?: string): Promise<SearchResponse> {
+    return this.#http.getJson<SearchResponse>("api/storesearch/", {
+      query: { term, l: language ?? this.#l, cc: country ?? this.#cc },
+    });
+  }
+
   async searchGames(
     term: string,
     country?: string,
     language?: string,
   ): Promise<Record<string, unknown>> {
-    const res = await this.#http.getJson<SearchResponse>("api/storesearch/", {
-      query: { term, l: language ?? this.#l, cc: country ?? this.#cc },
-    });
-    return summarizeSearch(res);
+    return summarizeSearch(await this.#search(term, country, language));
   }
 
   // Resolve a game title to its appid via store search (top match), so callers
   // can pass a name instead of an appid. Returns null when nothing matches.
   async resolveAppId(term: string, country?: string, language?: string): Promise<number | null> {
-    const res = await this.#http.getJson<SearchResponse>("api/storesearch/", {
-      query: { term, l: language ?? this.#l, cc: country ?? this.#cc },
-    });
+    const res = await this.#search(term, country, language);
     return res.items?.find((i) => typeof i.id === "number")?.id ?? null;
   }
 
@@ -135,26 +137,24 @@ export class StorefrontClient {
     });
   }
 
-  // Featured/specials change often; cache briefly via the shared TTL.
+  // featuredcategories backs both getFeatured (all sections) and getSpecials (just
+  // the specials slice). Cache the RAW payload once per cc/l, so calling either —
+  // or both — hits the store at most once; each shapes the cached payload itself.
+  #featured(cc: string, l: string): Promise<FeaturedResponse> {
+    return this.#cache.wrapStaleOnError(
+      `featured:${cc}:${l}`,
+      async () =>
+        (await this.#http.getJson<FeaturedResponse>("api/featuredcategories", {
+          query: { cc, l },
+        })) as Record<string, unknown>,
+    ) as Promise<FeaturedResponse>;
+  }
+
   async getFeatured(country?: string, language?: string): Promise<Record<string, unknown>> {
-    const cc = country ?? this.#cc;
-    const l = language ?? this.#l;
-    return this.#cache.wrapStaleOnError(`featured:${cc}:${l}`, async () => {
-      const res = await this.#http.getJson<FeaturedResponse>("api/featuredcategories", {
-        query: { cc, l },
-      });
-      return summarizeFeatured(res);
-    });
+    return summarizeFeatured(await this.#featured(country ?? this.#cc, language ?? this.#l));
   }
 
   async getSpecials(country?: string, language?: string): Promise<Record<string, unknown>> {
-    const cc = country ?? this.#cc;
-    const l = language ?? this.#l;
-    return this.#cache.wrapStaleOnError(`specials:${cc}:${l}`, async () => {
-      const res = await this.#http.getJson<FeaturedResponse>("api/featuredcategories", {
-        query: { cc, l },
-      });
-      return summarizeSpecials(res);
-    });
+    return summarizeSpecials(await this.#featured(country ?? this.#cc, language ?? this.#l));
   }
 }

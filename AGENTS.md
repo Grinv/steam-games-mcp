@@ -26,10 +26,12 @@ pattern: store/game reads go through the **Steam Storefront API**
 > services (`IStoreBrowseService/GetItems`, `IStoreQueryService/Query`). These tools
 > are exposed without the key gate; the key is still sent when present.
 
-> **No SteamDB, no third-party deal service.** Catalog-wide deal discovery
-> (`discover_deals` via `IStoreQueryService/Query` with `price_filters.min_discount_percent`)
-> and batch price+review (`get_items` via `IStoreBrowseService/GetItems`) come from
-> Steam's own keyless store APIs — verified live. SteamDB has no public API and
+> **No SteamDB, no third-party deal service.** Catalog-wide discovery
+> (`discover_games` via `IStoreQueryService/Query` — deals, recency, compat, tags,
+> native platform) and batch store cards (`get_items` via `IStoreBrowseService/GetItems`;
+> tag names via `IStoreService/GetTagList`, enriched wishlist via
+> `IWishlistService/GetWishlistSortedFiltered`) come from Steam's own keyless store
+> APIs — verified live. SteamDB has no public API and
 > forbids scraping (don't). **Price history is intentionally not offered**: Steam
 > exposes no price-history API (confirmed against the full method list), and the
 > only sources for it (SteamDB / IsThereAnyDeal) were deliberately dropped to keep
@@ -40,7 +42,8 @@ pattern: store/game reads go through the **Steam Storefront API**
 - Steam Web API: https://developer.valvesoftware.com/wiki/Steam_Web_API (official wiki);
   the machine-readable method list is `ISteamWebAPIUtil/GetSupportedAPIList` (keyless
   = the methods usable without a key).
-- Store services (`IStoreBrowseService/GetItems`, `IStoreQueryService/Query`) and the
+- Store services (`IStoreBrowseService/GetItems`, `IStoreQueryService/Query`,
+  `IStoreService/GetTagList`, `IWishlistService/GetWishlistSortedFiltered`) and the
   Storefront API (`store.steampowered.com/api/*`) are **unofficial/undocumented** —
   community reference at https://github.com/Revadike/InternalSteamWebAPI/wiki. All
   field shapes were verified against the live endpoints; `check:api` re-verifies on release.
@@ -51,10 +54,12 @@ src/
   server.ts       # buildServer() + start(); registers everything
   config.ts       # env → validated Config (zod)
   format/         # raw Steam payloads → trimmed, agent-facing shapes: storefront.ts,
-                  #   web.ts (incl. keyless store services), shared.ts (generic helpers)
+                  #   web.ts (official Web API: player data), store.ts (keyless store
+                  #   services: GetItems/Query/tags/enriched wishlist), shared.ts (helpers)
   lib/            # GENERIC carcass: http, rateLimit, cache, errors, logger, result
   clients/        # storefront.ts (keyless store), web.ts (Web API; key optional)
-  tools/          # storefront.ts, web.ts (player tools gated on the key), guard.ts
+  tools/          # storefront.ts, web.ts (player tools gated on the key),
+                  #   common.ts (shared param schemas + reply wrapper), guard.ts
   __tests__/      # node:test (*.test.ts) + helpers.ts
 scripts/          # build-tests.mjs, run-tests.mjs (generic), check-api.mjs (domain)
 ```

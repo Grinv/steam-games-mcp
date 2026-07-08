@@ -1,9 +1,10 @@
-// Trims verbose Steam Web API payloads (api.steampowered.com) down to the fields
-// an agent needs: player profiles/library/achievements, game news + achievement
-// rarity, plus the keyless store services (IStoreBrowseService/GetItems and
-// IStoreQueryService/Query). Companion to ./storefront.ts and ./shared.ts.
+// Trims verbose official Steam Web API payloads (api.steampowered.com) down to the
+// fields an agent needs: player profiles/library/achievements, game news,
+// achievement rarity and the (light) wishlist. The keyless store-service
+// formatters (GetItems/Query/tags/enriched wishlist) live in ./store.ts.
+// Companion to ./storefront.ts and ./shared.ts.
 
-import { hours, isoDay, stripHtml } from "./shared.js";
+import { hours, isoDay, storeUrl, stripHtml } from "./shared.js";
 
 // ---- Web API: player summary ------------------------------------------------
 
@@ -287,157 +288,9 @@ export function summarizeWishlist(r: WishlistResponse, max = 100): Record<string
     returned: Math.min(items.length, max),
     items: sorted.slice(0, max).map((i) => ({
       appid: i.appid,
+      store_url: storeUrl(i.appid),
       priority: i.priority ?? null,
       added: isoDay(i.date_added),
     })),
-  };
-}
-
-// ---- IStoreBrowseService/GetItems (keyless batch store data) ----------------
-
-interface StoreItem {
-  appid?: number;
-  name?: string;
-  is_free?: boolean;
-  best_purchase_option?: {
-    formatted_final_price?: string;
-    formatted_original_price?: string;
-    discount_pct?: number;
-  };
-  reviews?: {
-    summary_filtered?: {
-      review_count?: number;
-      percent_positive?: number;
-      review_score_label?: string;
-    };
-  };
-  release?: { steam_release_date?: number; is_coming_soon?: boolean };
-  // Valve's deck compatibility enum (returned with include_platforms): see DECK_COMPAT.
-  platforms?: { windows?: boolean; mac?: boolean; steam_deck_compat_category?: number };
-  visible?: boolean;
-}
-export interface StoreItemsResponse {
-  response?: { store_items?: StoreItem[] };
-}
-
-// Steam Deck compatibility — Valve's enum on platforms.steam_deck_compat_category.
-const DECK_COMPAT: Record<number, string> = {
-  0: "unknown",
-  1: "unsupported",
-  2: "playable",
-  3: "verified",
-};
-function steamDeck(cat?: number): string {
-  return DECK_COMPAT[cat ?? 0] ?? "unknown";
-}
-// Map a user-facing deck filter to the minimum acceptable category: "verified"
-// keeps only Verified; "playable" keeps Playable or Verified (i.e. "runs on Deck").
-export const DECK_MIN: Record<string, number> = { verified: 3, playable: 2 };
-
-// Compact card from a store item (shared by get_items and discover_games).
-function storeCard(it: StoreItem): Record<string, unknown> {
-  const bp = it.best_purchase_option;
-  const rev = it.reviews?.summary_filtered;
-  return {
-    appid: it.appid,
-    name: it.name ?? null,
-    discount_pct: bp?.discount_pct ?? 0,
-    price: bp?.formatted_final_price || null,
-    original: bp?.formatted_original_price || bp?.formatted_final_price || null,
-    review_percent: rev?.percent_positive ?? null,
-    review_count: rev?.review_count ?? null,
-    review_label: rev?.review_score_label ?? null,
-    steam_deck: steamDeck(it.platforms?.steam_deck_compat_category),
-    release_date: it.release?.steam_release_date
-      ? new Date(it.release.steam_release_date * 1000).toISOString().slice(0, 10)
-      : null,
-  };
-}
-
-// ---- IStoreQueryService/Query (keyless catalog discovery) -------------------
-
-export interface StoreQueryResponse {
-  response?: {
-    metadata?: { total_matching_records?: number; start?: number; count?: number };
-    store_items?: StoreItem[];
-  };
-}
-
-// Catalog-wide deal discovery. The server filters by min discount; review
-// thresholds (percent / count) and discount-desc sorting are applied here over
-// the returned page, since the Query API ignores those filters/sorts.
-export function summarizeDiscover(
-  r: StoreQueryResponse,
-  opts: { minReview?: number; minReviews?: number; steamDeck?: string; releasedAfter?: number },
-): Record<string, unknown> {
-  const deckMin = opts.steamDeck ? DECK_MIN[opts.steamDeck] : undefined;
-  let rows = (r.response?.store_items ?? [])
-    .filter((it) => {
-      if (it.visible === false || typeof it.appid !== "number") return false;
-      // Deck filter runs on the raw category (the Query API can't filter on it).
-      if (deckMin !== undefined && (it.platforms?.steam_deck_compat_category ?? 0) < deckMin)
-        return false;
-      // Recency filter (the Query API has no release-date sort/filter): keep only
-      // items released on/after the cutoff; drop ones with no known release date.
-      if (
-        opts.releasedAfter !== undefined &&
-        (it.release?.steam_release_date ?? 0) < opts.releasedAfter
-      )
-        return false;
-      return true;
-    })
-    .map(storeCard);
-  if (typeof opts.minReview === "number") {
-    rows = rows.filter((x) => ((x.review_percent as number | null) ?? -1) >= opts.minReview!);
-  }
-  if (typeof opts.minReviews === "number") {
-    rows = rows.filter((x) => ((x.review_count as number | null) ?? 0) >= opts.minReviews!);
-  }
-  rows.sort((a, b) => (b.discount_pct as number) - (a.discount_pct as number));
-  return {
-    total_matching: r.response?.metadata?.total_matching_records ?? null,
-    returned: rows.length,
-    deals: rows,
-  };
-}
-
-// Batch store card per requested appid: price+discount, review %, release date —
-// all from one keyless call. Missing appids come back available:false.
-export function summarizeItems(r: StoreItemsResponse, appids: number[]): Record<string, unknown> {
-  const byId = new Map<number, StoreItem>();
-  for (const it of r.response?.store_items ?? [])
-    if (typeof it.appid === "number") byId.set(it.appid, it);
-  return {
-    count: appids.length,
-    items: appids.map((appid) => {
-      const it = byId.get(appid);
-      if (!it || (!it.name && !it.best_purchase_option && !it.reviews)) {
-        return { appid, available: false };
-      }
-      const bp = it.best_purchase_option;
-      const rev = it.reviews?.summary_filtered;
-      return {
-        appid,
-        name: it.name ?? null,
-        is_free: it.is_free ?? false,
-        price: bp
-          ? {
-              final: bp.formatted_final_price || null,
-              original: bp.formatted_original_price || bp.formatted_final_price || null,
-              discount_pct: bp.discount_pct ?? 0,
-            }
-          : it.is_free
-            ? { is_free: true }
-            : null,
-        review_percent: rev?.percent_positive ?? null,
-        review_count: rev?.review_count ?? null,
-        review_label: rev?.review_score_label ?? null,
-        steam_deck: steamDeck(it.platforms?.steam_deck_compat_category),
-        release_date: it.release?.steam_release_date
-          ? new Date(it.release.steam_release_date * 1000).toISOString().slice(0, 10)
-          : null,
-        coming_soon: it.release?.is_coming_soon ?? false,
-      };
-    }),
   };
 }
