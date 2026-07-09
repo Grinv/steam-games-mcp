@@ -26,15 +26,28 @@ jobs:
       - run: npm test
       - name: Pack .mcpb bundle
         run: npx mcpb pack . steam-games-mcp.mcpb
+      # Use CHANGELOG.md as the single source of truth for release notes: extract
+      # this version's section and feed it as the GitHub Release body.
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" {flag=1; next}
+            flag && /^## \[/ {exit}
+            flag {print}
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          echo "----- release notes for $VERSION -----"; cat RELEASE_NOTES.md
       - name: Create GitHub Release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
         with:
           files: steam-games-mcp.mcpb
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
       # Trusted Publishing (OIDC): no token. Requires npm >= 11.5.1 and a
       # trusted publisher configured for this package on npmjs.com.
-      - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
+      # Pin npm: 12.0.0 ships a broken provenance path ("Cannot find module
+      # 'sigstore'") that fails --provenance. 11.18.0 is known-good and >= 11.5.1.
+      - name: Install npm for trusted publishing
+        run: npm install -g npm@11.18.0
       - name: Publish to npm (trusted publishing + provenance)
         run: npm publish --provenance --access public
 
