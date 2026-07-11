@@ -9,7 +9,7 @@ guidance here, not in CLAUDE.md. (For end-user/runtime docs, see [README.md](REA
 A TypeScript MCP server for Steam. Hybrid backend, mirroring the mal-mcp/tmdb-mcp
 pattern: store/game reads go through the **Steam Storefront API**
 (`store.steampowered.com/api/*`) which needs **no key**, while player data
-(profiles, libraries, achievements) uses the **official Steam Web API**
+(profiles, libraries, achievements, friends) uses the **official Steam Web API**
 (`api.steampowered.com`) which needs a **free key**.
 
 > **Why two clients in one server.** The storefront gives credential-free game
@@ -61,7 +61,8 @@ src/
   tools/          # storefront.ts, web.ts (player tools gated on the key),
                   #   common.ts (shared param schemas + reply wrapper), guard.ts
   __tests__/      # node:test (*.test.ts) + helpers.ts
-scripts/          # build-tests.mjs, run-tests.mjs (generic), check-api.mjs (domain)
+scripts/          # build-tests.mjs, run-tests.mjs, sync-version.mjs (generic),
+                  #   check-api.mjs (domain)
 ```
 
 ## Commands
@@ -90,9 +91,9 @@ npm run inspector      # run under the MCP Inspector
 - Tool failures return `{ isError: true }` results (via `guard()` / `result.ts`),
   never thrown — the agent should get an actionable message.
 - Keep clients fetch+cache only; all raw→agent-facing shaping lives in
-  `src/format/` (`storefront.ts` / `web.ts`, generic helpers in `shared.ts`).
-  Trim responses for token efficiency (cap big lists like a player's library or
-  a game's achievements).
+  `src/format/` (`storefront.ts` / `web.ts` / `store.ts`, generic helpers in
+  `shared.ts`). Trim responses for token efficiency (cap big lists like a
+  player's library, a game's achievements, or a friend list).
 - Write tool `description`s and per-field `.describe()` text for the calling
   model: explain when to use a tool and what each parameter means.
 - Keep dependencies minimal. New deps need a clear justification (supply-chain).
