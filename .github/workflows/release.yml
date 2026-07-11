@@ -44,10 +44,10 @@ jobs:
           body_path: RELEASE_NOTES.md
       # Trusted Publishing (OIDC): no token. Requires npm >= 11.5.1 and a
       # trusted publisher configured for this package on npmjs.com.
-      # Pin npm: 12.0.0 ships a broken provenance path ("Cannot find module
-      # 'sigstore'") that fails --provenance. 11.18.0 is known-good and >= 11.5.1.
-      - name: Install npm for trusted publishing
-        run: npm install -g npm@11.18.0
+      # 12.0.0 briefly shipped a broken provenance path ("Cannot find module
+      # 'sigstore'", npm/cli#9722); fixed in 12.0.1, so @latest is safe again.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
       - name: Publish to npm (trusted publishing + provenance)
         run: npm publish --provenance --access public
 
