@@ -10,6 +10,8 @@ import { TtlCache } from "../lib/cache.js";
 import { ApiError } from "../lib/errors.js";
 import {
   summarizeCurrentPlayers,
+  summarizeFriendList,
+  summarizeFriendsWhoOwn,
   summarizeGameSchema,
   summarizeGlobalAchievements,
   summarizeNews,
@@ -20,6 +22,7 @@ import {
   summarizeVanity,
   summarizeWishlist,
   type CurrentPlayersResponse,
+  type FriendListResponse,
   type GameSchemaResponse,
   type GlobalAchievementsResponse,
   type NewsResponse,
@@ -48,6 +51,16 @@ type Query = Record<string, string | number | boolean | undefined>;
 const PRIVATE_PROFILE_REASON =
   "Profile or game-details are private. Ask the owner to set Steam → Privacy → " +
   "Game details = Public.";
+
+const PRIVATE_FRIENDS_REASON =
+  "Profile or friends list is private. Ask the owner to set Steam → Privacy → " +
+  "Friends List = Public.";
+
+function friendIdsOf(r: FriendListResponse): string[] {
+  return (r.friendslist?.friends ?? [])
+    .map((f) => f.steamid)
+    .filter((id): id is string => Boolean(id));
+}
 
 // The include_* flags every store-service card call needs (basic info, reviews,
 // release, native platforms + compat, popular tags). tagCount varies: fewer for
@@ -216,6 +229,83 @@ export class SteamWebClient {
       vanityurl: vanity,
     });
     return summarizeVanity(res);
+  }
+
+  // Batch GetPlayerSummaries for an arbitrary id list, chunked to its
+  // 100-steamid-per-call limit. Shared by getFriendList and findFriendsWhoOwn,
+  // both of which enrich a bare steamid list with names/state/avatar.
+  async #playerSummaries(ids: string[]): Promise<PlayerSummariesResponse> {
+    if (ids.length === 0) return {};
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+    const responses = await Promise.all(
+      chunks.map((chunk) =>
+        this.#get<PlayerSummariesResponse>("ISteamUser/GetPlayerSummaries/v2/", {
+          steamids: chunk.join(","),
+        }),
+      ),
+    );
+    return { response: { players: responses.flatMap((r) => r.response?.players ?? []) } };
+  }
+
+  // Fetch the raw friend list, translating a private friends list into `null`
+  // instead of throwing. Shared by getFriendList and findFriendsWhoOwn.
+  async #friendsRaw(steamid: string): Promise<FriendListResponse | null> {
+    try {
+      return await this.#get<FriendListResponse>("ISteamUser/GetFriendList/v1/", {
+        steamid,
+        relationship: "friend",
+      });
+    } catch (e) {
+      if (e instanceof ApiError && (e.code === "forbidden" || e.code === "unauthorized"))
+        return null;
+      throw e;
+    }
+  }
+
+  // A player's friend list (needs the friends list to be public). GetFriendList
+  // only returns steamid + friend_since, so this enriches with names/state/avatar
+  // via GetPlayerSummaries.
+  async getFriendList(steamid: string): Promise<Record<string, unknown>> {
+    const res = await this.#friendsRaw(steamid);
+    if (res === null) return { found: false, reason: PRIVATE_FRIENDS_REASON };
+    return summarizeFriendList(res, await this.#playerSummaries(friendIdsOf(res)));
+  }
+
+  // Which of a player's friends own a given set of appids, with playtime —
+  // checked against each friend's FULL owned-games list (unlike get_owned_games,
+  // never capped to the top 50 by playtime), so a rarely-played copy is never
+  // missed. GetOwnedGames (unlike GetFriendList) doesn't error on a private
+  // profile — it answers 200 with neither `games` nor `game_count`, which
+  // #ownedPlaytimes reports as null.
+  async findFriendsWhoOwn(steamid: string, appids: number[]): Promise<Record<string, unknown>> {
+    const res = await this.#friendsRaw(steamid);
+    if (res === null) return { found: false, reason: PRIVATE_FRIENDS_REASON };
+    const ids = friendIdsOf(res);
+    if (ids.length === 0) return summarizeFriendsWhoOwn(appids, [], [], {});
+    const [players, ownership] = await Promise.all([
+      this.#playerSummaries(ids),
+      Promise.all(ids.map((id) => this.#ownedPlaytimes(id, appids))),
+    ]);
+    return summarizeFriendsWhoOwn(appids, ids, ownership, players);
+  }
+
+  // Playtime (minutes, playtime_forever) for just the requested appids a
+  // steamid owns, or null when the profile/game-details are private. Only
+  // requested appids are kept — the caller never needs the rest of the library.
+  async #ownedPlaytimes(steamid: string, appids: number[]): Promise<Map<number, number> | null> {
+    const res = await this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
+      steamid,
+      include_appinfo: false,
+    });
+    if (res.response?.games === undefined && res.response?.game_count === undefined) return null;
+    const wanted = new Set(appids);
+    const playtimes = new Map<number, number>();
+    for (const g of res.response?.games ?? []) {
+      if (typeof g.appid === "number" && wanted.has(g.appid))
+        playtimes.set(g.appid, g.playtime_forever ?? 0);
+    }
+    return playtimes;
   }
 
   // ---- keyless-capable (key sent when present) ------------------------------

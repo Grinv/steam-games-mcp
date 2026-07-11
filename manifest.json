@@ -64,6 +64,11 @@
     {
       "name": "get_player_achievements",
       "description": "A player's achievements in a game (key)."
+    },
+    { "name": "get_friend_list", "description": "A player's friends (key, public friends list)." },
+    {
+      "name": "find_friends_who_own",
+      "description": "Which friends own given appid(s), checking their full library (key)."
     }
   ],
   "user_config": {

@@ -43,6 +43,8 @@ Once it's connected, just ask your agent in natural language.
 "List Hollow Knight's achievements and how rare each one is."
 "How far am I through Elden Ring's achievements?"
 "What's the SteamID64 for the profile name 'gabelogannewell'?"
+"Which of my friends own Portal 2, and how many hours have they played?"
+"Show me my Steam friends list."
 ```
 
 ## Install
@@ -128,9 +130,11 @@ Key: **–** no credentials · **K** Steam Web API key.
 | `get_game_achievements`   | K   | Full achievement list (names, descriptions) + rarity                                                         |
 | `resolve_vanity_url`      | K   | Custom profile name → SteamID64                                                                              |
 | `get_player_summary`      | K   | Player public profile                                                                                        |
-| `get_owned_games`         | K   | A player's games + playtime                                                                                  |
+| `get_owned_games`         | K   | A player's games + playtime (top 50 by playtime — not for checking one specific game)                        |
 | `get_recently_played`     | K   | Games played in the last two weeks                                                                           |
 | `get_player_achievements` | K   | A player's achievement progress in a game                                                                    |
+| `get_friend_list`         | K   | A player's friends — name, online state, current game (public friends list)                                  |
+| `find_friends_who_own`    | K   | Which friends own given appid(s) + their playtime — checks each friend's FULL library, not just top 50       |
 
 **Two tiers.** Store/search + discovery tools (`store`/`api.steampowered.com`)
 need **no credentials** — including catalog-wide discovery (`discover_games`:

@@ -100,6 +100,21 @@ const PLAYERS = {
         communityvisibilitystate: 3,
         profileurl: "http://p",
       },
+      {
+        steamid: "76561197960287931",
+        personaname: "Two Socks",
+        personastate: 0,
+        communityvisibilitystate: 3,
+        profileurl: "http://p2",
+      },
+    ],
+  },
+};
+const FRIENDLIST = {
+  friendslist: {
+    friends: [
+      { steamid: "76561197960287930", relationship: "friend", friend_since: 1600000000 },
+      { steamid: "76561197960287931", relationship: "friend", friend_since: 1650000000 },
     ],
   },
 };
@@ -296,6 +311,7 @@ function router(url: string) {
   if (url.includes("GetNumberOfCurrentPlayers")) return jsonResponse(CURRENT_PLAYERS);
   if (url.includes("GetWishlistSortedFiltered")) return jsonResponse(WISHLIST_DETAILED);
   if (url.includes("GetWishlist")) return jsonResponse(WISHLIST);
+  if (url.includes("GetFriendList")) return jsonResponse(FRIENDLIST);
   if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
   if (url.includes("GetOwnedGames")) return jsonResponse(OWNED);
   if (url.includes("GetRecentlyPlayedGames")) return jsonResponse(OWNED);
@@ -519,6 +535,117 @@ test("get_player_achievements forwards a per-call language override", async () =
     });
     const u = mock.calls.find((c) => c.url.includes("GetPlayerAchievements"))!.url;
     assert.match(u, /l=russian/);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_friend_list merges names and sorts most-recent-friend-first", async () => {
+  const restore = installFetch(mockFetch(router));
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({
+      name: "get_friend_list",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as {
+      found: boolean;
+      total: number;
+      friends: { steamid: string; name: string; state: string }[];
+    };
+    assert.equal(s.found, true);
+    assert.equal(s.total, 2);
+    // 76561197960287931 has the later friend_since, so it sorts first.
+    assert.equal(s.friends[0]!.steamid, "76561197960287931");
+    assert.equal(s.friends[0]!.name, "Two Socks");
+    assert.equal(s.friends[1]!.name, "Rabscuttle");
+    assert.equal(s.friends[1]!.state, "online");
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("get_friend_list reports found:false for a private friends list (401)", async () => {
+  const restore = installFetch(
+    mockFetch((url) =>
+      url.includes("GetFriendList") ? jsonResponse({}, { status: 401 }) : jsonResponse({}),
+    ),
+  );
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({
+      name: "get_friend_list",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /friends list/i);
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("find_friends_who_own checks each friend's FULL library and separates private ones", async () => {
+  const restore = installFetch(
+    mockFetch((url) => {
+      if (url.includes("GetFriendList")) return jsonResponse(FRIENDLIST);
+      if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
+      if (url.includes("GetOwnedGames")) {
+        // 76561197960287931's library is private; the other owns 620 + 400.
+        if (url.includes("steamid=76561197960287931")) return jsonResponse({ response: {} });
+        return jsonResponse(OWNED);
+      }
+      return jsonResponse({});
+    }),
+  );
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [620, 999], steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as {
+      total_friends: number;
+      matches: {
+        appid: number;
+        owners: { steamid: string; name: string | null; playtime_hours: number | null }[];
+      }[];
+      private_friends: { steamid: string; name: string | null }[];
+    };
+    assert.equal(s.total_friends, 2);
+    const m620 = s.matches.find((m) => m.appid === 620)!;
+    assert.equal(m620.owners.length, 1);
+    assert.equal(m620.owners[0]!.name, "Rabscuttle");
+    // OWNED gives appid 620 a playtime_forever of 600 minutes = 10h.
+    assert.equal(m620.owners[0]!.playtime_hours, 10);
+    const m999 = s.matches.find((m) => m.appid === 999)!;
+    assert.equal(m999.owners.length, 0);
+    assert.equal(s.private_friends.length, 1);
+    assert.equal(s.private_friends[0]!.steamid, "76561197960287931");
+  } finally {
+    restore();
+    await close();
+  }
+});
+
+test("find_friends_who_own reports found:false for a private friends list (403)", async () => {
+  const restore = installFetch(
+    mockFetch((url) =>
+      url.includes("GetFriendList") ? jsonResponse({}, { status: 403 }) : jsonResponse({}),
+    ),
+  );
+  const { client, close } = await connectServer(ENV);
+  try {
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [620], steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /friends list/i);
   } finally {
     restore();
     await close();

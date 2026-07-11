@@ -108,6 +108,37 @@ test("summarizeWishlistDetailed: keeps wishlist priority order when no discount 
   assert.equal(s.items[0]!.appid, 1); // priority 1 sorts before priority 5
 });
 
+test("summarizeWishlistDetailed: entries Steam didn't enrich are reported via enriched/note, not silently dropped", () => {
+  const mk = (appid: number) => ({
+    appid,
+    priority: 1,
+    store_item: { appid, name: `Game ${appid}`, best_purchase_option: { discount_pct: 0 } },
+  });
+  // Steam attaches store_item to only the first ~100 wishlist entries; simulate
+  // one enriched entry plus one bare entry (appid/priority only, no store_item).
+  const s = summarizeWishlistDetailed({
+    response: { items: [mk(1), { appid: 2, priority: 2 }] },
+  }) as { total: number; enriched: number; matched: number; note: string | undefined };
+  assert.equal(s.total, 2);
+  assert.equal(s.enriched, 1);
+  assert.equal(s.matched, 1);
+  assert.match(s.note!, /1 of 2/);
+});
+
+test("summarizeWishlistDetailed: fully enriched wishlist carries no note", () => {
+  const mk = (appid: number) => ({
+    appid,
+    priority: 1,
+    store_item: { appid, name: `Game ${appid}`, best_purchase_option: { discount_pct: 0 } },
+  });
+  const s = summarizeWishlistDetailed({ response: { items: [mk(1), mk(2)] } }) as {
+    enriched: number;
+    note: string | undefined;
+  };
+  assert.equal(s.enriched, 2);
+  assert.equal(s.note, undefined);
+});
+
 test("summarizeTagList maps tagid→name and skips malformed entries", () => {
   const m = summarizeTagList({
     response: {

@@ -330,12 +330,15 @@ export function summarizeWishlistDetailed(
       items: [],
     };
   }
-  // Filters run over the WHOLE wishlist (same predicate as discover_games) before
-  // the output cap, so a match — e.g. a deeply-discounted niche game whose matching
-  // tag falls past the display cap — is never hidden by the cap or the sort window.
+  // Steam only attaches a store_item card to the first ~100 entries of a
+  // wishlist, however many count/start params this call sends (verified live —
+  // it doesn't budge) — so on a >100-item wishlist, filters below only ever see
+  // that enriched prefix, NOT the whole wishlist as the tool description used to
+  // (wrongly) promise. Entries past it carry no price/reviews/tags to filter on.
+  const enriched = items.filter((i) => i.store_item);
   const keep = storeItemFilter({ ...opts, tagMap });
-  const cards: Record<string, unknown>[] = items
-    .filter((i) => i.store_item && typeof i.appid === "number" && keep(i.store_item!))
+  const cards: Record<string, unknown>[] = enriched
+    .filter((i) => typeof i.appid === "number" && keep(i.store_item!))
     .map((i) => ({
       ...storeCard(i.store_item!, tagMap),
       priority: i.priority ?? null,
@@ -351,6 +354,13 @@ export function summarizeWishlistDetailed(
   return {
     found: true,
     total: items.length,
+    enriched: enriched.length,
+    note:
+      enriched.length < items.length
+        ? `Steam only returned store data for ${enriched.length} of ${items.length} wishlist ` +
+          `items; filters/matches only cover those ${enriched.length} — the rest have no price, ` +
+          "reviews or tags to check."
+        : undefined,
     matched: cards.length,
     returned: Math.min(cards.length, WISHLIST_DETAIL_MAX),
     items: cards.slice(0, WISHLIST_DETAIL_MAX),

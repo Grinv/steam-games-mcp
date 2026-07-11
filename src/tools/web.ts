@@ -253,12 +253,15 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
         "['Metroidvania']), platform (NATIVE windows/mac/linux build), steam_deck / steam_os / " +
         "steam_frame (Proton compatibility — distinct from a native build), min_review and " +
         "min_discount / on_sale_only, or country / language (the light appid list carries no price, " +
-        "so setting either implies include_details too) — these are applied over the " +
-        "WHOLE wishlist before the output cap, so a deeply-discounted niche match is never hidden by " +
-        "the cap (e.g. 'top metroidvanias on my wishlist with a good discount and reviews' → " +
-        "tags:['Metroidvania'] + min_discount + min_review). Results ranked by discount when a " +
-        "discount filter is set, else by wishlist priority; `matched` reports the pre-cap count. " +
-        "Convert a vanity name with resolve_vanity_url first.",
+        "so setting either implies include_details too) — these are applied before the output cap, " +
+        "so a deeply-discounted niche match past the display cap is never hidden by it (e.g. 'top " +
+        "metroidvanias on my wishlist with a good discount and reviews' → tags:['Metroidvania'] + " +
+        "min_discount + min_review). Results ranked by discount when a discount filter is set, else " +
+        "by wishlist priority; `matched` reports the pre-cap count. Steam itself only attaches store " +
+        "data to roughly the first 100 wishlist entries per call — on a bigger wishlist, `enriched` " +
+        "reports how many of `total` got checked, and `note` explains when some were skipped (their " +
+        "filter/price data isn't available at all, not that they don't match). Convert a vanity name " +
+        "with resolve_vanity_url first.",
       inputSchema: {
         steamid,
         include_details: z
@@ -410,6 +413,48 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
   );
 
   server.registerTool(
+    "get_friend_list",
+    {
+      title: "Get a player's friend list",
+      description:
+        "List a player's Steam friends by SteamID64: name, online state, current game and how " +
+        "long they've been friends, most-recently-added first. Requires STEAM_API_KEY and the " +
+        "friends list to be public. For 'which of my friends own game X', use find_friends_who_own " +
+        "instead — it checks each friend's full library, not just this list. Get the SteamID64 from " +
+        "resolve_vanity_url.",
+      inputSchema: { steamid },
+      annotations: READ_ONLY,
+    },
+    ({ steamid: id }) => requireKey(async () => web.getFriendList(await web.requireSteamId(id))),
+  );
+
+  server.registerTool(
+    "find_friends_who_own",
+    {
+      title: "Find friends who own a game",
+      description:
+        "Check which of a player's Steam friends own one or more games by appid, with each owner's " +
+        "playtime_hours — 'which of my friends have Portal 2 and how long have they played'. Checks " +
+        "each friend's FULL library, unlike get_owned_games / get_friend_list which cap at the top " +
+        "50 games by playtime — so a friend's rarely-played or unplayed copy is never missed (its " +
+        "playtime_hours may still be low or 0). Requires STEAM_API_KEY and the player's friends list " +
+        "to be public; friends with a private library are listed separately in private_friends " +
+        "(can't be checked) rather than silently counted as non-owners. Get appids from search_games.",
+      inputSchema: {
+        appids: z
+          .array(z.number().int().positive())
+          .min(1)
+          .max(10)
+          .describe("Steam appids to check (1-10)."),
+        steamid,
+      },
+      annotations: READ_ONLY,
+    },
+    ({ appids, steamid: id }) =>
+      requireKey(async () => web.findFriendsWhoOwn(await web.requireSteamId(id), appids)),
+  );
+
+  server.registerTool(
     "get_player_summary",
     {
       title: "Get player profile",
@@ -427,8 +472,10 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
     {
       title: "Get owned games",
       description:
-        "List the games a player owns with playtime (hours), most-played first. Requires " +
-        "STEAM_API_KEY and a public profile + game-details visibility. Get the SteamID64 from resolve_vanity_url.",
+        "List the games a player owns with playtime (hours), most-played first (capped to the top " +
+        "50 by playtime — a lightly-played or unplayed game may not appear, so this is NOT reliable " +
+        "for 'does X own game Y'; use find_friends_who_own for that). Requires STEAM_API_KEY and a " +
+        "public profile + game-details visibility. Get the SteamID64 from resolve_vanity_url.",
       inputSchema: { steamid },
       annotations: READ_ONLY,
     },

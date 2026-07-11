@@ -8,7 +8,7 @@ import { hours, isoDay, storeUrl, stripHtml } from "./shared.js";
 
 // ---- Web API: player summary ------------------------------------------------
 
-interface PlayerSummary {
+export interface PlayerSummary {
   steamid?: string;
   personaname?: string;
   profileurl?: string;
@@ -292,5 +292,81 @@ export function summarizeWishlist(r: WishlistResponse, max = 100): Record<string
       priority: i.priority ?? null,
       added: isoDay(i.date_added),
     })),
+  };
+}
+
+// ---- Web API: friend list (key required; friends list must be public) ------
+
+export interface FriendListResponse {
+  friendslist?: { friends?: { steamid?: string; relationship?: string; friend_since?: number }[] };
+}
+
+// GetFriendList only returns steamid/friend_since — no names — so this merges
+// in a GetPlayerSummaries batch (fetched alongside) for name/state/avatar.
+// Sorted most-recent-friend-first, capped like the other list tools.
+export function summarizeFriendList(
+  r: FriendListResponse,
+  players: PlayerSummariesResponse,
+  max = 100,
+): Record<string, unknown> {
+  const friends = r.friendslist?.friends ?? [];
+  if (friends.length === 0) return { found: true, total: 0, returned: 0, friends: [] };
+  const byId = new Map<string, PlayerSummary>();
+  for (const p of players.response?.players ?? []) if (p.steamid) byId.set(p.steamid, p);
+  const sorted = friends.slice().sort((a, b) => (b.friend_since ?? 0) - (a.friend_since ?? 0));
+  return {
+    found: true,
+    total: friends.length,
+    returned: Math.min(friends.length, max),
+    friends: sorted.slice(0, max).map((f) => {
+      const p = f.steamid ? byId.get(f.steamid) : undefined;
+      return {
+        steamid: f.steamid,
+        name: p?.personaname ?? null,
+        state: PERSONA_STATES[p?.personastate ?? 0] ?? "offline",
+        in_game: p?.gameextrainfo || null,
+        profile_url: p?.profileurl ?? null,
+        friends_since: isoDay(f.friend_since),
+      };
+    }),
+  };
+}
+
+// ---- Web API: find friends who own a game (key required) -------------------
+
+// Per appid, which friends own it, plus the friends whose library couldn't be
+// checked at all (private) — kept separate from "doesn't own" so an agent never
+// reports a private library as a confirmed non-owner.
+export function summarizeFriendsWhoOwn(
+  appids: number[],
+  friendIds: string[],
+  ownership: (Map<number, number> | null)[],
+  players: PlayerSummariesResponse,
+): Record<string, unknown> {
+  const byId = new Map<string, PlayerSummary>();
+  for (const p of players.response?.players ?? []) if (p.steamid) byId.set(p.steamid, p);
+  const nameOf = (steamid: string) => ({ steamid, name: byId.get(steamid)?.personaname ?? null });
+
+  const owners = new Map<number, ({ playtime_hours: number | null } & ReturnType<typeof nameOf>)[]>(
+    appids.map((a) => [a, []]),
+  );
+  const privateFriends: ReturnType<typeof nameOf>[] = [];
+  friendIds.forEach((steamid, i) => {
+    const playtimes = ownership[i];
+    if (!playtimes) {
+      privateFriends.push(nameOf(steamid));
+      return;
+    }
+    for (const appid of appids) {
+      if (!playtimes.has(appid)) continue;
+      owners.get(appid)!.push({ ...nameOf(steamid), playtime_hours: hours(playtimes.get(appid)) });
+    }
+  });
+
+  return {
+    found: true,
+    total_friends: friendIds.length,
+    matches: appids.map((appid) => ({ appid, owners: owners.get(appid) ?? [] })),
+    private_friends: privateFriends,
   };
 }

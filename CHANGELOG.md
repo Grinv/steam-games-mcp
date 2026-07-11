@@ -6,6 +6,27 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `get_friend_list` tool — a player's Steam friends (name, online state, current
+  game, friends-since), enriched via `GetPlayerSummaries`. Requires `STEAM_API_KEY`
+  and a public friends list.
+- `find_friends_who_own` tool — which of a player's friends own given appid(s)
+  and how many hours they've played, checked against each friend's FULL
+  owned-games list (unlike `get_owned_games` / `get_friend_list`, never capped
+  to the top 50 by playtime). Friends with a private library are reported
+  separately, not counted as non-owners.
+
+### Fixed
+
+- `get_wishlist` (`include_details`): Steam's `GetWishlistSortedFiltered` only
+  attaches store data to roughly the first 100 entries of a wishlist, no matter
+  what pagination params are sent (verified live) — on a bigger wishlist,
+  filters were silently only checking that prefix while the tool description
+  claimed the whole wishlist was covered. The response now reports `enriched`
+  (how many entries actually got store data) alongside `total`, with a `note`
+  explaining the gap when Steam truncates it.
+
 ## [0.5.0] - 2026-07-09
 
 Richer store cards and catalog/wishlist discovery for the SteamOS / Steam Machine
