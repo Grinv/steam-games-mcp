@@ -101,6 +101,9 @@ npm run inspector      # run under the MCP Inspector
   scripts (use the Node helper scripts).
 - **Commits:** author/committer `Grinv <4070730+Grinv@users.noreply.github.com>`;
   do **not** add a `Co-Authored-By` trailer.
+- **CodeQL** (`.github/workflows/codeql.yml`) scans `javascript-typescript` on
+  push/PR to main plus a weekly cron — no local equivalent command; findings
+  surface under the repo's **Security → Code scanning** tab.
 
 ## Before opening a PR
 
