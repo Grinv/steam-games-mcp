@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-12
+
 ### Added
 
 - `get_friend_list` tool — a player's Steam friends (name, online state, current
