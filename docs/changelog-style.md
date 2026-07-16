@@ -27,6 +27,10 @@ and glincker/changelog-generator.
   gets an entry describing that effect, not the refactor itself.
 - **Link commits/PRs/issues**: reference the commit that made the change, and
   the PR or issue too when one exists.
+- **No dangling link line**: keep an entry and its link(s) on one physical
+  source line, even if long. GitHub renders a single soft-wrapped newline
+  inside a list item as a real line break, so a wrapped entry shows its link
+  stranded alone on the next line instead of reading as one continuous bullet.
 
 **Example** (same change, two ways):
 
