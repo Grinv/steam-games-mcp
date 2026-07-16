@@ -32,3 +32,18 @@ test("a sliding window caps a burst beyond its limit", async () => {
   assert.ok(stamps[2]! < 30, `first 3 should burst, got ${stamps[2]}ms`);
   assert.ok(stamps[3]! >= 90, `4th should wait for the window, got ${stamps[3]}ms`);
 });
+
+test("first acquisition never waits, even when the clock starts at/near the epoch", async (t) => {
+  // Regression: #delayUntilAllowed used to compare against a `#lastStart = 0`
+  // sentinel, silently relying on Date.now() always being far from 0 — true
+  // for any real clock, but not for one mocked to start at 0. Mock only Date
+  // (not setTimeout) and measure REAL elapsed time via performance.now()
+  // (unaffected by the Date mock): if the bug were back, the first acquire()
+  // would await a genuine ~40ms setTimeout, which this would catch.
+  t.mock.timers.enable({ apis: ["Date"], now: 0 });
+  const limiter = new RateLimiter(40);
+  const realStart = performance.now();
+  await limiter.acquire();
+  const realElapsed = performance.now() - realStart;
+  assert.ok(realElapsed < 20, `first acquisition should not really wait, took ${realElapsed}ms`);
+});

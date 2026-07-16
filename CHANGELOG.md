@@ -6,6 +6,37 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-16
+
+### Changed
+
+- Runtime floor raised to Node ≥ 20 (was ≥ 18).
+
+### Added
+
+- `steam_machine` compat field/filter — `get_items`, `discover_games` and
+  `get_wishlist` now distinguish Steam Machine support from general `steam_os`.
+- `get_followed_games` tool — a player's Steam store follows list (keyless).
+- `get_player_bans` tool — VAC/game/community/economy ban status.
+- `get_player_summary` now also returns Steam level.
+
+### Fixed
+
+- `get_followed_games` no longer errors out if just the count lookup fails.
+- `build-tests.mjs` clears `dist-tests/` before rebuilding, so deleted/renamed
+  test files can't leave stale compiled copies behind.
+- Fixed a `RateLimiter` edge case that could misfire under a clock near the
+  epoch.
+
+### Internal
+
+- Split the grown `clients/web.ts` / `tools/web.ts` into smaller per-concern
+  files.
+- Split `steam.test.ts` into per-domain test files with shared fixtures.
+- Tests now use `t.mock` / `t.after` (Node 20's stable `node:test` APIs)
+  instead of manual restore/`finally` boilerplate.
+- Integration tests are grouped into `describe()` blocks per tool.
+
 ## [0.6.0] - 2026-07-12
 
 ### Added

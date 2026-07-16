@@ -1,4 +1,5 @@
 // Shared test helpers. Not a test file (no *.test suffix) so the runner skips it.
+import type { TestContext } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createLogger, type Logger } from "../lib/logger.js";
@@ -44,13 +45,12 @@ export function mockFetch(
   return { fn, calls };
 }
 
-/** Install a fetch mock and return a restore function. */
-export function installFetch(mock: FetchMock): () => void {
-  const original = globalThis.fetch;
-  globalThis.fetch = mock.fn;
-  return () => {
-    globalThis.fetch = original;
-  };
+/** Install a fetch mock for the duration of the current test. Scoped to `t.mock`
+ * (Node 20's stable node:test mocking), which auto-restores the original
+ * `globalThis.fetch` when the test finishes — callers don't call anything to
+ * undo it themselves. */
+export function installFetch(t: TestContext, mock: FetchMock): void {
+  t.mock.method(globalThis, "fetch", mock.fn);
 }
 
 /** Build the server and connect an in-memory client for end-to-end tool tests. */

@@ -16,10 +16,14 @@ test("wrap caches and reuses the fresh value", async () => {
   assert.equal(calls, 1);
 });
 
-test("wrapStaleOnError serves the stale value when compute fails", async () => {
+test("wrapStaleOnError serves the stale value when compute fails", async (t) => {
+  // Mock Date only (not setTimeout): this just needs the TTL to have elapsed,
+  // not an actual wait, so advancing the clock synchronously is both safe and
+  // deterministic — no real delay, no reliance on OS timer granularity.
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
   const cache = new TtlCache<number>(1); // 1ms TTL → expires almost immediately
   await cache.wrapStaleOnError("k", async () => 1);
-  await tick(5);
+  t.mock.timers.tick(5);
   const v = await cache.wrapStaleOnError("k", async () => {
     throw new Error("upstream down");
   });
@@ -94,10 +98,11 @@ test("wrapStaleOnError: concurrent calls on a cold key share one in-flight compu
   assert.equal(calls, 1);
 });
 
-test("wrapStaleOnError: concurrent failures each independently fall back to the same stale value", async () => {
+test("wrapStaleOnError: concurrent failures each independently fall back to the same stale value", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
   const cache = new TtlCache<number>(1); // 1ms TTL → expires almost immediately
   await cache.wrapStaleOnError("k", async () => 5);
-  await tick(5);
+  t.mock.timers.tick(5);
   let calls = 0;
   const failing = async () => {
     calls += 1;

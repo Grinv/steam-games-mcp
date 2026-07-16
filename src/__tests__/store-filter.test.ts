@@ -41,10 +41,26 @@ test("each compat filter reads its OWN category field", () => {
       item({ platforms: { steam_frame_compat_category: 3 } }),
     ),
   );
+  assert.ok(
+    storeItemFilter({ steamMachine: "playable" })(
+      item({ platforms: { steam_machine_compat_category: 2 } }),
+    ),
+  );
+  assert.ok(
+    !storeItemFilter({ steamMachine: "verified" })(
+      item({ platforms: { steam_machine_compat_category: 2 } }),
+    ),
+  );
   // A Deck filter must NOT be satisfied by a SteamOS rating.
   assert.ok(
     !storeItemFilter({ steamDeck: "verified" })(
       item({ platforms: { steam_os_compat_category: 3 } }),
+    ),
+  );
+  // A SteamOS filter must NOT be satisfied by a Steam Machine rating (they're distinct).
+  assert.ok(
+    !storeItemFilter({ steamOs: "verified" })(
+      item({ platforms: { steam_machine_compat_category: 3 } }),
     ),
   );
 });

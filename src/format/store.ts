@@ -29,14 +29,16 @@ export interface StoreItem {
   };
   release?: { steam_release_date?: number; is_coming_soon?: boolean };
   // Valve's compatibility enums (returned with include_platforms): see COMPAT_CATEGORY.
-  // steam_deck = Steam Deck; steam_os = SteamOS in general (any SteamOS device incl.
-  // the Steam Machine, not Steam-Machine-specific); steam_frame = the Steam Frame VR headset.
+  // steam_deck = Steam Deck; steam_os = SteamOS in general (any SteamOS device);
+  // steam_machine = the Steam Machine console specifically (its own rating, distinct
+  // from the general steam_os one); steam_frame = the Steam Frame VR headset.
   platforms?: {
     windows?: boolean;
     mac?: boolean;
     steamos_linux?: boolean; // native Linux/SteamOS build (distinct from the Proton compat rating)
     steam_deck_compat_category?: number;
     steam_os_compat_category?: number;
+    steam_machine_compat_category?: number;
     steam_frame_compat_category?: number;
   };
   // Popular user-defined tags (returned with include_tag_count), most-weighted
@@ -99,8 +101,8 @@ function matchesAllTags(
 
 // ---- compatibility + native platforms ---------------------------------------
 
-// Valve's compatibility enum, shared by all three platforms.*_compat_category
-// fields (Steam Deck, SteamOS, Steam Frame) — same badges, same review process.
+// Valve's compatibility enum, shared by all four platforms.*_compat_category
+// fields (Steam Deck, SteamOS, Steam Machine, Steam Frame) — same badges, same review process.
 const COMPAT_CATEGORY: Record<number, string> = {
   0: "unknown",
   1: "unsupported",
@@ -175,6 +177,7 @@ function baseCard(it: StoreItem, tagMap?: TagMap): Record<string, unknown> {
     platforms: nativePlatforms(it.platforms),
     steam_deck: compat(it.platforms?.steam_deck_compat_category),
     steam_os: compat(it.platforms?.steam_os_compat_category),
+    steam_machine: compat(it.platforms?.steam_machine_compat_category),
     steam_frame: compat(it.platforms?.steam_frame_compat_category),
     tags: resolveTags(it.tags, tagMap),
     release_date: isoDay(it.release?.steam_release_date),
@@ -194,38 +197,59 @@ function storeCard(it: StoreItem, tagMap?: TagMap): Record<string, unknown> {
 
 // ---- shared client-side filter ---------------------------------------------
 
+// The four hardware-compat filters, shared by StoreFilters here and by every
+// clients/storeService.ts method that accepts them (#queryCatalog, discoverGames,
+// getWishlistDetailed) — one place to add a 5th Valve compat dimension instead of
+// three copy-pasted signatures.
+export interface CompatFilters {
+  steamDeck?: string;
+  steamOs?: string;
+  steamMachine?: string;
+  steamFrame?: string;
+}
+
 // Every filter discover_games and the wishlist detailed view apply, client-side,
 // over the raw store items. All optional — an unset field passes everything.
 // (Steam's store APIs ignore most of these server-side, hence we filter here.)
-interface StoreFilters {
+interface StoreFilters extends CompatFilters {
   minReview?: number;
   minReviews?: number;
   minDiscount?: number;
   onSaleOnly?: boolean;
-  steamDeck?: string;
-  steamOs?: string;
-  steamFrame?: string;
   platform?: keyof typeof PLATFORM_FIELD;
   releasedAfter?: number;
   tags?: string[];
   tagMap?: TagMap;
 }
 
+// Each compat filter dimension: which StoreFilters key holds the user's choice,
+// and which platforms.*_compat_category field it's checked against. Table-driven
+// so a future compat dimension (Valve keeps adding hardware SKUs) is one row,
+// not another copy-pasted `if` — TypeScript can't catch a forgotten `if`, but it
+// can't forget a table row that storeItemFilter's own loop always applies.
+const COMPAT_FILTERS = [
+  ["steamDeck", "steam_deck_compat_category"],
+  ["steamOs", "steam_os_compat_category"],
+  ["steamMachine", "steam_machine_compat_category"],
+  ["steamFrame", "steam_frame_compat_category"],
+] as const satisfies readonly [keyof StoreFilters, keyof NonNullable<StoreItem["platforms"]>][];
+
 // Resolve the options once (compat mins, native-platform flag, wanted tag names)
 // into a per-item predicate. Compat is checked on the raw category ints and tags
 // on the FULL tag set (not the capped display list), so both callers filter
 // identically without duplicating the logic. Exported for focused unit tests.
 export function storeItemFilter(f: StoreFilters): (it: StoreItem) => boolean {
-  const deckMin = f.steamDeck ? COMPAT_MIN[f.steamDeck] : undefined;
-  const osMin = f.steamOs ? COMPAT_MIN[f.steamOs] : undefined;
-  const frameMin = f.steamFrame ? COMPAT_MIN[f.steamFrame] : undefined;
+  const compatMins = COMPAT_FILTERS.map(([filterKey, categoryField]) => {
+    const chosen = f[filterKey];
+    return [categoryField, chosen ? COMPAT_MIN[chosen] : undefined] as const;
+  });
   const platformField = f.platform ? PLATFORM_FIELD[f.platform] : undefined;
   const wantTags = f.tags?.length ? f.tags.map((t) => t.toLowerCase()) : undefined;
   return (it) => {
     const p = it.platforms;
-    if (deckMin !== undefined && (p?.steam_deck_compat_category ?? 0) < deckMin) return false;
-    if (osMin !== undefined && (p?.steam_os_compat_category ?? 0) < osMin) return false;
-    if (frameMin !== undefined && (p?.steam_frame_compat_category ?? 0) < frameMin) return false;
+    for (const [categoryField, min] of compatMins) {
+      if (min !== undefined && (p?.[categoryField] ?? 0) < min) return false;
+    }
     if (platformField && !p?.[platformField]) return false;
     if (f.releasedAfter !== undefined && (it.release?.steam_release_date ?? 0) < f.releasedAfter)
       return false;

@@ -1,11 +1,12 @@
-// Steam Web API tools. Player tools (profile, library, achievements, vanity)
-// require a free key (STEAM_API_KEY); they short-circuit with a clear message
-// when it's missing. News and global achievement % are exposed without that
-// gate since Steam currently serves them keyless (a key is still sent if set).
+// Keyless-capable Steam Web API tools: news, global achievement %, current
+// players, and the modern store-service card tools (get_items, discover_games,
+// get_wishlist, get_followed_games). All work without STEAM_API_KEY; the key is
+// still sent when present (see AGENTS.md's keyless caveat). Split out of a single
+// tools/web.ts once it grew past ~550 lines — see tools/webPlayer.ts for the
+// key-required half.
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SteamWebClient } from "../clients/web.js";
-import { errorResult, type ToolResult } from "../lib/result.js";
 import {
   READ_ONLY,
   appid,
@@ -15,37 +16,12 @@ import {
   reply,
   steamDeck,
   steamFrame,
+  steamMachine,
   steamOs,
 } from "./common.js";
+import { steamid, steamIdTool } from "./webShared.js";
 
-const steamid = z
-  .string()
-  .regex(
-    /^\d{17}$/,
-    "A SteamID64 is 17 digits. Use resolve_vanity_url to convert a custom profile name.",
-  )
-  .describe(
-    "17-digit SteamID64. Omit to use the STEAM_ID configured on the server. " +
-      "Convert a vanity/custom URL name with resolve_vanity_url first.",
-  )
-  .optional();
-
-export function registerWebTools(server: McpServer, web: SteamWebClient): void {
-  // Gate player tools on the key; one clear message instead of a round-trip 403.
-  const requireKey = (fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> => {
-    if (!web.configured) {
-      return Promise.resolve(
-        errorResult(
-          "This tool needs a Steam Web API key. Set STEAM_API_KEY to a free key from " +
-            "https://steamcommunity.com/dev/apikey. (Note: the target profile must also be public.)",
-        ),
-      );
-    }
-    return reply(fn);
-  };
-
-  // ---- keyless-capable ------------------------------------------------------
-
+export function registerStoreWebTools(server: McpServer, web: SteamWebClient): void {
   server.registerTool(
     "get_game_news",
     {
@@ -83,9 +59,9 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
         "Get price/discount, review % (positive), hardware compatibility, popular user tags and " +
         "release date for a LIST of games by appid in ONE keyless call. The efficient way to price-, " +
         "rating-, tag- and compat-check a wishlist or library without a request per game. Each item " +
-        "carries three compatibility fields, each verified/playable/unsupported/unknown: steam_deck " +
-        "(Steam Deck), steam_os (SteamOS — any SteamOS device incl. the Steam Machine), and " +
-        "steam_frame (Steam Frame VR headset); a `tags` list (top user tags like 'Roguelike', " +
+        "carries four compatibility fields, each verified/playable/unsupported/unknown: steam_deck " +
+        "(Steam Deck), steam_os (SteamOS in general), steam_machine (the Steam Machine console " +
+        "specifically), and steam_frame (Steam Frame VR headset); a `tags` list (top user tags like 'Roguelike', " +
         "'Souls-like', most-relevant first); a clickable `store_url` to the game's Steam page; and, " +
         "when on sale, `discount_end` (ISO UTC time the discount expires — for 'how long is this deal " +
         "valid'). Get appids from search_games / get_wishlist / get_owned_games.",
@@ -111,16 +87,18 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
         "Find games across the whole Steam catalog (keyless), filtered by ANY combination of: " +
         "discount (min_discount — for 'what's on sale'), release recency (released_after / " +
         "released_within_days — for 'new games'), hardware compatibility (steam_deck for Steam Deck, " +
-        "steam_os for SteamOS / the Steam Machine, steam_frame for the Steam Frame VR headset), " +
+        "steam_os for SteamOS in general, steam_machine for the Steam Machine console specifically, " +
+        "steam_frame for the Steam Frame VR headset), " +
         "native OS build (platform — windows/mac/linux), review quality (min_review / min_reviews), " +
         "and user tags (tags — e.g. ['Roguelike', " +
-        "'Deckbuilding'] for 'games like X'). Each result returns price/discount, review %, all three " +
+        "'Deckbuilding'] for 'games like X'). Each result returns price/discount, review %, all four " +
         "compat statuses, popular tags, a clickable store_url, discount_end (when a deal expires) and " +
         "release date in one call. Examples: '>80% off with 90%+ " +
         "reviews' → set min_discount + min_review; 'recent well-reviewed games that run on Steam Deck' " +
         "→ set released_within_days + steam_deck + min_review; 'roguelike deckbuilders on sale' → " +
-        "tags:['Roguelike','Deckbuilding'] + min_discount; 'games that run on the Steam Machine / " +
-        "SteamOS' → steam_os. No appids needed — unlike get_items, which prices a list you already have. " +
+        "tags:['Roguelike','Deckbuilding'] + min_discount; 'games that run on the Steam Machine' → " +
+        "steam_machine; 'games that run on SteamOS' → steam_os. " +
+        "No appids needed — unlike get_items, which prices a list you already have. " +
         "Note: the Steam catalog API has no release-date/tag sort or filter, so results are scanned " +
         "popularity-first and the recency, compat and tag filters are applied over that window — great " +
         "for popular titles; a niche match may fall outside the top `count` (raise count for stricter filters).",
@@ -138,6 +116,7 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
           .optional(),
         steam_deck: steamDeck,
         steam_os: steamOs,
+        steam_machine: steamMachine,
         steam_frame: steamFrame,
         platform,
         tags: z
@@ -190,6 +169,7 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
       released_within_days,
       steam_deck,
       steam_os,
+      steam_machine,
       steam_frame,
       platform: plat,
       tags,
@@ -212,6 +192,7 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
           releasedAfter,
           steamDeck: steam_deck,
           steamOs: steam_os,
+          steamMachine: steam_machine,
           steamFrame: steam_frame,
           platform: plat,
           tags,
@@ -241,6 +222,23 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
   );
 
   server.registerTool(
+    "get_followed_games",
+    {
+      title: "Get a player's followed games",
+      description:
+        "List the games a player 'follows' on the Steam store, by SteamID64 — a lighter opt-in " +
+        "(get sale/update notifications) that's separate from the wishlist; many players follow more " +
+        "games than they wishlist. Works without a key, but only if that player's follows/profile are " +
+        "public — otherwise it returns found:false. Returns appids + store_url only (no price/name); " +
+        "pass the appids to get_items for price, review % and compat. Convert a vanity name with " +
+        "resolve_vanity_url first.",
+      inputSchema: { steamid },
+      annotations: READ_ONLY,
+    },
+    steamIdTool(web, reply, (sid) => web.getFollowedGames(sid)),
+  );
+
+  server.registerTool(
     "get_wishlist",
     {
       title: "Get a player's wishlist",
@@ -248,10 +246,10 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
         "List a player's Steam wishlist by SteamID64. Works without a key, but only if that player's " +
         "wishlist/profile is public — otherwise it returns found:false. By default returns a light " +
         "list of appids (sorted by priority, no names). Set include_details for full store cards in " +
-        "ONE call (name, price/discount, review %, Deck/SteamOS/Frame compat, tags, release) — no " +
-        "need to follow up with get_items. Narrow it in the SAME call with tags (e.g. " +
+        "ONE call (name, price/discount, review %, Deck/SteamOS/Machine/Frame compat, tags, release) — " +
+        "no need to follow up with get_items. Narrow it in the SAME call with tags (e.g. " +
         "['Metroidvania']), platform (NATIVE windows/mac/linux build), steam_deck / steam_os / " +
-        "steam_frame (Proton compatibility — distinct from a native build), min_review and " +
+        "steam_machine / steam_frame (Proton compatibility — distinct from a native build), min_review and " +
         "min_discount / on_sale_only, or country / language (the light appid list carries no price, " +
         "so setting either implies include_details too) — these are applied before the output cap, " +
         "so a deeply-discounted niche match past the display cap is never hidden by it (e.g. 'top " +
@@ -306,6 +304,7 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
         platform,
         steam_deck: steamDeck,
         steam_os: steamOs,
+        steam_machine: steamMachine,
         steam_frame: steamFrame,
         country: country.describe(
           "Country (cc) for prices; overrides STEAM_COUNTRY. Only meaningful for store cards, so " +
@@ -328,6 +327,7 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
       platform: plat,
       steam_deck,
       steam_os,
+      steam_machine,
       steam_frame,
       country,
       language,
@@ -347,6 +347,7 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
             plat,
             steam_deck,
             steam_os,
+            steam_machine,
             steam_frame,
             country,
             language,
@@ -360,163 +361,12 @@ export function registerWebTools(server: McpServer, web: SteamWebClient): void {
               platform: plat,
               steamDeck: steam_deck,
               steamOs: steam_os,
+              steamMachine: steam_machine,
               steamFrame: steam_frame,
               country,
               language,
             })
           : web.getWishlist(sid);
       }),
-  );
-
-  // ---- player data (key required) -------------------------------------------
-
-  server.registerTool(
-    "get_game_achievements",
-    {
-      title: "Get a game's full achievement list",
-      description:
-        "List ALL achievements of a game by appid with their names, descriptions, hidden flag and " +
-        "global unlock % (rarity). Requires STEAM_API_KEY (the achievement schema needs a key). " +
-        "For just the rarity by internal id without a key, use get_global_achievements; for a few " +
-        "named highlights, see get_game's achievements_highlighted. Get the appid from search_games.",
-      inputSchema: {
-        appid,
-        language: z
-          .string()
-          .min(2)
-          .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
-          .optional(),
-      },
-      annotations: READ_ONLY,
-    },
-    ({ appid: id, language }) => requireKey(() => web.getGameAchievements(id, language)),
-  );
-
-  server.registerTool(
-    "resolve_vanity_url",
-    {
-      title: "Resolve vanity URL to SteamID",
-      description:
-        "Convert a Steam custom (vanity) profile name — the part after /id/ in a profile URL — into " +
-        "the 17-digit SteamID64 that the player tools need. Requires STEAM_API_KEY.",
-      inputSchema: {
-        vanity: z
-          .string()
-          .min(1)
-          .describe(
-            "Vanity name, e.g. 'gabelogannewell' from steamcommunity.com/id/gabelogannewell.",
-          ),
-      },
-      annotations: READ_ONLY,
-    },
-    ({ vanity }) => requireKey(() => web.resolveVanityUrl(vanity)),
-  );
-
-  server.registerTool(
-    "get_friend_list",
-    {
-      title: "Get a player's friend list",
-      description:
-        "List a player's Steam friends by SteamID64: name, online state, current game and how " +
-        "long they've been friends, most-recently-added first. Requires STEAM_API_KEY and the " +
-        "friends list to be public. For 'which of my friends own game X', use find_friends_who_own " +
-        "instead — it checks each friend's full library, not just this list. Get the SteamID64 from " +
-        "resolve_vanity_url.",
-      inputSchema: { steamid },
-      annotations: READ_ONLY,
-    },
-    ({ steamid: id }) => requireKey(async () => web.getFriendList(await web.requireSteamId(id))),
-  );
-
-  server.registerTool(
-    "find_friends_who_own",
-    {
-      title: "Find friends who own a game",
-      description:
-        "Check which of a player's Steam friends own one or more games by appid, with each owner's " +
-        "playtime_hours — 'which of my friends have Portal 2 and how long have they played'. Checks " +
-        "each friend's FULL library, unlike get_owned_games / get_friend_list which cap at the top " +
-        "50 games by playtime — so a friend's rarely-played or unplayed copy is never missed (its " +
-        "playtime_hours may still be low or 0). Requires STEAM_API_KEY and the player's friends list " +
-        "to be public; friends with a private library are listed separately in private_friends " +
-        "(can't be checked) rather than silently counted as non-owners. Get appids from search_games.",
-      inputSchema: {
-        appids: z
-          .array(z.number().int().positive())
-          .min(1)
-          .max(10)
-          .describe("Steam appids to check (1-10)."),
-        steamid,
-      },
-      annotations: READ_ONLY,
-    },
-    ({ appids, steamid: id }) =>
-      requireKey(async () => web.findFriendsWhoOwn(await web.requireSteamId(id), appids)),
-  );
-
-  server.registerTool(
-    "get_player_summary",
-    {
-      title: "Get player profile",
-      description:
-        "Get a player's public profile by SteamID64: display name, online state, country, account " +
-        "age, and the game they're currently in. Requires STEAM_API_KEY and a public profile.",
-      inputSchema: { steamid },
-      annotations: READ_ONLY,
-    },
-    ({ steamid: id }) => requireKey(async () => web.getPlayerSummary(await web.requireSteamId(id))),
-  );
-
-  server.registerTool(
-    "get_owned_games",
-    {
-      title: "Get owned games",
-      description:
-        "List the games a player owns with playtime (hours), most-played first (capped to the top " +
-        "50 by playtime — a lightly-played or unplayed game may not appear, so this is NOT reliable " +
-        "for 'does X own game Y'; use find_friends_who_own for that). Requires STEAM_API_KEY and a " +
-        "public profile + game-details visibility. Get the SteamID64 from resolve_vanity_url.",
-      inputSchema: { steamid },
-      annotations: READ_ONLY,
-    },
-    ({ steamid: id }) => requireKey(async () => web.getOwnedGames(await web.requireSteamId(id))),
-  );
-
-  server.registerTool(
-    "get_recently_played",
-    {
-      title: "Get recently played games",
-      description:
-        "List the games a player has played in the last two weeks, with recent and total playtime. " +
-        "Requires STEAM_API_KEY and a public profile.",
-      inputSchema: { steamid },
-      annotations: READ_ONLY,
-    },
-    ({ steamid: id }) =>
-      requireKey(async () => web.getRecentlyPlayed(await web.requireSteamId(id))),
-  );
-
-  server.registerTool(
-    "get_player_achievements",
-    {
-      title: "Get a player's achievements",
-      description:
-        "Get a player's achievement progress for one game (unlocked count, % complete, per-achievement " +
-        "unlock dates) by SteamID64 + appid. Requires STEAM_API_KEY and a public profile.",
-      inputSchema: {
-        steamid,
-        appid,
-        language: z
-          .string()
-          .min(2)
-          .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
-          .optional(),
-      },
-      annotations: READ_ONLY,
-    },
-    ({ steamid: id, appid: app, language }) =>
-      requireKey(async () =>
-        web.getPlayerAchievements(await web.requireSteamId(id), app, language),
-      ),
   );
 }

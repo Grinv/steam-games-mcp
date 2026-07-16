@@ -22,8 +22,9 @@ pattern: store/game reads go through the **Steam Storefront API**
 > **Keyless caveat.** Valve states _all_ Web API use requires a key
 > (https://steamcommunity.com/dev), but several endpoints answer without one and
 > we rely on that: `GetNewsForApp`, `GetGlobalAchievementPercentagesForApp`,
-> `GetNumberOfCurrentPlayers`, `IWishlistService/GetWishlist`, and the store-browse
-> services (`IStoreBrowseService/GetItems`, `IStoreQueryService/Query`). These tools
+> `GetNumberOfCurrentPlayers`, `IWishlistService/GetWishlist`,
+> `IStoreService/GetGamesFollowed`(+`Count`), and the store-browse services
+> (`IStoreBrowseService/GetItems`, `IStoreQueryService/Query`). These tools
 > are exposed without the key gate; the key is still sent when present.
 
 > **No SteamDB, no third-party deal service.** Catalog-wide discovery
@@ -57,9 +58,14 @@ src/
                   #   web.ts (official Web API: player data), store.ts (keyless store
                   #   services: GetItems/Query/tags/enriched wishlist), shared.ts (helpers)
   lib/            # GENERIC carcass: http, rateLimit, cache, errors, logger, result
-  clients/        # storefront.ts (keyless store), web.ts (Web API; key optional)
-  tools/          # storefront.ts, web.ts (player tools gated on the key),
-                  #   common.ts (shared param schemas + reply wrapper), guard.ts
+  clients/        # storefront.ts (keyless store), web.ts (official Web API; key
+                  #   optional; composes storeService.ts internally), storeService.ts
+                  #   (modern store-browse/query/wishlist-sorted card services)
+  tools/          # storefront.ts, webStore.ts (keyless-capable Web API tools),
+                  #   webPlayer.ts (key-gated player tools), webShared.ts (steamid
+                  #   schema + steamIdTool helper shared by the two), common.ts
+                  #   (shared param schemas + reply wrapper across storefront+web),
+                  #   guard.ts
   __tests__/      # node:test (*.test.ts) + helpers.ts
 scripts/          # build-tests.mjs, run-tests.mjs, sync-version.mjs (generic),
                   #   check-api.mjs (domain)
@@ -81,7 +87,8 @@ npm run inspector      # run under the MCP Inspector
 
 - **Docs and in-code text are English** (README, docs, comments, tool
   descriptions, error messages).
-- Runtime floor is **Node ≥ 18** (global `fetch`); tsup targets `node18`.
+- Runtime floor is **Node ≥ 20** (global `fetch`, stable `node:test`); tsup
+  targets `node20`.
 - **Never write to stdout** — it is the MCP protocol channel. Use the logger,
   which writes to **stderr** and redacts credentials (the Web API key travels as
   a `key` query param). The logger also mirrors each line to the MCP client as a
@@ -109,7 +116,10 @@ npm run inspector      # run under the MCP Inspector
 ## Before opening a PR
 
 Run `npm run build && npm test && npm run lint && npm run format:check`.
-Update `CHANGELOG.md` (Unreleased section).
+Update `CHANGELOG.md` (Unreleased section). Keep entries short — one line (two
+if it genuinely needs a "why"), stating what changed and, when it matters,
+the user-facing effect. Skip mechanism/implementation detail — that belongs
+in the commit or PR description, not the changelog.
 
 ## Releasing
 
@@ -159,6 +169,14 @@ can't see `config.ts`, so the `config.ts` → descriptors step is on you. Keep
 `server.json` descriptions ≤ 100 chars (registry schema cap). Purely internal
 tunables (timeouts, cache, rate limits, `LOG_LEVEL`) stay env-only — they don't
 belong in the install form or registry entry.
+
+## TODO / ideas (personal notes)
+
+- Claude Code's `TaskCreate` tool only accepts one task per call (`subject` +
+  `description`, no array/batch param) — hit this 2026-07-14 while trying to
+  queue a multi-step todo list in one call. Think about whether a batch-create
+  wrapper (e.g. an MCP tool) would be useful, or whether it's worth raising as
+  feedback upstream to Anthropic.
 
 ## Reuse / shared architecture
 

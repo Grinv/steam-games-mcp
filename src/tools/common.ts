@@ -52,9 +52,16 @@ export const steamDeck = z
 export const steamOs = z
   .enum(["playable", "verified"])
   .describe(
-    "SteamOS compatibility — how well it runs on SteamOS / the Steam Machine (via Proton): " +
-      "'verified' = SteamOS-Verified only; 'playable' = Playable or Verified. For a NATIVE Linux " +
-      "build instead, use platform:'linux'.",
+    "SteamOS compatibility — how well it runs on SteamOS in general (via Proton): 'verified' = " +
+      "SteamOS-Verified only; 'playable' = Playable or Verified. For a NATIVE Linux build instead, " +
+      "use platform:'linux'; for the Steam Machine console specifically, use steam_machine.",
+  )
+  .optional();
+export const steamMachine = z
+  .enum(["playable", "verified"])
+  .describe(
+    "Steam Machine (Valve's console) compatibility (via Proton): 'verified' = Steam-Machine-Verified " +
+      "only; 'playable' = Playable or Verified. Its own rating, distinct from the general steam_os one.",
   )
   .optional();
 export const steamFrame = z

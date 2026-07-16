@@ -10,6 +10,7 @@ import { TtlCache } from "../lib/cache.js";
 import { ApiError } from "../lib/errors.js";
 import {
   summarizeCurrentPlayers,
+  summarizeFollowedGames,
   summarizeFriendList,
   summarizeFriendsWhoOwn,
   summarizeGameSchema,
@@ -18,31 +19,26 @@ import {
   summarizeOwnedGames,
   summarizePlayer,
   summarizePlayerAchievements,
+  summarizePlayerBans,
   summarizeRecentlyPlayed,
   summarizeVanity,
   summarizeWishlist,
   type CurrentPlayersResponse,
+  type FollowedGamesCountResponse,
+  type FollowedGamesResponse,
   type FriendListResponse,
   type GameSchemaResponse,
   type GlobalAchievementsResponse,
   type NewsResponse,
   type OwnedGamesResponse,
   type PlayerAchievementsResponse,
+  type PlayerBansResponse,
   type PlayerSummariesResponse,
+  type SteamLevelResponse,
   type VanityResponse,
   type WishlistResponse,
 } from "../format/web.js";
-import {
-  summarizeDiscover,
-  summarizeItems,
-  summarizeTagList,
-  summarizeWishlistDetailed,
-  type GetTagListResponse,
-  type StoreItemsResponse,
-  type StoreQueryResponse,
-  type TagMap,
-  type WishlistDetailedResponse,
-} from "../format/store.js";
+import { StoreServiceClient } from "./storeService.js";
 import type { Logger } from "../lib/logger.js";
 import type { Config } from "../config.js";
 
@@ -62,17 +58,6 @@ function friendIdsOf(r: FriendListResponse): string[] {
     .filter((id): id is string => Boolean(id));
 }
 
-// The include_* flags every store-service card call needs (basic info, reviews,
-// release, native platforms + compat, popular tags). tagCount varies: fewer for
-// display-only (get_items), more when tags are also filtered (discover/wishlist).
-const storeCardDataRequest = (tagCount: number) => ({
-  include_basic_info: true,
-  include_reviews: true,
-  include_release: true,
-  include_platforms: true,
-  include_tag_count: tagCount,
-});
-
 export class SteamWebClient {
   readonly #http: HttpClient;
   readonly #cache: TtlCache<Record<string, unknown>>;
@@ -80,6 +65,9 @@ export class SteamWebClient {
   readonly #l: string;
   readonly #country: string;
   readonly #defaultSteamId: string | undefined;
+  // The modern store-browse/query/wishlist-sorted services (get_items,
+  // discover_games, get_wishlist's include_details) — see clients/storeService.ts.
+  readonly #store: StoreServiceClient;
   // Memoised result of resolving a vanity STEAM_ID default to a SteamID64.
   #resolvedDefault: string | undefined;
   /** True when a Steam Web API key is configured; player tools short-circuit otherwise. */
@@ -100,6 +88,14 @@ export class SteamWebClient {
       beforeRequest: () => limiter.acquire(),
     });
     this.#cache = new TtlCache(config.cacheTtlMs);
+    // Shares this #http/#cache (one rate limiter, one cache) rather than owning
+    // its own — both clients hit the same api.steampowered.com host.
+    this.#store = new StoreServiceClient({
+      get: this.#get.bind(this),
+      cache: this.#cache,
+      language: this.#l,
+      country: this.#country,
+    });
   }
 
   #get<T>(path: string, query: Query): Promise<T> {
@@ -147,10 +143,39 @@ export class SteamWebClient {
   // ---- player data (key required) -------------------------------------------
 
   async getPlayerSummary(steamid: string): Promise<Record<string, unknown>> {
-    const res = await this.#get<PlayerSummariesResponse>("ISteamUser/GetPlayerSummaries/v2/", {
+    const [res, level] = await Promise.all([
+      this.#get<PlayerSummariesResponse>("ISteamUser/GetPlayerSummaries/v2/", {
+        steamids: steamid,
+      }),
+      this.#steamLevel(steamid),
+    ]);
+    return summarizePlayer(res, level);
+  }
+
+  // GetSteamLevel has its own failure mode (independent of the summary lookup);
+  // never let it turn a working get_player_summary call into an error. Cached
+  // like the other small, semi-static enrichment fetches (#tagNames,
+  // getGlobalAchievements) — same wrapStaleOnError so a transient failure falls
+  // back to the last-known level instead of degrading to null every time.
+  async #steamLevel(steamid: string): Promise<number | null> {
+    try {
+      const wrapped = await this.#cache.wrapStaleOnError(`level:${steamid}`, async () => {
+        const res = await this.#get<SteamLevelResponse>("IPlayerService/GetSteamLevel/v1/", {
+          steamid,
+        });
+        return { level: res.response?.player_level ?? null };
+      });
+      return wrapped.level as number | null;
+    } catch {
+      return null;
+    }
+  }
+
+  async getPlayerBans(steamid: string): Promise<Record<string, unknown>> {
+    const res = await this.#get<PlayerBansResponse>("ISteamUser/GetPlayerBans/v1/", {
       steamids: steamid,
     });
-    return summarizePlayer(res);
+    return summarizePlayerBans(res);
   }
 
   async getOwnedGames(steamid: string): Promise<Record<string, unknown>> {
@@ -338,153 +363,21 @@ export class SteamWebClient {
     return summarizeCurrentPlayers(res, appid);
   }
 
-  // Tag dictionary (tagid → localized name) from IStoreService/GetTagList
-  // (keyless). Store items carry only numeric tagids; this resolves them to the
-  // readable tag names surfaced on each card. Cached per language and tiny
-  // (~450 entries, stable), so one fetch serves many cards.
-  // Returns null (rather than throwing) on upstream failure — callers that only
-  // DISPLAY tags can degrade gracefully (empty tags list); callers that FILTER
-  // by tags must check for null themselves and fail loudly instead of silently
-  // returning zero matches (an empty dictionary would make every tag filter
-  // reject every item, indistinguishable from "no games matched").
-  async #tagNames(language: string): Promise<TagMap | null> {
-    try {
-      const map = await this.#cache.wrapStaleOnError(`tags:${language}`, async () => {
-        const res = await this.#get<GetTagListResponse>("IStoreService/GetTagList/v1/", {
-          language,
-        });
-        return summarizeTagList(res) as Record<string, unknown>;
-      });
-      return map as TagMap;
-    } catch {
-      return null;
-    }
-  }
-
-  // Throws when a tags filter was requested but the tag dictionary is
-  // unavailable — never silently treats that as "nothing matched".
-  #requireTagMapIfFiltering(tags: string[] | undefined, tagMap: TagMap | null): TagMap | undefined {
-    if (tagMap !== null) return tagMap;
-    if (!tags?.length) return undefined;
-    // "unknown" is the one ApiErrorCode whose mapped message (lib/result.ts)
-    // includes our own text verbatim — the other codes render a fixed,
-    // generic sentence per code and would swallow this explanation.
-    throw new ApiError({
-      code: "unknown",
-      message:
-        "could not fetch Steam's tag dictionary right now, so the `tags` filter can't be " +
-        "reliably applied. Retry, or drop `tags` to see unfiltered results.",
-      retryable: true,
-    });
-  }
-
-  // Batch store card (price+discount, review %, compat, popular tags, release) for
-  // a list of appids in one keyless call via the modern store-browse service. The
-  // efficient way to price-, rating- and tag-check a known list (wishlist/library)
-  // without N requests. Tag names come from a second, cached dictionary lookup.
-  async getItems(
+  // The modern store-browse/query card services (get_items, discover_games) —
+  // see clients/storeService.ts. Thin delegations so SteamWebClient's public API
+  // is unchanged; tools/webStore.ts doesn't know or care these moved.
+  getItems(
     appids: number[],
     country?: string,
     language?: string,
   ): Promise<Record<string, unknown>> {
-    const l = language ?? this.#l;
-    const input = {
-      ids: appids.map((appid) => ({ appid })),
-      context: { language: l, country_code: country ?? this.#country },
-      data_request: storeCardDataRequest(15), // 15 tags: display-only (get_items doesn't tag-filter)
-    };
-    const [res, tagMap] = await Promise.all([
-      this.#get<StoreItemsResponse>("IStoreBrowseService/GetItems/v1/", {
-        input_json: JSON.stringify(input),
-      }),
-      this.#tagNames(l),
-    ]);
-    // get_items never filters by tags — a failed dictionary just means the
-    // `tags` display field comes back empty, which resolveTags already handles.
-    return summarizeItems(res, appids, tagMap ?? undefined);
+    return this.#store.getItems(appids, country, language);
   }
 
-  // Shared catalog discovery over the keyless store query backend (discoverGames
-  // is a thin preset over this). The Query API can't filter/sort on reviews,
-  // Deck or release date, so those are applied in
-  // summarizeDiscover over the returned page — which is why we sort by
-  // popularity (sort:10): without a sort the page is appid-ordered and fills
-  // with obscure, Deck-untested shovelware, making the post-filters return
-  // nothing useful. Popularity puts real games (with Deck ratings + review
-  // counts) into the window.
-  async #queryCatalog(p: {
-    minDiscount?: number;
-    releasedOnly?: boolean;
-    count?: number;
-    start?: number;
-    minReview?: number;
-    minReviews?: number;
-    steamDeck?: string;
-    steamOs?: string;
-    steamFrame?: string;
-    platform?: "windows" | "mac" | "linux";
-    releasedAfter?: number;
-    tags?: string[];
-    country?: string;
-    language?: string;
-  }): Promise<Record<string, unknown>> {
-    const l = p.language ?? this.#l;
-    const filters: Record<string, unknown> = {};
-    if (typeof p.minDiscount === "number")
-      filters.price_filters = { min_discount_percent: p.minDiscount };
-    if (p.releasedOnly) filters.released_only = true;
-    const input = {
-      query: { start: p.start ?? 0, count: p.count ?? 50, sort: 10, filters },
-      context: {
-        language: l,
-        country_code: p.country ?? this.#country,
-        steam_realm: 1,
-      },
-      data_request: storeCardDataRequest(20), // 20 tags: full set so tag filtering isn't capped
-    };
-    // Fetch the tag dictionary alongside the page (cached, so ~free after the
-    // first call) — every card surfaces resolved tag names.
-    const [res, tagMap] = await Promise.all([
-      this.#get<StoreQueryResponse>("IStoreQueryService/Query/v1/", {
-        input_json: JSON.stringify(input),
-      }),
-      this.#tagNames(l),
-    ]);
-    return summarizeDiscover(res, {
-      minReview: p.minReview,
-      minReviews: p.minReviews,
-      steamDeck: p.steamDeck,
-      steamOs: p.steamOs,
-      steamFrame: p.steamFrame,
-      platform: p.platform,
-      releasedAfter: p.releasedAfter,
-      tags: p.tags,
-      tagMap: this.#requireTagMapIfFiltering(p.tags, tagMap),
-    });
-  }
-
-  // Catalog-wide game discovery: browse by discount, recency, hardware
-  // compatibility (Steam Deck / SteamOS / Steam Frame) and review quality, in any
-  // combination. Every filter is optional — pass minDiscount for "on sale",
-  // releasedAfter for "new", steamDeck/steamOs/steamFrame for "runs on X", or mix
-  // them. released_only is set only when a recency cutoff is given, so a pure deal
-  // query still surfaces pre-purchase discounts.
-  async discoverGames(p: {
-    releasedAfter?: number;
-    minDiscount?: number;
-    count?: number;
-    start?: number;
-    minReview?: number;
-    minReviews?: number;
-    steamDeck?: string;
-    steamOs?: string;
-    steamFrame?: string;
-    platform?: "windows" | "mac" | "linux";
-    tags?: string[];
-    country?: string;
-    language?: string;
-  }): Promise<Record<string, unknown>> {
-    return this.#queryCatalog({ ...p, releasedOnly: p.releasedAfter !== undefined });
+  discoverGames(
+    p: Parameters<StoreServiceClient["discoverGames"]>[0],
+  ): Promise<Record<string, unknown>> {
+    return this.#store.discoverGames(p);
   }
 
   // A player's wishlist (needs the wishlist/profile to be public). Keyless.
@@ -493,49 +386,37 @@ export class SteamWebClient {
     return summarizeWishlist(res);
   }
 
-  // Enriched wishlist: GetWishlistSortedFiltered embeds a full store card per
-  // entry, so "my wishlist with prices / deals" is one keyless call instead of
-  // getWishlist + getItems. Also fetches the (cached) tag dictionary to resolve
-  // tag names. onSaleOnly keeps just the discounted entries, ranked by discount.
-  async getWishlistDetailed(
-    steamid: string,
-    opts: {
-      onSaleOnly?: boolean;
-      tags?: string[];
-      minReview?: number;
-      minDiscount?: number;
-      platform?: "windows" | "mac" | "linux";
-      steamDeck?: string;
-      steamOs?: string;
-      steamFrame?: string;
-      country?: string;
-      language?: string;
-    } = {},
-  ): Promise<Record<string, unknown>> {
-    const l = opts.language ?? this.#l;
-    const input = {
-      steamid,
-      context: { language: l, country_code: opts.country ?? this.#country, steam_realm: 1 },
-      data_request: storeCardDataRequest(20), // 20 tags: full set so tag filtering isn't capped
-      sort: 0,
-    };
-    const [res, tagMap] = await Promise.all([
-      this.#get<WishlistDetailedResponse>("IWishlistService/GetWishlistSortedFiltered/v1/", {
-        input_json: JSON.stringify(input),
-      }),
-      this.#tagNames(l),
+  // A player's followed games (needs the profile to be public). Keyless — a
+  // separate opt-in "follow" feature from the wishlist; the count endpoint
+  // reports the true total independent of any cap on the appid list.
+  async getFollowedGames(steamid: string): Promise<Record<string, unknown>> {
+    const [list, count] = await Promise.all([
+      this.#get<FollowedGamesResponse>("IStoreService/GetGamesFollowed/v1/", { steamid }),
+      this.#followedGamesCount(steamid),
     ]);
-    const safeTagMap = this.#requireTagMapIfFiltering(opts.tags, tagMap);
-    return summarizeWishlistDetailed(res, safeTagMap, {
-      onSaleOnly: opts.onSaleOnly,
-      tags: opts.tags,
-      minReview: opts.minReview,
-      minDiscount: opts.minDiscount,
-      platform: opts.platform,
-      steamDeck: opts.steamDeck,
-      steamOs: opts.steamOs,
-      steamFrame: opts.steamFrame,
-    });
+    return summarizeFollowedGames(list, count);
+  }
+
+  // The count is a best-effort cross-check (summarizeFollowedGames falls back to
+  // appids.length) — never let it turn a working getFollowedGames call into an error.
+  async #followedGamesCount(steamid: string): Promise<FollowedGamesCountResponse> {
+    try {
+      return await this.#get<FollowedGamesCountResponse>(
+        "IStoreService/GetGamesFollowedCount/v1/",
+        {
+          steamid,
+        },
+      );
+    } catch {
+      return {};
+    }
+  }
+
+  getWishlistDetailed(
+    steamid: string,
+    opts?: Parameters<StoreServiceClient["getWishlistDetailed"]>[1],
+  ): Promise<Record<string, unknown>> {
+    return this.#store.getWishlistDetailed(steamid, opts);
   }
 
   // Full achievement list for a game (GetSchemaForGame needs a key), merged with

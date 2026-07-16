@@ -7,7 +7,8 @@ import { createLogger, type Logger, type LogLevel, type LogSink } from "./lib/lo
 import { StorefrontClient } from "./clients/storefront.js";
 import { SteamWebClient } from "./clients/web.js";
 import { registerStorefrontTools } from "./tools/storefront.js";
-import { registerWebTools } from "./tools/web.js";
+import { registerStoreWebTools } from "./tools/webStore.js";
+import { registerPlayerWebTools } from "./tools/webPlayer.js";
 import { VERSION } from "./version.js";
 
 const INSTRUCTIONS =
@@ -35,7 +36,8 @@ export function buildServer(config: Config, logger: Logger): McpServer {
   );
 
   registerStorefrontTools(server, store);
-  registerWebTools(server, web);
+  registerStoreWebTools(server, web);
+  registerPlayerWebTools(server, web);
   return server;
 }
 

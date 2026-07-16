@@ -57,8 +57,19 @@
     },
     { "name": "get_current_players", "description": "Live concurrent player count." },
     { "name": "get_wishlist", "description": "A player's wishlist appids (public profiles)." },
+    {
+      "name": "get_followed_games",
+      "description": "A player's followed games, separate from the wishlist (public profiles)."
+    },
     { "name": "resolve_vanity_url", "description": "Vanity profile name → SteamID64 (key)." },
-    { "name": "get_player_summary", "description": "Player public profile (key)." },
+    {
+      "name": "get_player_summary",
+      "description": "Player public profile incl. Steam level (key)."
+    },
+    {
+      "name": "get_player_bans",
+      "description": "VAC/game/community/economy ban status (key)."
+    },
     { "name": "get_owned_games", "description": "A player's games + playtime (key)." },
     { "name": "get_recently_played", "description": "Games played in the last 2 weeks (key)." },
     {

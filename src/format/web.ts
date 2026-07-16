@@ -35,7 +35,17 @@ const PERSONA_STATES = [
   "looking to play",
 ];
 
-export function summarizePlayer(r: PlayerSummariesResponse): Record<string, unknown> {
+// GetSteamLevel is fetched alongside GetPlayerSummaries and merged in; it has
+// its own failure mode (e.g. private inventory), so the level is nullable
+// independent of whether the summary itself was found.
+export interface SteamLevelResponse {
+  response?: { player_level?: number };
+}
+
+export function summarizePlayer(
+  r: PlayerSummariesResponse,
+  level?: number | null,
+): Record<string, unknown> {
   const p = r.response?.players?.[0];
   if (!p) return { found: false };
   return {
@@ -46,6 +56,7 @@ export function summarizePlayer(r: PlayerSummariesResponse): Record<string, unkn
     state: PERSONA_STATES[p.personastate ?? 0] ?? "offline",
     visibility: p.communityvisibilitystate === 3 ? "public" : "private",
     country: p.loccountrycode || null,
+    level: level ?? null,
     created: p.timecreated ? new Date(p.timecreated * 1000).toISOString().slice(0, 10) : null,
     in_game: p.gameextrainfo || null,
     profile_url: p.profileurl ?? null,
@@ -281,7 +292,7 @@ export function summarizeWishlist(r: WishlistResponse, max = 100): Record<string
       items: [],
     };
   }
-  const sorted = items.slice().sort((a, b) => (a.priority ?? 1e9) - (b.priority ?? 1e9));
+  const sorted = items.toSorted((a, b) => (a.priority ?? 1e9) - (b.priority ?? 1e9));
   return {
     found: true,
     total: items.length,
@@ -292,6 +303,70 @@ export function summarizeWishlist(r: WishlistResponse, max = 100): Record<string
       priority: i.priority ?? null,
       added: isoDay(i.date_added),
     })),
+  };
+}
+
+// ---- Web API: player bans (key required; ban status is always public) ------
+
+export interface PlayerBansResponse {
+  players?: {
+    SteamId?: string;
+    CommunityBanned?: boolean;
+    VACBanned?: boolean;
+    NumberOfVACBans?: number;
+    NumberOfGameBans?: number;
+    DaysSinceLastBan?: number;
+    EconomyBan?: string;
+  }[];
+}
+
+export function summarizePlayerBans(r: PlayerBansResponse): Record<string, unknown> {
+  const p = r.players?.[0];
+  if (!p) return { found: false };
+  return {
+    found: true,
+    steamid: p.SteamId,
+    vac_banned: p.VACBanned ?? false,
+    vac_ban_count: p.NumberOfVACBans ?? 0,
+    game_ban_count: p.NumberOfGameBans ?? 0,
+    community_banned: p.CommunityBanned ?? false,
+    economy_ban: p.EconomyBan && p.EconomyBan !== "none" ? p.EconomyBan : null,
+    days_since_last_ban: p.DaysSinceLastBan ?? null,
+  };
+}
+
+// ---- Web API: followed games (keyless; needs a public profile) -------------
+
+export interface FollowedGamesResponse {
+  response?: { appids?: number[] };
+}
+export interface FollowedGamesCountResponse {
+  response?: { followed_game_count?: number };
+}
+
+// A player can follow far more games than they wishlist; cap like the other
+// list tools. total comes from the dedicated count endpoint (independent of
+// any cap on the appid list), same pattern as summarizeWishlist.
+const FOLLOWED_MAX = 200;
+export function summarizeFollowedGames(
+  r: FollowedGamesResponse,
+  countRes: FollowedGamesCountResponse,
+  max = FOLLOWED_MAX,
+): Record<string, unknown> {
+  const appids = r.response?.appids ?? [];
+  if (appids.length === 0) {
+    return {
+      found: false,
+      reason: "No followed games, or the profile is private.",
+      total: 0,
+      games: [],
+    };
+  }
+  return {
+    found: true,
+    total: countRes.response?.followed_game_count ?? appids.length,
+    returned: Math.min(appids.length, max),
+    games: appids.slice(0, max).map((appid) => ({ appid, store_url: storeUrl(appid) })),
   };
 }
 
@@ -313,7 +388,7 @@ export function summarizeFriendList(
   if (friends.length === 0) return { found: true, total: 0, returned: 0, friends: [] };
   const byId = new Map<string, PlayerSummary>();
   for (const p of players.response?.players ?? []) if (p.steamid) byId.set(p.steamid, p);
-  const sorted = friends.slice().sort((a, b) => (b.friend_since ?? 0) - (a.friend_since ?? 0));
+  const sorted = friends.toSorted((a, b) => (b.friend_since ?? 0) - (a.friend_since ?? 0));
   return {
     found: true,
     total: friends.length,

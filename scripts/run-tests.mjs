@@ -6,15 +6,19 @@ import { spawn } from "node:child_process";
 // Keep this in sync with the CI "Coverage gate" step (.github/workflows/ci.yml).
 const COVERAGE_LINES_THRESHOLD = 80;
 
-const coverage = process.argv.includes("--coverage");
+// Anything besides --coverage is forwarded as-is to `node --test`, e.g.
+// `npm test -- --test-name-pattern=wishlist` to run a subset locally.
+const rawArgs = process.argv.slice(2);
+const coverage = rawArgs.includes("--coverage");
+const passthrough = rawArgs.filter((a) => a !== "--coverage");
 
 // `--test-coverage-lines` (a hard, fail-the-run threshold) landed in Node 22.8.
-// On older runtimes — including the Node 18 floor — fall back to reporting
+// On older runtimes — including the Node 20 floor — fall back to reporting
 // coverage without enforcing it, so `npm run test:coverage` still works there.
 const [major, minor] = process.versions.node.split(".").map(Number);
 const supportsThreshold = major > 22 || (major === 22 && minor >= 8);
 
-const args = ["--test"];
+const args = ["--test", ...passthrough];
 if (coverage) {
   args.push("--experimental-test-coverage");
   if (supportsThreshold) args.push(`--test-coverage-lines=${COVERAGE_LINES_THRESHOLD}`);
