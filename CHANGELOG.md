@@ -17,12 +17,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Add a `steam_machine` compat field/filter (separate from `steam_os`) to `get_items`, `discover_games` and `get_wishlist` ([58d978c](https://github.com/Grinv/steam-games-mcp/commit/58d978c)).
 - Add `get_followed_games` — a player's Steam store follows list, keyless ([58d978c](https://github.com/Grinv/steam-games-mcp/commit/58d978c)).
 - Add `get_player_bans` — VAC/game/community/economy ban status ([58d978c](https://github.com/Grinv/steam-games-mcp/commit/58d978c)).
-- Add Steam level to `get_player_summary`'s response ([58d978c](https://github.com/Grinv/steam-games-mcp/commit/58d978c)).
+- Expose Steam level in `get_player_summary`'s response ([58d978c](https://github.com/Grinv/steam-games-mcp/commit/58d978c)).
 
 ### Fixed
 
 - Fix `get_followed_games` erroring out when just the count lookup fails ([58d978c](https://github.com/Grinv/steam-games-mcp/commit/58d978c)).
-- Fix a `RateLimiter` edge case that could misfire under a clock near the epoch ([58d978c](https://github.com/Grinv/steam-games-mcp/commit/58d978c)).
+- Prevent a `RateLimiter` edge case that could misfire under a clock near the epoch ([58d978c](https://github.com/Grinv/steam-games-mcp/commit/58d978c)).
 
 ## [0.6.0] - 2026-07-12
 
@@ -54,20 +54,20 @@ Richer store cards and catalog/wishlist discovery for the SteamOS / Steam Machin
 
 ### Fixed
 
-- Fix the `tags` filter silently returning zero results when Steam's tag dictionary is unavailable — it now errors clearly instead ([a01a3db](https://github.com/Grinv/steam-games-mcp/commit/a01a3db)).
-- Fix `get_wishlist`'s `country`/`language` silently no-oping without another filter — it now always switches to the detailed view ([a01a3db](https://github.com/Grinv/steam-games-mcp/commit/a01a3db)).
+- Return a clear error, instead of silently zero results, when the `tags` filter can't reach Steam's tag dictionary ([a01a3db](https://github.com/Grinv/steam-games-mcp/commit/a01a3db)).
+- Stop `get_wishlist`'s `country`/`language` from silently no-oping without another filter — it now always switches to the detailed view ([a01a3db](https://github.com/Grinv/steam-games-mcp/commit/a01a3db)).
 
 ## [0.4.6] - 2026-06-30
 
 ### Fixed
 
-- Fix unfilled optional `.mcpb` fields leaking as the literal `${user_config.x}` string instead of empty, causing 403s ([f9d0318](https://github.com/Grinv/steam-games-mcp/commit/f9d0318)).
+- Prevent unfilled optional `.mcpb` fields from leaking as the literal `${user_config.x}` string instead of empty, which caused 403s ([f9d0318](https://github.com/Grinv/steam-games-mcp/commit/f9d0318)).
 
 ## [0.4.5] - 2026-06-30
 
 ### Fixed
 
-- Fix the `.mcpb` bundle crashing standalone (`ERR_MODULE_NOT_FOUND`) — runtime deps are now inlined instead of left external ([c24a072](https://github.com/Grinv/steam-games-mcp/commit/c24a072)).
+- Prevent the `.mcpb` bundle from crashing standalone (`ERR_MODULE_NOT_FOUND`) by inlining runtime deps instead of leaving them external ([c24a072](https://github.com/Grinv/steam-games-mcp/commit/c24a072)).
 
 ### Changed
 
@@ -77,36 +77,36 @@ Richer store cards and catalog/wishlist discovery for the SteamOS / Steam Machin
 
 ### Fixed
 
-- Fix strict MCP clients (e.g. Claude Desktop) disconnecting immediately — log mirroring now starts only after `initialized` ([0194f04](https://github.com/Grinv/steam-games-mcp/commit/0194f04)).
+- Stop strict MCP clients (e.g. Claude Desktop) from disconnecting immediately — log mirroring now starts only after `initialized` ([0194f04](https://github.com/Grinv/steam-games-mcp/commit/0194f04)).
 
 ## [0.4.3] - 2026-06-30
 
 ### Added
 
-- Add `environmentVariables` to `server.json` so registry consumers can surface every config option ([9f6bdef](https://github.com/Grinv/steam-games-mcp/commit/9f6bdef)).
+- Expose `environmentVariables` in `server.json` so registry consumers can surface every config option ([9f6bdef](https://github.com/Grinv/steam-games-mcp/commit/9f6bdef)).
 
 ## [0.4.2] - 2026-06-30
 
 ### Fixed
 
-- Fix the v0.4.1 MCP Registry publish failing schema validation — `server.json`'s `description` exceeded the 100-char cap ([dfb1c6d](https://github.com/Grinv/steam-games-mcp/commit/dfb1c6d)).
+- Shorten `server.json`'s `description`, which exceeded the registry's 100-char cap and broke the v0.4.1 publish ([dfb1c6d](https://github.com/Grinv/steam-games-mcp/commit/dfb1c6d)).
 
 ## [0.4.1] - 2026-06-30
 
 ### Added
 
-- Add MCP Registry publishing (npm + `.mcpb` packages), automated in the release workflow ([c61d0ac](https://github.com/Grinv/steam-games-mcp/commit/c61d0ac)).
+- Publish to the MCP Registry (npm + `.mcpb` packages), automated in the release workflow ([c61d0ac](https://github.com/Grinv/steam-games-mcp/commit/c61d0ac)).
 
 ## [0.4.0] - 2026-06-30
 
 ### Added
 
-- Add the MCP logging capability — mirrors stderr log lines to the client as `notifications/message` ([649ce1c](https://github.com/Grinv/steam-games-mcp/commit/649ce1c)).
+- Support the MCP logging capability, mirroring stderr log lines to the client as `notifications/message` ([649ce1c](https://github.com/Grinv/steam-games-mcp/commit/649ce1c)).
 
 ### Fixed
 
-- Fix the logger's stderr prefix showing `[mal-mcp]` (template leftover) instead of `[steam-games-mcp]` ([649ce1c](https://github.com/Grinv/steam-games-mcp/commit/649ce1c)).
-- Fix `redact()` not masking the Steam Web API `key` query param, which could leak into logs ([649ce1c](https://github.com/Grinv/steam-games-mcp/commit/649ce1c)).
+- Correct the logger's stderr prefix, which showed `[mal-mcp]` (template leftover) instead of `[steam-games-mcp]` ([649ce1c](https://github.com/Grinv/steam-games-mcp/commit/649ce1c)).
+- Mask the Steam Web API `key` query param in `redact()`, which could leak into logs ([649ce1c](https://github.com/Grinv/steam-games-mcp/commit/649ce1c)).
 
 ## [0.3.0] - 2026-06-30
 
@@ -136,7 +136,7 @@ Richer store cards and catalog/wishlist discovery for the SteamOS / Steam Machin
 
 ### Fixed
 
-- Fix `get_specials` missing `get_prices` from the manifest and referencing a stale, already-removed `get_deals` tool ([e14b05b](https://github.com/Grinv/steam-games-mcp/commit/e14b05b)).
+- Restore `get_prices` to the manifest and drop a stale, already-removed `get_deals` reference in `get_specials` ([e14b05b](https://github.com/Grinv/steam-games-mcp/commit/e14b05b)).
 
 ### Removed
 
