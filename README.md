@@ -117,7 +117,7 @@ need a free API key and a public profile. Three short steps:
 > The key and Steam ID go in your MCP client config (the `env` block above) — see
 > [docs/clients.md](docs/clients.md) for per-client examples. Never commit them.
 
-## What it does
+## Tools
 
 Key: **–** no credentials · **K** Steam Web API key.
 
