@@ -15,8 +15,9 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
     {
       title: "Search games",
       description:
-        "Search the Steam store by title; returns matches with their appid (needed by the other " +
-        "game tools), price, Metacritic score and platforms. No API key required.",
+        "Search the Steam store by title — term can be partial or approximate, not an exact match; " +
+        "returns matches with their appid (needed by the other game tools), price, Metacritic score " +
+        "and platforms. No API key required.",
       inputSchema: {
         term: z.string().min(1).describe("Game title to search for."),
         country,
@@ -115,8 +116,10 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Get prices for many games",
       description:
         "Get current price and discount for a batch of games by appid in one call — efficient for " +
-        "checking a whole list (e.g. a wishlist) for deals. Each row has the final/initial price and " +
-        "discount_percent (or is_free). No API key required. Get appids from search_games or get_wishlist.",
+        "checking a whole list (e.g. a wishlist) for deals. Rows come back in the same order as the " +
+        "given appids, one per id (unavailable ones marked available:false, never dropped). Each row " +
+        "has the final/initial price and discount_percent (or is_free). No API key required. Get " +
+        "appids from search_games or get_wishlist.",
       inputSchema: {
         appids: z
           .array(z.number().int().positive())
