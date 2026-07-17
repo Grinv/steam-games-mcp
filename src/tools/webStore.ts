@@ -65,7 +65,8 @@ export function registerStoreWebTools(
       description:
         "Get price/discount, review % (positive), hardware compatibility, popular user tags and " +
         "release date for a LIST of games by appid in ONE keyless call. The efficient way to price-, " +
-        "rating-, tag- and compat-check a wishlist or library without a request per game. Each item " +
+        "rating-, tag- and compat-check a wishlist or library without a request per game. For a bigger " +
+        "batch (up to 500 appids) when you only need price, use get_prices instead. Each item " +
         "carries four compatibility fields, each verified/playable/unsupported/unknown: steam_deck " +
         "(Steam Deck), steam_os (SteamOS in general), steam_machine (the Steam Machine console " +
         "specifically), and steam_frame (Steam Frame VR headset); a `tags` list (top user tags like 'Roguelike', " +
