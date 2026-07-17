@@ -6,10 +6,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-18
+
 ### Added
 
 - Add `compare_players` — shared games between two players' full libraries, with each one's playtime ([a36baa9](https://github.com/Grinv/steam-games-mcp/commit/a36baa9)).
 - Add guided prompts (`what_should_i_play`, `is_it_worth_buying`, `deals_digest`) that orchestrate existing tools for common questions ([a36baa9](https://github.com/Grinv/steam-games-mcp/commit/a36baa9)).
+
+### Fixed
+
+- Fix the fatal-startup error message showing the generic template name instead of `steam-games-mcp` ([1becccf](https://github.com/Grinv/steam-games-mcp/commit/1becccf)).
 
 ## [0.7.0] - 2026-07-16
 
