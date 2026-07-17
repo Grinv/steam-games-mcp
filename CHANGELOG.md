@@ -6,6 +6,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Add `compare_players` — shared games between two players' full libraries, with each one's playtime ([a36baa9](https://github.com/Grinv/steam-games-mcp/commit/a36baa9)).
+- Add guided prompts (`what_should_i_play`, `is_it_worth_buying`, `deals_digest`) that orchestrate existing tools for common questions ([a36baa9](https://github.com/Grinv/steam-games-mcp/commit/a36baa9)).
+
 ## [0.7.0] - 2026-07-16
 
 ### Changed
