@@ -150,7 +150,9 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Get featured store sections",
       description:
         "Get the Steam store's featured sections: specials, top sellers, new releases and coming " +
-        "soon (each a list of games with appid and price). No API key required.",
+        "soon (each a list of games with appid and price), all in one call — for a general 'what's " +
+        "on the store front page' overview. For just current discounts use get_specials (lighter), " +
+        "or discover_games for catalog-wide deals with filters. No API key required.",
       inputSchema: { country, language },
       annotations: READ_ONLY,
     },
