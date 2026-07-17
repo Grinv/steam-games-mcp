@@ -3,10 +3,15 @@
 [![npm version](https://img.shields.io/npm/v/steam-games-mcp.svg)](https://www.npmjs.com/package/steam-games-mcp)
 [![CI](https://github.com/Grinv/steam-games-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Grinv/steam-games-mcp/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/npm/l/steam-games-mcp.svg)](LICENSE)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.Grinv%2Fsteam--games--mcp-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.Grinv/steam-games-mcp&version=latest)
 
 An [MCP](https://modelcontextprotocol.io) server for **Steam**: search games and
 read store details, prices, reviews, discounts and news (no key), plus player
 profiles, libraries and achievements via the official **Steam Web API** (free key).
+
+**Read-only · official Steam APIs only · most tools need no key · open source.**
+Nobody logs in; the only credential is a free Steam Web API key you set yourself,
+and the server never writes, trades, posts, launches games, or makes purchases.
 
 Works with any MCP client (Claude Desktop/Code, Cursor, VS Code, Cline, …) over stdio.
 
