@@ -104,7 +104,9 @@ npm run inspector      # run under the MCP Inspector
   `shared.ts`). Trim responses for token efficiency (cap big lists like a
   player's library, a game's achievements, or a friend list).
 - Write tool `description`s and per-field `.describe()` text for the calling
-  model: explain when to use a tool and what each parameter means.
+  model: explain when to use a tool and what each parameter means. Check new
+  or edited descriptions against [docs/tool-descriptions.md](docs/tool-descriptions.md)
+  (Glama's TDQS rubric) before committing.
 - Keep dependencies minimal. New deps need a clear justification (supply-chain).
 - **Never commit secrets.** The key comes from env vars / OS keychain only.
 - Cross-platform: macOS, Linux and Windows. Avoid POSIX-only shell in npm
