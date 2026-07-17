@@ -54,6 +54,7 @@ src/
   index.ts        # bin entry — calls start()
   server.ts       # buildServer() + start(); registers everything
   config.ts       # env → validated Config (zod)
+  version.ts      # VERSION/USER_AGENT, kept in sync with package.json by a test
   format/         # raw Steam payloads → trimmed, agent-facing shapes: storefront.ts,
                   #   web.ts (official Web API: player data), store.ts (keyless store
                   #   services: GetItems/Query/tags/enriched wishlist), shared.ts (helpers)

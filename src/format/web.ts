@@ -57,7 +57,7 @@ export function summarizePlayer(
     visibility: p.communityvisibilitystate === 3 ? "public" : "private",
     country: p.loccountrycode || null,
     level: level ?? null,
-    created: p.timecreated ? new Date(p.timecreated * 1000).toISOString().slice(0, 10) : null,
+    created: isoDay(p.timecreated),
     in_game: p.gameextrainfo || null,
     profile_url: p.profileurl ?? null,
     avatar: p.avatarfull ?? null,
@@ -147,10 +147,7 @@ export function summarizePlayerAchievements(
     achievements: all.map((a) => ({
       name: a.name || a.apiname,
       achieved: a.achieved === 1,
-      unlocked_at:
-        a.achieved === 1 && a.unlocktime
-          ? new Date(a.unlocktime * 1000).toISOString().slice(0, 10)
-          : null,
+      unlocked_at: a.achieved === 1 ? isoDay(a.unlocktime) : null,
     })),
   };
 }
@@ -240,7 +237,7 @@ export function summarizeNews(r: NewsResponse): Record<string, unknown> {
   return {
     items: (r.appnews?.newsitems ?? []).map((n) => ({
       title: n.title ?? null,
-      date: n.date ? new Date(n.date * 1000).toISOString().slice(0, 10) : null,
+      date: isoDay(n.date),
       author: n.author || null,
       feed: n.feedlabel || null,
       excerpt: stripHtml(n.contents),
