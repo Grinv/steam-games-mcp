@@ -6,6 +6,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Sharpen `search_games`, `get_prices`, `get_items` and `get_global_achievements`'s descriptions — cross-reference `get_items`/`get_prices` for the right batch size vs richness tradeoff, and disclose concrete parameter/return-shape facts instead of restating the schema ([d75122a](https://github.com/Grinv/steam-games-mcp/commit/d75122a), [db8c25e](https://github.com/Grinv/steam-games-mcp/commit/db8c25e), [72781e9](https://github.com/Grinv/steam-games-mcp/commit/72781e9)).
+
 ## [0.8.0] - 2026-07-18
 
 ### Added
