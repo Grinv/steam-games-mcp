@@ -99,6 +99,20 @@ export class StoreServiceClient {
     });
   }
 
+  // Shared shape behind getItems/#queryCatalog/getWishlistDetailed: fetch the
+  // store-service page alongside the (cached) tag dictionary in parallel, then
+  // resolve/guard the tag map through the same rule every caller needs.
+  // tagsBeingFiltered is omitted by getItems, which never filters by tags.
+  async #fetchWithTags<T>(
+    path: string,
+    query: Query,
+    language: string,
+    tagsBeingFiltered?: string[],
+  ): Promise<{ res: T; tagMap: TagMap | undefined }> {
+    const [res, tagMap] = await Promise.all([this.#get<T>(path, query), this.#tagNames(language)]);
+    return { res, tagMap: this.#requireTagMapIfFiltering(tagsBeingFiltered, tagMap) };
+  }
+
   // Batch store card (price+discount, review %, compat, popular tags, release) for
   // a list of appids in one keyless call via the modern store-browse service. The
   // efficient way to price-, rating- and tag-check a known list (wishlist/library)
@@ -114,15 +128,14 @@ export class StoreServiceClient {
       context: { language: l, country_code: country ?? this.#country },
       data_request: storeCardDataRequest(15), // 15 tags: display-only (get_items doesn't tag-filter)
     };
-    const [res, tagMap] = await Promise.all([
-      this.#get<StoreItemsResponse>("IStoreBrowseService/GetItems/v1/", {
-        input_json: JSON.stringify(input),
-      }),
-      this.#tagNames(l),
-    ]);
     // get_items never filters by tags — a failed dictionary just means the
     // `tags` display field comes back empty, which resolveTags already handles.
-    return summarizeItems(res, appids, tagMap ?? undefined);
+    const { res, tagMap } = await this.#fetchWithTags<StoreItemsResponse>(
+      "IStoreBrowseService/GetItems/v1/",
+      { input_json: JSON.stringify(input) },
+      l,
+    );
+    return summarizeItems(res, appids, tagMap);
   }
 
   // Shared catalog discovery over the keyless store query backend (discoverGames
@@ -164,12 +177,12 @@ export class StoreServiceClient {
     };
     // Fetch the tag dictionary alongside the page (cached, so ~free after the
     // first call) — every card surfaces resolved tag names.
-    const [res, tagMap] = await Promise.all([
-      this.#get<StoreQueryResponse>("IStoreQueryService/Query/v1/", {
-        input_json: JSON.stringify(input),
-      }),
-      this.#tagNames(l),
-    ]);
+    const { res, tagMap } = await this.#fetchWithTags<StoreQueryResponse>(
+      "IStoreQueryService/Query/v1/",
+      { input_json: JSON.stringify(input) },
+      l,
+      p.tags,
+    );
     return summarizeDiscover(res, {
       minReview: p.minReview,
       minReviews: p.minReviews,
@@ -180,7 +193,7 @@ export class StoreServiceClient {
       platform: p.platform,
       releasedAfter: p.releasedAfter,
       tags: p.tags,
-      tagMap: this.#requireTagMapIfFiltering(p.tags, tagMap),
+      tagMap,
     });
   }
 
@@ -230,14 +243,13 @@ export class StoreServiceClient {
       data_request: storeCardDataRequest(20), // 20 tags: full set so tag filtering isn't capped
       sort: 0,
     };
-    const [res, tagMap] = await Promise.all([
-      this.#get<WishlistDetailedResponse>("IWishlistService/GetWishlistSortedFiltered/v1/", {
-        input_json: JSON.stringify(input),
-      }),
-      this.#tagNames(l),
-    ]);
-    const safeTagMap = this.#requireTagMapIfFiltering(opts.tags, tagMap);
-    return summarizeWishlistDetailed(res, safeTagMap, {
+    const { res, tagMap } = await this.#fetchWithTags<WishlistDetailedResponse>(
+      "IWishlistService/GetWishlistSortedFiltered/v1/",
+      { input_json: JSON.stringify(input) },
+      l,
+      opts.tags,
+    );
+    return summarizeWishlistDetailed(res, tagMap, {
       onSaleOnly: opts.onSaleOnly,
       tags: opts.tags,
       minReview: opts.minReview,

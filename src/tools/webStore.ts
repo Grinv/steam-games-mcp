@@ -7,6 +7,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SteamWebClient } from "../clients/web.js";
+import type { StoreServiceClient } from "../clients/storeService.js";
 import {
   READ_ONLY,
   appid,
@@ -21,7 +22,11 @@ import {
 } from "./common.js";
 import { steamid, steamIdTool } from "./webShared.js";
 
-export function registerStoreWebTools(server: McpServer, web: SteamWebClient): void {
+export function registerStoreWebTools(
+  server: McpServer,
+  web: SteamWebClient,
+  store: StoreServiceClient,
+): void {
   server.registerTool(
     "get_game_news",
     {
@@ -76,7 +81,7 @@ export function registerStoreWebTools(server: McpServer, web: SteamWebClient): v
       },
       annotations: READ_ONLY,
     },
-    ({ appids, country, language }) => reply(() => web.getItems(appids, country, language)),
+    ({ appids, country, language }) => reply(() => store.getItems(appids, country, language)),
   );
 
   server.registerTool(
@@ -188,7 +193,7 @@ export function registerStoreWebTools(server: McpServer, web: SteamWebClient): v
       else if (released_within_days)
         releasedAfter = Math.floor(Date.now() / 1000) - released_within_days * 86400;
       return reply(() =>
-        web.discoverGames({
+        store.discoverGames({
           releasedAfter,
           steamDeck: steam_deck,
           steamOs: steam_os,
@@ -334,39 +339,20 @@ export function registerStoreWebTools(server: McpServer, web: SteamWebClient): v
     }) =>
       reply(async () => {
         const sid = await web.requireSteamId(id);
-        // Any filter (or an explicit flag) switches to the enriched card view.
-        // country/language are included here too — the light appid list carries
-        // no price, so those params are a no-op unless detailed mode is on.
-        const detailed =
-          include_details ||
-          on_sale_only ||
-          [
-            tags,
-            min_review,
-            min_discount,
-            plat,
-            steam_deck,
-            steam_os,
-            steam_machine,
-            steam_frame,
-            country,
-            language,
-          ].some((v) => v !== undefined);
-        return detailed
-          ? web.getWishlistDetailed(sid, {
-              onSaleOnly: on_sale_only,
-              tags,
-              minReview: min_review,
-              minDiscount: min_discount,
-              platform: plat,
-              steamDeck: steam_deck,
-              steamOs: steam_os,
-              steamMachine: steam_machine,
-              steamFrame: steam_frame,
-              country,
-              language,
-            })
-          : web.getWishlist(sid);
+        return web.getWishlist(sid, {
+          includeDetails: include_details,
+          onSaleOnly: on_sale_only,
+          tags,
+          minReview: min_review,
+          minDiscount: min_discount,
+          platform: plat,
+          steamDeck: steam_deck,
+          steamOs: steam_os,
+          steamMachine: steam_machine,
+          steamFrame: steam_frame,
+          country,
+          language,
+        });
       }),
   );
 }

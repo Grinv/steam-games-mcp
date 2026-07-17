@@ -60,8 +60,9 @@ src/
                   #   services: GetItems/Query/tags/enriched wishlist), shared.ts (helpers)
   lib/            # GENERIC carcass: http, rateLimit, cache, errors, logger, result
   clients/        # storefront.ts (keyless store), web.ts (official Web API; key
-                  #   optional; composes storeService.ts internally), storeService.ts
-                  #   (modern store-browse/query/wishlist-sorted card services)
+                  #   optional; builds storeService.ts, exposed via `.store` for
+                  #   tools/webStore.ts), storeService.ts (modern store-browse/
+                  #   query/wishlist-sorted card services)
   tools/          # storefront.ts, webStore.ts (keyless-capable Web API tools),
                   #   webPlayer.ts (key-gated player tools), webShared.ts (steamid
                   #   schema + steamIdTool helper shared by the two), common.ts

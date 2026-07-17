@@ -363,25 +363,17 @@ export class SteamWebClient {
     return summarizeCurrentPlayers(res, appid);
   }
 
-  // The modern store-browse/query card services (get_items, discover_games) —
-  // see clients/storeService.ts. Thin delegations so SteamWebClient's public API
-  // is unchanged; tools/webStore.ts doesn't know or care these moved.
-  getItems(
-    appids: number[],
-    country?: string,
-    language?: string,
-  ): Promise<Record<string, unknown>> {
-    return this.#store.getItems(appids, country, language);
-  }
-
-  discoverGames(
-    p: Parameters<StoreServiceClient["discoverGames"]>[0],
-  ): Promise<Record<string, unknown>> {
-    return this.#store.discoverGames(p);
+  // The modern store-browse/query card services (get_items, discover_games) live
+  // on StoreServiceClient (clients/storeService.ts); tools/webStore.ts calls it
+  // directly via this getter rather than through pass-through methods here.
+  // Shares this.#get/#cache (one rate limiter, one cache), so it's built once in
+  // the constructor and exposed, not reconstructed by the caller.
+  get store(): StoreServiceClient {
+    return this.#store;
   }
 
   // A player's wishlist (needs the wishlist/profile to be public). Keyless.
-  async getWishlist(steamid: string): Promise<Record<string, unknown>> {
+  async #getWishlistLight(steamid: string): Promise<Record<string, unknown>> {
     const res = await this.#get<WishlistResponse>("IWishlistService/GetWishlist/v1/", { steamid });
     return summarizeWishlist(res);
   }
@@ -412,11 +404,31 @@ export class SteamWebClient {
     }
   }
 
-  getWishlistDetailed(
+  #getWishlistDetailed(
     steamid: string,
     opts?: Parameters<StoreServiceClient["getWishlistDetailed"]>[1],
   ): Promise<Record<string, unknown>> {
     return this.#store.getWishlistDetailed(steamid, opts);
+  }
+
+  // Single entry point for the get_wishlist tool: decides light vs detailed the
+  // same way the tool schema implies it — any filter field being SET switches to
+  // the enriched card view, since the light appid list carries no price to
+  // filter on. onSaleOnly is checked by value (only `true` implies detailed)
+  // since `false` is a meaningful "don't require a discount", not an opt-in to
+  // detailed mode.
+  async getWishlist(
+    steamid: string,
+    opts: NonNullable<Parameters<StoreServiceClient["getWishlistDetailed"]>[1]> & {
+      includeDetails?: boolean;
+    } = {},
+  ): Promise<Record<string, unknown>> {
+    const { includeDetails, onSaleOnly, ...filters } = opts;
+    const detailed =
+      includeDetails || onSaleOnly || Object.values(filters).some((v) => v !== undefined);
+    return detailed
+      ? this.#getWishlistDetailed(steamid, { onSaleOnly, ...filters })
+      : this.#getWishlistLight(steamid);
   }
 
   // Full achievement list for a game (GetSchemaForGame needs a key), merged with
