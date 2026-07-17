@@ -49,7 +49,9 @@ export function registerStoreWebTools(
       title: "Get global achievement rates",
       description:
         "Get the global unlock percentage of each achievement in a game by appid — how rare each " +
-        "achievement is across all players. Get the appid from search_games. Works without a key.",
+        "achievement is across all players. Returns each achievement's internal name and its unlock " +
+        "percent (no display names/descriptions — for those, use get_game_achievements). Get the " +
+        "appid from search_games. Works without a key.",
       inputSchema: { appid },
       annotations: READ_ONLY,
     },
