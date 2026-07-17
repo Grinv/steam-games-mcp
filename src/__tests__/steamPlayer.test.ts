@@ -260,6 +260,77 @@ describe("find_friends_who_own", () => {
   });
 });
 
+describe("compare_players", () => {
+  test("compare_players finds shared games with each player's own playtime, sorted by combined playtime", async (t) => {
+    installFetch(
+      t,
+      mockFetch((url) => {
+        if (!url.includes("GetOwnedGames")) return jsonResponse({});
+        if (url.includes("steamid=76561197960287931")) {
+          return jsonResponse({
+            response: {
+              game_count: 3,
+              games: [
+                { appid: 620, name: "Portal 2", playtime_forever: 300 },
+                { appid: 400, name: "Portal", playtime_forever: 50 },
+                { appid: 111, name: "OnlyB", playtime_forever: 10 },
+              ],
+            },
+          });
+        }
+        return jsonResponse({
+          response: {
+            game_count: 3,
+            games: [
+              { appid: 620, name: "Portal 2", playtime_forever: 600 },
+              { appid: 400, name: "Portal", playtime_forever: 1200 },
+              { appid: 999, name: "OnlyA", playtime_forever: 100 },
+            ],
+          },
+        });
+      }),
+    );
+    const { client, close } = await connectServer(ENV);
+    t.after(close);
+    const res = await client.callTool({
+      name: "compare_players",
+      arguments: { steamid: "76561197960287930", other_steamid: "76561197960287931" },
+    });
+    const s = res.structuredContent as {
+      found: boolean;
+      shared_count: number;
+      games: { appid: number; name: string; playtime_hours_a: number; playtime_hours_b: number }[];
+    };
+    assert.equal(s.found, true);
+    assert.equal(s.shared_count, 2);
+    // Portal (1200+50=1250 combined) sorts before Portal 2 (600+300=900).
+    assert.equal(s.games[0]!.appid, 400);
+    assert.equal(s.games[0]!.playtime_hours_a, 20);
+    assert.equal(s.games[0]!.playtime_hours_b, 0.8);
+    assert.equal(s.games[1]!.appid, 620);
+  });
+
+  test("compare_players reports found:false when either profile is private", async (t) => {
+    installFetch(
+      t,
+      mockFetch((url) => {
+        if (!url.includes("GetOwnedGames")) return jsonResponse({});
+        if (url.includes("steamid=76561197960287931")) return jsonResponse({ response: {} });
+        return jsonResponse(OWNED);
+      }),
+    );
+    const { client, close } = await connectServer(ENV);
+    t.after(close);
+    const res = await client.callTool({
+      name: "compare_players",
+      arguments: { steamid: "76561197960287930", other_steamid: "76561197960287931" },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /private/i);
+  });
+});
+
 test("resolve_vanity_url returns the steamid", async (t) => {
   const mock = mockFetch(router);
   installFetch(t, mock);

@@ -110,6 +110,31 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
   );
 
   server.registerTool(
+    "compare_players",
+    {
+      title: "Compare two players' libraries",
+      description:
+        "Find games two players both own, with each one's playtime — 'what can my friend and I both " +
+        "play', 'do we have anything in common'. Checks each player's FULL library, unlike " +
+        "get_owned_games which caps at the top 50 by playtime. Requires STEAM_API_KEY and both " +
+        "profiles' game-details to be public. Omit steamid to compare against yourself (STEAM_ID).",
+      inputSchema: {
+        steamid,
+        other_steamid: z
+          .string()
+          .regex(
+            /^\d{17}$/,
+            "A SteamID64 is 17 digits. Use resolve_vanity_url to convert a custom profile name.",
+          )
+          .describe("The other player's 17-digit SteamID64 to compare against."),
+      },
+      annotations: READ_ONLY,
+    },
+    ({ steamid: id, other_steamid }) =>
+      requireKey(async () => web.comparePlayers(await web.requireSteamId(id), other_steamid)),
+  );
+
+  server.registerTool(
     "get_player_summary",
     {
       title: "Get player profile",

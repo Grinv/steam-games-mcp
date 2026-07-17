@@ -9,6 +9,7 @@ import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
 import { ApiError } from "../lib/errors.js";
 import {
+  summarizeComparePlayers,
   summarizeCurrentPlayers,
   summarizeFollowedGames,
   summarizeFriendList,
@@ -192,6 +193,22 @@ export class SteamWebClient {
       steamid,
     });
     return summarizeRecentlyPlayed(res);
+  }
+
+  // Shared games between two players' FULL libraries, unlike get_owned_games
+  // which caps to the top 50 by playtime — comparing needs the whole list.
+  async comparePlayers(steamidA: string, steamidB: string): Promise<Record<string, unknown>> {
+    const [a, b] = await Promise.all([
+      this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
+        steamid: steamidA,
+        include_appinfo: true,
+      }),
+      this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
+        steamid: steamidB,
+        include_appinfo: true,
+      }),
+    ]);
+    return summarizeComparePlayers(a, b);
   }
 
   async getPlayerAchievements(

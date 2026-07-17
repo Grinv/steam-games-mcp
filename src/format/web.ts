@@ -106,6 +106,47 @@ export function summarizeOwnedGames(r: OwnedGamesResponse, max = 50): Record<str
   };
 }
 
+const COMPARE_PRIVATE_REASON =
+  "One or both profiles/game-details are private. Ask the owner(s) to set Steam → " +
+  "Privacy → Game details = Public.";
+
+// Shared games between two players' FULL libraries (not capped like
+// summarizeOwnedGames — comparing needs the whole list, not just the top N by
+// playtime), each with its own playtime. Sorted by combined playtime desc.
+export function summarizeComparePlayers(
+  a: OwnedGamesResponse,
+  b: OwnedGamesResponse,
+  max = 50,
+): Record<string, unknown> {
+  if (isPrivate(a) || isPrivate(b)) return { found: false, reason: COMPARE_PRIVATE_REASON };
+  const gamesA = new Map((a.response?.games ?? []).map((g) => [g.appid, g]));
+  const gamesB = new Map((b.response?.games ?? []).map((g) => [g.appid, g]));
+  const shared = [...gamesA.keys()]
+    .filter((appid): appid is number => typeof appid === "number" && gamesB.has(appid))
+    .map((appid) => {
+      const ga = gamesA.get(appid)!;
+      const gb = gamesB.get(appid)!;
+      return {
+        appid,
+        name: ga.name ?? gb.name ?? null,
+        playtime_hours_a: hours(ga.playtime_forever),
+        playtime_hours_b: hours(gb.playtime_forever),
+      };
+    })
+    .sort(
+      (x, y) =>
+        (y.playtime_hours_a ?? 0) +
+        (y.playtime_hours_b ?? 0) -
+        ((x.playtime_hours_a ?? 0) + (x.playtime_hours_b ?? 0)),
+    );
+  return {
+    found: true,
+    shared_count: shared.length,
+    returned: Math.min(shared.length, max),
+    games: shared.slice(0, max),
+  };
+}
+
 export function summarizeRecentlyPlayed(r: OwnedGamesResponse): Record<string, unknown> {
   if (isPrivate(r)) return { found: false, reason: PRIVATE_REASON, total: 0, games: [] };
   return {

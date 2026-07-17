@@ -45,6 +45,7 @@ Once it's connected, just ask your agent in natural language.
 "How far am I through Elden Ring's achievements?"
 "What's the SteamID64 for the profile name 'gabelogannewell'?"
 "Which of my friends own Portal 2, and how many hours have they played?"
+"What games do my friend and I both own, and who's played them more?"
 "Show me my Steam friends list."
 "Is SteamID 76561197960287930 VAC banned?"
 "What games am I following that aren't on my wishlist?"
@@ -140,6 +141,7 @@ Key: **–** no credentials · **K** Steam Web API key.
 | `get_player_achievements` | K   | A player's achievement progress in a game                                                                            |
 | `get_friend_list`         | K   | A player's friends — name, online state, current game (public friends list)                                          |
 | `find_friends_who_own`    | K   | Which friends own given appid(s) + their playtime — checks each friend's FULL library, not just top 50               |
+| `compare_players`         | K   | Games two players both own, with each one's playtime — checks each player's FULL library, not just top 50            |
 
 **Two tiers.** Store/search + discovery tools (`store`/`api.steampowered.com`)
 need **no credentials** — including catalog-wide discovery (`discover_games`:
@@ -154,6 +156,17 @@ default to you, so "my wishlist / library" works without passing an ID each time
 > (keyless) store APIs. SteamDB is not used (no public API + scraping disallowed).
 > Steam has no price-history API, so that isn't offered. Not affiliated with Valve.
 
+## Prompts
+
+Guided one-shot prompts that orchestrate several tools for a common question —
+use these when your client exposes MCP prompts, instead of describing the steps yourself:
+
+| Prompt               | Args                                                | What it does                                                               |
+| -------------------- | --------------------------------------------------- | -------------------------------------------------------------------------- |
+| `what_should_i_play` | `steamid`, `budget`, `tags` (all optional)          | Recommends catalog games from your library/taste, excluding what you own   |
+| `is_it_worth_buying` | `game` (title or appid)                             | Price, review trend and Steam Deck compatibility → a buy/wait/skip verdict |
+| `deals_digest`       | `min_discount`, `min_review`, `tags` (all optional) | A curated list of well-reviewed discounted games                           |
+
 ## Develop
 
 ```sh
@@ -167,6 +180,7 @@ npm run inspector    # run under the MCP Inspector
 ```
 
 Runtime requires Node ≥ 20. Contributor/agent guidance: [AGENTS.md](AGENTS.md).
+Security policy: [SECURITY.md](SECURITY.md).
 Per-client config and all tunables: [docs/clients.md](docs/clients.md).
 
 ## Updating

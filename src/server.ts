@@ -9,6 +9,7 @@ import { SteamWebClient } from "./clients/web.js";
 import { registerStorefrontTools } from "./tools/storefront.js";
 import { registerStoreWebTools } from "./tools/webStore.js";
 import { registerPlayerWebTools } from "./tools/webPlayer.js";
+import { registerPrompts } from "./tools/prompts.js";
 import { VERSION } from "./version.js";
 
 const INSTRUCTIONS =
@@ -38,6 +39,7 @@ export function buildServer(config: Config, logger: Logger): McpServer {
   registerStorefrontTools(server, store);
   registerStoreWebTools(server, web, web.store);
   registerPlayerWebTools(server, web);
+  registerPrompts(server);
   return server;
 }
 
