@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-18
+
 ### Added
 
 - Add `get_recommended_games` — personalized picks derived from the player's own playtime-weighted tag preferences, ranked with a review-quality discount, and `exclude_tags`/`min_discount` options, excluding owned games.
