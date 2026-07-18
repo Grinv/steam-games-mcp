@@ -61,7 +61,7 @@ function friendIdsOf(r: FriendListResponse): string[] {
 
 export class SteamWebClient {
   readonly #http: HttpClient;
-  readonly #cache: TtlCache<Record<string, unknown>>;
+  readonly #cache: TtlCache;
   readonly #key: string | undefined;
   readonly #l: string;
   readonly #country: string;
@@ -166,7 +166,7 @@ export class SteamWebClient {
         });
         return { level: res.response?.player_level ?? null };
       });
-      return wrapped.level as number | null;
+      return wrapped.level;
     } catch {
       return null;
     }
@@ -179,13 +179,13 @@ export class SteamWebClient {
     return summarizePlayerBans(res);
   }
 
-  async getOwnedGames(steamid: string): Promise<Record<string, unknown>> {
+  async getOwnedGames(steamid: string, checkAppids?: number[]): Promise<Record<string, unknown>> {
     const res = await this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
       steamid,
       include_appinfo: true,
       include_played_free_games: true,
     });
-    return summarizeOwnedGames(res);
+    return summarizeOwnedGames(res, { checkAppids });
   }
 
   async getRecentlyPlayed(steamid: string): Promise<Record<string, unknown>> {
@@ -193,6 +193,37 @@ export class SteamWebClient {
       steamid,
     });
     return summarizeRecentlyPlayed(res);
+  }
+
+  // Personalized recommendations derived from the player's own library: tags
+  // on their most-played games become weighted preferences, discounted by
+  // review quality, then ranked against the broader catalog. Needs the key
+  // for GetOwnedGames' playtime even though the catalog side (store) is keyless.
+  async getRecommendedGames(
+    steamid: string,
+    opts: {
+      count?: number;
+      country?: string;
+      language?: string;
+      excludeTags?: string[];
+      minDiscount?: number;
+    } = {},
+  ): Promise<Record<string, unknown>> {
+    const res = await this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
+      steamid,
+      include_appinfo: false,
+      // Without this, Steam omits free-to-play games from the owned list
+      // entirely — they'd then not only miss tag-weighting but, worse, never
+      // get excluded as "already owned" and could be recommended back.
+      include_played_free_games: true,
+    });
+    if (res.response?.games === undefined && res.response?.game_count === undefined) {
+      return { found: false, reason: PRIVATE_PROFILE_REASON };
+    }
+    const games = (res.response?.games ?? [])
+      .filter((g): g is { appid: number; playtime_forever?: number } => typeof g.appid === "number")
+      .map((g) => ({ appid: g.appid, playtimeMinutes: g.playtime_forever ?? 0 }));
+    return this.#store.getRecommendedGames(games, opts);
   }
 
   // Shared games between two players' FULL libraries, unlike get_owned_games

@@ -5,26 +5,21 @@
 // (keyless-capable Web API store tools).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { connectServer, installFetch, mockFetch, jsonResponse } from "./helpers.js";
+import { setupServer, jsonResponse, assertToolError } from "./helpers.js";
 import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.js";
 
 test("player tools error clearly without STEAM_API_KEY", async (t) => {
-  const { client, close } = await connectServer({});
-  t.after(close);
+  const { client } = await setupServer(t);
   const res = await client.callTool({
     name: "get_owned_games",
     arguments: { steamid: "76561197960287930" },
   });
-  assert.equal(res.isError, true);
-  const text = (res.content as { text: string }[])[0]!.text;
-  assert.match(text, /STEAM_API_KEY/);
+  assertToolError(res, /STEAM_API_KEY/);
 });
 
 describe("get_owned_games", () => {
   test("get_owned_games sorts by playtime and converts to hours", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
+    const { client } = await setupServer(t, ENV, router);
     const res = await client.callTool({
       name: "get_owned_games",
       arguments: { steamid: "76561197960287930" },
@@ -40,14 +35,9 @@ describe("get_owned_games", () => {
   });
 
   test("get_owned_games reports found:false for a private profile", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) =>
-        url.includes("GetOwnedGames") ? jsonResponse({ response: {} }) : jsonResponse({}),
-      ),
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetOwnedGames") ? jsonResponse({ response: {} }) : jsonResponse({}),
     );
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
     const res = await client.callTool({
       name: "get_owned_games",
       arguments: { steamid: "76561197960287930" },
@@ -61,13 +51,245 @@ describe("get_owned_games", () => {
     assert.equal(s.game_count, null);
     assert.match(s.reason, /private/i);
   });
+
+  test("get_owned_games: check_appids reliably reports ownership even outside the top-50 cap", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetOwnedGames")
+        ? jsonResponse({
+            response: {
+              game_count: 2,
+              games: [
+                { appid: 620, name: "Portal 2", playtime_forever: 600 },
+                { appid: 400, name: "Portal", playtime_forever: 1200 },
+              ],
+            },
+          })
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "76561197960287930", check_appids: [620, 999] },
+    });
+    const s = res.structuredContent as {
+      owns: { appid: number; owned: boolean; playtime_hours: number | null }[];
+    };
+    assert.deepEqual(s.owns, [
+      { appid: 620, owned: true, playtime_hours: 10 },
+      { appid: 999, owned: false, playtime_hours: null },
+    ]);
+  });
+});
+
+describe("get_recently_played", () => {
+  test("get_recently_played lists games played in the last two weeks", async (t) => {
+    const { client } = await setupServer(t, ENV, router);
+    const res = await client.callTool({
+      name: "get_recently_played",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as {
+      found: boolean;
+      total: number;
+      games: { appid: number; name: string; playtime_hours: number }[];
+    };
+    assert.equal(s.found, true);
+    assert.equal(s.total, 2);
+    assert.equal(s.games[0]!.appid, 620);
+    assert.equal(s.games[0]!.playtime_hours, 10); // 600 min playtime_forever → 10h
+  });
+
+  test("get_recently_played reports found:false for a private profile", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetRecentlyPlayedGames") ? jsonResponse({ response: {} }) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_recently_played",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { found: boolean; total: number; games: unknown[] };
+    assert.equal(s.found, false);
+    assert.equal(s.total, 0);
+    assert.deepEqual(s.games, []);
+  });
+});
+
+describe("get_recommended_games", () => {
+  // tagid 1 = Roguelike, tagid 2 = Horror. The player owns appid 10 (200min,
+  // Roguelike), appid 20 (0min, Horror — ignored, no playtime), and appid 60,
+  // a free-to-play Roguelike Steam only returns when include_played_free_games
+  // is set — regression coverage for a bug where an owned F2P game was missing
+  // from the exclusion set (and got recommended right back).
+  function recoRouter(url: string) {
+    if (url.includes("GetOwnedGames")) {
+      const games = [
+        { appid: 10, playtime_forever: 200 },
+        { appid: 20, playtime_forever: 0 },
+      ];
+      if (url.includes("include_played_free_games=true"))
+        games.push({ appid: 60, playtime_forever: 0 });
+      return jsonResponse({ response: { game_count: games.length, games } });
+    }
+    if (url.includes("GetTagList")) {
+      return jsonResponse({
+        response: {
+          tags: [
+            { tagid: 1, name: "Roguelike" },
+            { tagid: 2, name: "Horror" },
+            { tagid: 3, name: "Souls-like" },
+          ],
+        },
+      });
+    }
+    if (url.includes("IStoreBrowseService/GetItems")) {
+      return jsonResponse({
+        response: {
+          store_items: [
+            { appid: 10, tags: [{ tagid: 1, weight: 900 }] },
+            { appid: 20, tags: [{ tagid: 2, weight: 900 }] },
+          ],
+        },
+      });
+    }
+    if (url.includes("IStoreQueryService/Query")) {
+      return jsonResponse({
+        response: {
+          metadata: { total_matching_records: 3 },
+          store_items: [
+            {
+              appid: 10,
+              name: "Owned Roguelike",
+              visible: true,
+              tags: [{ tagid: 1, weight: 900 }],
+              reviews: { summary_filtered: { percent_positive: 90 } },
+            },
+            {
+              appid: 30,
+              name: "New Roguelike",
+              visible: true,
+              tags: [{ tagid: 1, weight: 900 }],
+              reviews: { summary_filtered: { percent_positive: 95 } },
+              best_purchase_option: { formatted_final_price: "$9.99" },
+            },
+            { appid: 40, name: "Horror Only", visible: true, tags: [{ tagid: 2, weight: 900 }] },
+            {
+              appid: 60,
+              name: "Owned F2P Roguelike",
+              visible: true,
+              tags: [{ tagid: 1, weight: 900 }],
+              reviews: { summary_filtered: { percent_positive: 99 } },
+            },
+          ],
+        },
+      });
+    }
+    return jsonResponse({});
+  }
+
+  test("get_recommended_games ranks by playtime-weighted tags, excluding owned games", async (t) => {
+    const { client } = await setupServer(t, ENV, recoRouter);
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as {
+      found: boolean;
+      based_on_tags: string[];
+      count: number;
+      recommendations: { appid: number; name: string; matched_tags: string[] }[];
+    };
+    assert.equal(s.found, true);
+    assert.deepEqual(s.based_on_tags, ["Roguelike"]); // Horror had 0 playtime weight
+    // appid 10 is owned (excluded despite matching); appid 40 has no tag
+    // overlap (dropped); appid 60 is an owned F2P game (excluded — regression
+    // check for GetOwnedGames needing include_played_free_games) — only the
+    // unowned Roguelike remains.
+    assert.deepEqual(
+      s.recommendations.map((r) => r.appid),
+      [30],
+    );
+    assert.deepEqual(s.recommendations[0]!.matched_tags, ["Roguelike"]);
+  });
+
+  test("get_recommended_games: exclude_tags drops matching candidates end-to-end", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("IStoreQueryService/Query")) {
+        return jsonResponse({
+          response: {
+            store_items: [
+              {
+                appid: 30,
+                name: "New Roguelike",
+                visible: true,
+                tags: [{ tagid: 1, weight: 900 }],
+                reviews: { summary_filtered: { percent_positive: 95 } },
+              },
+              {
+                appid: 50,
+                name: "Souls-like Roguelike",
+                visible: true,
+                // Souls-like present but low-weighted — exclusion must still see it.
+                tags: [
+                  { tagid: 1, weight: 900 },
+                  { tagid: 3, weight: 1 },
+                ],
+              },
+            ],
+          },
+        });
+      }
+      return recoRouter(url);
+    });
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930", exclude_tags: ["Souls-like"] },
+    });
+    const s = res.structuredContent as { recommendations: { appid: number }[] };
+    assert.deepEqual(
+      s.recommendations.map((r) => r.appid),
+      [30],
+    );
+  });
+
+  test("get_recommended_games: min_discount is forwarded as a server-side price filter", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, recoRouter);
+    await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930", min_discount: 30 },
+    });
+    const queryCall = mock.calls.find((c) => c.url.includes("IStoreQueryService/Query"))!;
+    const input = JSON.parse(new URL(queryCall.url).searchParams.get("input_json")!);
+    assert.equal(input.query.filters.price_filters.min_discount_percent, 30);
+  });
+
+  test("get_recommended_games reports found:false for a private profile", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetOwnedGames") ? jsonResponse({ response: {} }) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /private/i);
+  });
+
+  test("get_recommended_games errors clearly when the tag dictionary is unavailable", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetTagList")) return jsonResponse({}, { status: 500 });
+      return recoRouter(url);
+    });
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930" },
+    });
+    assertToolError(res, /tag dictionary/i);
+  });
 });
 
 describe("get_player_achievements", () => {
   test("get_player_achievements computes completion", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
+    const { client } = await setupServer(t, ENV, router);
     const res = await client.callTool({
       name: "get_player_achievements",
       arguments: { steamid: "76561197960287930", appid: 620 },
@@ -79,10 +301,7 @@ describe("get_player_achievements", () => {
   });
 
   test("get_player_achievements forwards a per-call language override", async (t) => {
-    const mock = mockFetch(router);
-    installFetch(t, mock);
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
+    const { client, mock } = await setupServer(t, ENV, router);
     await client.callTool({
       name: "get_player_achievements",
       arguments: { steamid: "76561197960287930", appid: 620, language: "russian" },
@@ -92,19 +311,14 @@ describe("get_player_achievements", () => {
   });
 
   test("get_player_achievements: private profile (403) → clear private reason", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) =>
-        url.includes("GetPlayerAchievements")
-          ? jsonResponse(
-              { playerstats: { error: "Profile is not public", success: false } },
-              { status: 403 },
-            )
-          : jsonResponse({}),
-      ),
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetPlayerAchievements")
+        ? jsonResponse(
+            { playerstats: { error: "Profile is not public", success: false } },
+            { status: 403 },
+          )
+        : jsonResponse({}),
     );
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
     const res = await client.callTool({
       name: "get_player_achievements",
       arguments: { steamid: "76561197960287930", appid: 620 },
@@ -115,18 +329,13 @@ describe("get_player_achievements", () => {
   });
 
   test("get_player_achievements: success:false + game has no achievements", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) => {
-        if (url.includes("GetPlayerAchievements"))
-          return jsonResponse({ playerstats: { success: false } });
-        if (url.includes("GetSchemaForGame"))
-          return jsonResponse({ game: { availableGameStats: { achievements: [] } } });
-        return jsonResponse({});
-      }),
-    );
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("GetPlayerAchievements"))
+        return jsonResponse({ playerstats: { success: false } });
+      if (url.includes("GetSchemaForGame"))
+        return jsonResponse({ game: { availableGameStats: { achievements: [] } } });
+      return jsonResponse({});
+    });
     const res = await client.callTool({
       name: "get_player_achievements",
       arguments: { steamid: "76561197960287930", appid: 620 },
@@ -137,17 +346,12 @@ describe("get_player_achievements", () => {
   });
 
   test("get_player_achievements: success:false but game HAS achievements → hidden/private", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) => {
-        if (url.includes("GetPlayerAchievements"))
-          return jsonResponse({ playerstats: { success: false } });
-        if (url.includes("GetSchemaForGame")) return jsonResponse(SCHEMA); // 2 achievements
-        return jsonResponse({});
-      }),
-    );
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("GetPlayerAchievements"))
+        return jsonResponse({ playerstats: { success: false } });
+      if (url.includes("GetSchemaForGame")) return jsonResponse(SCHEMA); // 2 achievements
+      return jsonResponse({});
+    });
     const res = await client.callTool({
       name: "get_player_achievements",
       arguments: { steamid: "76561197960287930", appid: 620 },
@@ -156,13 +360,46 @@ describe("get_player_achievements", () => {
     assert.equal(s.found, false);
     assert.match(s.reason, /hidden|private/i);
   });
+
+  // A genuine upstream failure (not a private/no-stats disambiguation signal)
+  // must surface as a real tool error, not get silently swallowed into
+  // found:false — only forbidden/unauthorized/bad_request/not_found are
+  // treated as "explain, don't fail" (see #getPlayerAchievements' catch).
+  test("get_player_achievements: a genuine 500 propagates as a tool error, not found:false", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+      url.includes("GetPlayerAchievements") ? jsonResponse({}, { status: 500 }) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 620 },
+    });
+    assertToolError(res, /5xx|retry later/i);
+  });
+
+  // #explainNoPlayerAchievements' own fallback: the disambiguating
+  // GetSchemaForGame lookup can itself fail. That must still degrade to a
+  // reason string, never throw/crash the tool.
+  test("get_player_achievements: success:false and the schema lookup ALSO fails → generic fallback reason", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetPlayerAchievements"))
+        return jsonResponse({ playerstats: { success: false } });
+      if (url.includes("GetSchemaForGame")) return jsonResponse({}, { status: 500 });
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 620 },
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /achievements unavailable/i);
+  });
 });
 
 describe("get_friend_list", () => {
   test("get_friend_list merges names and sorts most-recent-friend-first", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
+    const { client } = await setupServer(t, ENV, router);
     const res = await client.callTool({
       name: "get_friend_list",
       arguments: { steamid: "76561197960287930" },
@@ -182,14 +419,9 @@ describe("get_friend_list", () => {
   });
 
   test("get_friend_list reports found:false for a private friends list (401)", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) =>
-        url.includes("GetFriendList") ? jsonResponse({}, { status: 401 }) : jsonResponse({}),
-      ),
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetFriendList") ? jsonResponse({}, { status: 401 }) : jsonResponse({}),
     );
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
     const res = await client.callTool({
       name: "get_friend_list",
       arguments: { steamid: "76561197960287930" },
@@ -202,21 +434,16 @@ describe("get_friend_list", () => {
 
 describe("find_friends_who_own", () => {
   test("find_friends_who_own checks each friend's FULL library and separates private ones", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) => {
-        if (url.includes("GetFriendList")) return jsonResponse(FRIENDLIST);
-        if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
-        if (url.includes("GetOwnedGames")) {
-          // 76561197960287931's library is private; the other owns 620 + 400.
-          if (url.includes("steamid=76561197960287931")) return jsonResponse({ response: {} });
-          return jsonResponse(OWNED);
-        }
-        return jsonResponse({});
-      }),
-    );
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("GetFriendList")) return jsonResponse(FRIENDLIST);
+      if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
+      if (url.includes("GetOwnedGames")) {
+        // 76561197960287931's library is private; the other owns 620 + 400.
+        if (url.includes("steamid=76561197960287931")) return jsonResponse({ response: {} });
+        return jsonResponse(OWNED);
+      }
+      return jsonResponse({});
+    });
     const res = await client.callTool({
       name: "find_friends_who_own",
       arguments: { appids: [620, 999], steamid: "76561197960287930" },
@@ -242,14 +469,9 @@ describe("find_friends_who_own", () => {
   });
 
   test("find_friends_who_own reports found:false for a private friends list (403)", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) =>
-        url.includes("GetFriendList") ? jsonResponse({}, { status: 403 }) : jsonResponse({}),
-      ),
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetFriendList") ? jsonResponse({}, { status: 403 }) : jsonResponse({}),
     );
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
     const res = await client.callTool({
       name: "find_friends_who_own",
       arguments: { appids: [620], steamid: "76561197960287930" },
@@ -258,40 +480,59 @@ describe("find_friends_who_own", () => {
     assert.equal(s.found, false);
     assert.match(s.reason, /friends list/i);
   });
+
+  // A public-but-empty friends list is distinct from a private one: it's a
+  // real, successful zero-friends result, not an error/found:false.
+  test("find_friends_who_own handles a public but empty friends list without crashing", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetFriendList")
+        ? jsonResponse({ friendslist: { friends: [] } })
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [620, 999], steamid: "76561197960287930" },
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as {
+      total_friends: number;
+      matches: { appid: number; owners: unknown[] }[];
+      private_friends: unknown[];
+    };
+    assert.equal(s.total_friends, 0);
+    assert.equal(s.matches.length, 2); // both requested appids still reported, just with no owners
+    assert.ok(s.matches.every((m) => m.owners.length === 0));
+    assert.equal(s.private_friends.length, 0);
+  });
 });
 
 describe("compare_players", () => {
   test("compare_players finds shared games with each player's own playtime, sorted by combined playtime", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) => {
-        if (!url.includes("GetOwnedGames")) return jsonResponse({});
-        if (url.includes("steamid=76561197960287931")) {
-          return jsonResponse({
-            response: {
-              game_count: 3,
-              games: [
-                { appid: 620, name: "Portal 2", playtime_forever: 300 },
-                { appid: 400, name: "Portal", playtime_forever: 50 },
-                { appid: 111, name: "OnlyB", playtime_forever: 10 },
-              ],
-            },
-          });
-        }
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (!url.includes("GetOwnedGames")) return jsonResponse({});
+      if (url.includes("steamid=76561197960287931")) {
         return jsonResponse({
           response: {
             game_count: 3,
             games: [
-              { appid: 620, name: "Portal 2", playtime_forever: 600 },
-              { appid: 400, name: "Portal", playtime_forever: 1200 },
-              { appid: 999, name: "OnlyA", playtime_forever: 100 },
+              { appid: 620, name: "Portal 2", playtime_forever: 300 },
+              { appid: 400, name: "Portal", playtime_forever: 50 },
+              { appid: 111, name: "OnlyB", playtime_forever: 10 },
             ],
           },
         });
-      }),
-    );
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
+      }
+      return jsonResponse({
+        response: {
+          game_count: 3,
+          games: [
+            { appid: 620, name: "Portal 2", playtime_forever: 600 },
+            { appid: 400, name: "Portal", playtime_forever: 1200 },
+            { appid: 999, name: "OnlyA", playtime_forever: 100 },
+          ],
+        },
+      });
+    });
     const res = await client.callTool({
       name: "compare_players",
       arguments: { steamid: "76561197960287930", other_steamid: "76561197960287931" },
@@ -311,16 +552,11 @@ describe("compare_players", () => {
   });
 
   test("compare_players reports found:false when either profile is private", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) => {
-        if (!url.includes("GetOwnedGames")) return jsonResponse({});
-        if (url.includes("steamid=76561197960287931")) return jsonResponse({ response: {} });
-        return jsonResponse(OWNED);
-      }),
-    );
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (!url.includes("GetOwnedGames")) return jsonResponse({});
+      if (url.includes("steamid=76561197960287931")) return jsonResponse({ response: {} });
+      return jsonResponse(OWNED);
+    });
     const res = await client.callTool({
       name: "compare_players",
       arguments: { steamid: "76561197960287930", other_steamid: "76561197960287931" },
@@ -332,10 +568,7 @@ describe("compare_players", () => {
 });
 
 test("resolve_vanity_url returns the steamid", async (t) => {
-  const mock = mockFetch(router);
-  installFetch(t, mock);
-  const { client, close } = await connectServer(ENV);
-  t.after(close);
+  const { client, mock } = await setupServer(t, ENV, router);
   const res = await client.callTool({
     name: "resolve_vanity_url",
     arguments: { vanity: "gabe" },
@@ -346,11 +579,27 @@ test("resolve_vanity_url returns the steamid", async (t) => {
   assert.ok(mock.calls.some((c) => c.url.includes("key=test-key")));
 });
 
+// An unmatched vanity name is a normal, successful "no match" result — not a
+// tool error — and Steam's own `message` (when present) is surfaced as the reason.
+test("resolve_vanity_url reports found:false for a vanity name with no match", async (t) => {
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("ResolveVanityURL")
+      ? jsonResponse({ response: { success: 42, message: "No match" } })
+      : jsonResponse({}),
+  );
+  const res = await client.callTool({
+    name: "resolve_vanity_url",
+    arguments: { vanity: "zzzznobody" },
+  });
+  assert.equal(res.isError, undefined);
+  const s = res.structuredContent as { found: boolean; reason: string };
+  assert.equal(s.found, false);
+  assert.match(s.reason, /no match/i);
+});
+
 describe("get_game_achievements", () => {
   test("get_game_achievements merges schema names with global rarity (needs key)", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer(ENV);
-    t.after(close);
+    const { client } = await setupServer(t, ENV, router);
     const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
     const s = res.structuredContent as {
       total: number;
@@ -364,18 +613,14 @@ describe("get_game_achievements", () => {
   });
 
   test("get_game_achievements requires a key", async (t) => {
-    const { client, close } = await connectServer({});
-    t.after(close);
+    const { client } = await setupServer(t);
     const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
     assert.equal(res.isError, true);
   });
 });
 
 test("player tools fall back to STEAM_ID (SteamID64) when steamid is omitted", async (t) => {
-  const mock = mockFetch(router);
-  installFetch(t, mock);
-  const { client, close } = await connectServer({ ...ENV, STEAM_ID: "76561197960287930" });
-  t.after(close);
+  const { client, mock } = await setupServer(t, { ...ENV, STEAM_ID: "76561197960287930" }, router);
   const res = await client.callTool({ name: "get_owned_games", arguments: {} });
   const s = res.structuredContent as { game_count: number };
   assert.equal(s.game_count, 2);
@@ -384,10 +629,7 @@ test("player tools fall back to STEAM_ID (SteamID64) when steamid is omitted", a
 });
 
 test("a vanity STEAM_ID is resolved once, then reused for player tools", async (t) => {
-  const mock = mockFetch(router);
-  installFetch(t, mock);
-  const { client, close } = await connectServer({ ...ENV, STEAM_ID: "gabe" });
-  t.after(close);
+  const { client, mock } = await setupServer(t, { ...ENV, STEAM_ID: "gabe" }, router);
   const res = await client.callTool({ name: "get_player_summary", arguments: {} });
   const s = res.structuredContent as { found: boolean; steamid: string; level: number };
   assert.equal(s.found, true);
@@ -399,9 +641,7 @@ test("a vanity STEAM_ID is resolved once, then reused for player tools", async (
 });
 
 test("get_player_bans reports ban status by steamid", async (t) => {
-  installFetch(t, mockFetch(router));
-  const { client, close } = await connectServer(ENV);
-  t.after(close);
+  const { client } = await setupServer(t, ENV, router);
   const res = await client.callTool({
     name: "get_player_bans",
     arguments: { steamid: "76561197960287930" },
@@ -422,11 +662,28 @@ test("get_player_bans reports ban status by steamid", async (t) => {
   assert.equal(s.economy_ban, null); // EconomyBan "none" → null
 });
 
+// requireSteamId's own "needs a key to resolve" branch (web.ts) is unreachable
+// from webPlayer.ts tools — requireKey there already gates on the key first.
+// It's only reachable via a keyless-capable tool (get_followed_games), which
+// resolves STEAM_ID without requiring a key overall.
+test("a vanity STEAM_ID without a key errors clearly (needs STEAM_API_KEY to resolve it)", async (t) => {
+  const { client } = await setupServer(t, { STEAM_ID: "gabe" }, router); // no STEAM_API_KEY
+  const res = await client.callTool({ name: "get_followed_games", arguments: {} });
+  assertToolError(res, /STEAM_API_KEY/);
+});
+
+test("a vanity STEAM_ID that fails to resolve errors clearly", async (t) => {
+  const { client } = await setupServer(t, { ...ENV, STEAM_ID: "nobody-such-vanity" }, (url) =>
+    url.includes("ResolveVanityURL")
+      ? jsonResponse({ response: { success: 42 } }) // no steamid — unresolvable
+      : jsonResponse({}),
+  );
+  const res = await client.callTool({ name: "get_followed_games", arguments: {} });
+  assertToolError(res, /could not resolve/i);
+});
+
 test("player tools error clearly when steamid is omitted and STEAM_ID is unset", async (t) => {
-  installFetch(t, mockFetch(router));
-  const { client, close } = await connectServer(ENV); // key set, but no STEAM_ID
-  t.after(close);
+  const { client } = await setupServer(t, ENV, router); // key set, but no STEAM_ID
   const res = await client.callTool({ name: "get_player_summary", arguments: {} });
-  assert.equal(res.isError, true);
-  assert.match((res.content as { text: string }[])[0]!.text, /STEAM_ID/);
+  assertToolError(res, /STEAM_ID/);
 });

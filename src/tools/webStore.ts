@@ -69,7 +69,9 @@ export function registerStoreWebTools(
         "batch (up to 500 appids) when you only need price, use get_prices instead. Each item " +
         "carries four compatibility fields, each verified/playable/unsupported/unknown: steam_deck " +
         "(Steam Deck), steam_os (SteamOS in general), steam_machine (the Steam Machine console " +
-        "specifically), and steam_frame (Steam Frame VR headset); a `tags` list (top user tags like 'Roguelike', " +
+        "specifically), and steam_frame (Steam Frame VR headset); a `vr_support` flag " +
+        "(none/supported/required — distinct from steam_frame, which is a Steam Frame HARDWARE compat " +
+        "rating, not whether the game itself has a VR mode); a `tags` list (top user tags like 'Roguelike', " +
         "'Souls-like', most-relevant first); a clickable `store_url` to the game's Steam page; and, " +
         "when on sale, `discount_end` (ISO UTC time the discount expires — for 'how long is this deal " +
         "valid'). Get appids from search_games / get_wishlist / get_owned_games.",
@@ -100,13 +102,15 @@ export function registerStoreWebTools(
         "native OS build (platform — windows/mac/linux), review quality (min_review / min_reviews), " +
         "and user tags (tags — e.g. ['Roguelike', " +
         "'Deckbuilding'] for 'games like X'). Each result returns price/discount, review %, all four " +
-        "compat statuses, popular tags, a clickable store_url, discount_end (when a deal expires) and " +
-        "release date in one call. Examples: '>80% off with 90%+ " +
+        "compat statuses, a vr_support flag (none/supported/required), popular tags, a clickable " +
+        "store_url, discount_end (when a deal expires) and release date in one call. Examples: '>80% off with 90%+ " +
         "reviews' → set min_discount + min_review; 'recent well-reviewed games that run on Steam Deck' " +
         "→ set released_within_days + steam_deck + min_review; 'roguelike deckbuilders on sale' → " +
         "tags:['Roguelike','Deckbuilding'] + min_discount; 'games that run on the Steam Machine' → " +
         "steam_machine; 'games that run on SteamOS' → steam_os. " +
-        "No appids needed — unlike get_items, which prices a list you already have. " +
+        "No appids needed — unlike get_items, which prices a list you already have. For 'games like " +
+        "X' from a SINGLE named title, get its tags via get_items and pass them here; for taste " +
+        "inferred from the player's WHOLE library instead, use get_recommended_games (key-gated). " +
         "Note: the Steam catalog API has no release-date/tag sort or filter, so results are scanned " +
         "popularity-first and the recency, compat and tag filters are applied over that window — great " +
         "for popular titles; a niche match may fall outside the top `count` (raise count for stricter filters).",
@@ -254,7 +258,7 @@ export function registerStoreWebTools(
         "List a player's Steam wishlist by SteamID64. Works without a key, but only if that player's " +
         "wishlist/profile is public — otherwise it returns found:false. By default returns a light " +
         "list of appids (sorted by priority, no names). Set include_details for full store cards in " +
-        "ONE call (name, price/discount, review %, Deck/SteamOS/Machine/Frame compat, tags, release) — " +
+        "ONE call (name, price/discount, review %, Deck/SteamOS/Machine/Frame compat, vr_support, tags, release) — " +
         "no need to follow up with get_items. Narrow it in the SAME call with tags (e.g. " +
         "['Metroidvania']), platform (NATIVE windows/mac/linux build), steam_deck / steam_os / " +
         "steam_machine / steam_frame (Proton compatibility — distinct from a native build), min_review and " +

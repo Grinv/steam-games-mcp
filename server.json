@@ -1,8 +1,10 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Grinv/steam-games-mcp",
+  "title": "Steam MCP Server",
   "description": "Steam store/game data (no key) plus player profiles, libraries and achievements (Steam Web API).",
   "version": "0.8.1",
+  "websiteUrl": "https://github.com/Grinv/steam-games-mcp#readme",
   "repository": {
     "url": "https://github.com/Grinv/steam-games-mcp",
     "source": "github"

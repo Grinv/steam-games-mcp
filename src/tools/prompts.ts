@@ -42,12 +42,11 @@ export function registerPrompts(server: McpServer): void {
       promptResult(
         "Recommend games based on library/taste",
         "Recommend what I should play next.\n\n" +
-          `1. Call get_owned_games${steamid ? ` for steamid ${steamid}` : ""} and find the tags/genres of my ` +
-          "most-played games (use get_items on a few top appids for their tags if needed).\n" +
-          `2. Call discover_games filtered by ${tags ? `tags: ${tags}` : "the tags you found"}` +
-          `${budget ? `, priced under ${budget}` : ""} and a good review score (min_review 80+).\n` +
-          "3. Cross-check the results against my owned games and drop anything I already own.\n" +
-          "4. Present 3-5 picks, each with price, review %, and a one-line reason it matches my taste.",
+          (tags
+            ? `1. Call discover_games with tags: ${tags}${budget ? `, priced under ${budget}` : ""} and a good review score (min_review 80+).\n` +
+              "2. Call get_owned_games and drop any result I already own.\n"
+            : `1. Call get_recommended_games${steamid ? ` for steamid ${steamid}` : ""}${budget ? ` and drop any result priced above ${budget}` : ""} — it infers taste from my library's playtime-weighted tags and already excludes what I own.\n`) +
+          "Present 3-5 picks, each with price, review %, and a one-line reason it matches my taste.",
       ),
   );
 

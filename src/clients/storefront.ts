@@ -29,7 +29,7 @@ type AppDetailsResponse = Record<string, { success?: boolean; data?: StoreApp }>
 
 export class StorefrontClient {
   readonly #http: HttpClient;
-  readonly #cache: TtlCache<Record<string, unknown>>;
+  readonly #cache: TtlCache;
   readonly #cc: string;
   readonly #l: string;
 
@@ -141,13 +141,9 @@ export class StorefrontClient {
   // the specials slice). Cache the RAW payload once per cc/l, so calling either —
   // or both — hits the store at most once; each shapes the cached payload itself.
   #featured(cc: string, l: string): Promise<FeaturedResponse> {
-    return this.#cache.wrapStaleOnError(
-      `featured:${cc}:${l}`,
-      async () =>
-        (await this.#http.getJson<FeaturedResponse>("api/featuredcategories", {
-          query: { cc, l },
-        })) as Record<string, unknown>,
-    ) as Promise<FeaturedResponse>;
+    return this.#cache.wrapStaleOnError(`featured:${cc}:${l}`, () =>
+      this.#http.getJson<FeaturedResponse>("api/featuredcategories", { query: { cc, l } }),
+    );
   }
 
   async getFeatured(country?: string, language?: string): Promise<Record<string, unknown>> {

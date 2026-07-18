@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { textOf } from "./helpers.js";
 
 // The unit suite exercises the code via an in-memory transport against src. This
 // e2e instead drives the REAL built bundle the way Claude Desktop does: a spawned
@@ -47,13 +48,13 @@ test("e2e: built bundle runs standalone, handshakes, lists all tools, gates play
     await client.connect(transport); // real initialize handshake over a spawned process
 
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 24, "every tool should register in the built bundle");
+    assert.equal(tools.length, 25, "every tool should register in the built bundle");
 
     // A player tool without a key must short-circuit with the actionable message
     // (no network) — proving the key gate works through the real binary.
     const res = await client.callTool({ name: "get_owned_games", arguments: {} });
     assert.equal(res.isError, true);
-    const text = (res.content as { type: string; text: string }[])[0]?.text ?? "";
+    const text = textOf(res);
     assert.match(text, /needs a Steam Web API key/i);
   } finally {
     await client.close();

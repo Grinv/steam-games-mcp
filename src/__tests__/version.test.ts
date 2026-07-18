@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { VERSION } from "../version.js";
+import { connectServer } from "./helpers.js";
 
 // Tests run from the dist-tests/ working directory; the repo root is one level up.
 const root = join(process.cwd(), "..");
@@ -12,6 +13,7 @@ const pkg = readJson("package.json") as { version: string; mcpName: string };
 const manifest = readJson("manifest.json") as {
   version: string;
   user_config: Record<string, unknown>;
+  tools: { name: string }[];
 };
 const server = readJson("server.json") as {
   name: string;
@@ -34,6 +36,21 @@ test("VERSION constant matches package.json", () => {
 
 test("manifest.json version matches package.json", () => {
   assert.equal(manifest.version, pkg.version);
+});
+
+// manifest.json's `tools` array is a hand-maintained short-description list (not
+// generated — tools_generated:false), so a new/removed tool can silently drift
+// from what the server actually registers. This catches that at test time
+// instead of at .mcpb-install time.
+test("manifest.json's tools list matches every tool the server actually registers", async () => {
+  const { client, close } = await connectServer({});
+  try {
+    const registered = new Set((await client.listTools()).tools.map((t) => t.name));
+    const declared = new Set(manifest.tools.map((t) => t.name));
+    assert.deepEqual(declared, registered);
+  } finally {
+    await close();
+  }
 });
 
 test("server.json versions (+ mcpb release URL) match package.json", () => {

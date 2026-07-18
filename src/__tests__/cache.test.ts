@@ -5,7 +5,7 @@ import { TtlCache } from "../lib/cache.js";
 const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 test("wrap caches and reuses the fresh value", async () => {
-  const cache = new TtlCache<number>(60_000);
+  const cache = new TtlCache(60_000);
   let calls = 0;
   const compute = async () => {
     calls += 1;
@@ -21,7 +21,7 @@ test("wrapStaleOnError serves the stale value when compute fails", async (t) => 
   // not an actual wait, so advancing the clock synchronously is both safe and
   // deterministic — no real delay, no reliance on OS timer granularity.
   t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
-  const cache = new TtlCache<number>(1); // 1ms TTL → expires almost immediately
+  const cache = new TtlCache(1); // 1ms TTL → expires almost immediately
   await cache.wrapStaleOnError("k", async () => 1);
   t.mock.timers.tick(5);
   const v = await cache.wrapStaleOnError("k", async () => {
@@ -31,7 +31,7 @@ test("wrapStaleOnError serves the stale value when compute fails", async (t) => 
 });
 
 test("wrapStaleOnError rethrows when nothing was ever cached", async () => {
-  const cache = new TtlCache<number>(60_000);
+  const cache = new TtlCache(60_000);
   await assert.rejects(() =>
     cache.wrapStaleOnError("missing", async () => {
       throw new Error("boom");
@@ -40,7 +40,7 @@ test("wrapStaleOnError rethrows when nothing was ever cached", async () => {
 });
 
 test("ttl <= 0 disables caching", async () => {
-  const cache = new TtlCache<number>(0);
+  const cache = new TtlCache(0);
   let calls = 0;
   const compute = async () => {
     calls += 1;
@@ -52,7 +52,7 @@ test("ttl <= 0 disables caching", async () => {
 });
 
 test("wrap: concurrent calls on a cold key share one in-flight compute()", async () => {
-  const cache = new TtlCache<number>(60_000);
+  const cache = new TtlCache(60_000);
   let calls = 0;
   const compute = async () => {
     calls += 1;
@@ -70,7 +70,7 @@ test("wrap: concurrent calls on a cold key share one in-flight compute()", async
 });
 
 test("wrap: a failed in-flight compute() clears the slot so the next call retries", async () => {
-  const cache = new TtlCache<number>(60_000);
+  const cache = new TtlCache(60_000);
   let calls = 0;
   const failing = async () => {
     calls += 1;
@@ -82,7 +82,7 @@ test("wrap: a failed in-flight compute() clears the slot so the next call retrie
 });
 
 test("wrapStaleOnError: concurrent calls on a cold key share one in-flight compute()", async () => {
-  const cache = new TtlCache<number>(60_000);
+  const cache = new TtlCache(60_000);
   let calls = 0;
   const compute = async () => {
     calls += 1;
@@ -100,7 +100,7 @@ test("wrapStaleOnError: concurrent calls on a cold key share one in-flight compu
 
 test("wrapStaleOnError: concurrent failures each independently fall back to the same stale value", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
-  const cache = new TtlCache<number>(1); // 1ms TTL → expires almost immediately
+  const cache = new TtlCache(1); // 1ms TTL → expires almost immediately
   await cache.wrapStaleOnError("k", async () => 5);
   t.mock.timers.tick(5);
   let calls = 0;

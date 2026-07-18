@@ -81,7 +81,7 @@ npm test               # build tests with esbuild, run with node:test
 npm run test:coverage  # same, with coverage (gate: ~80%)
 npm run lint           # eslint
 npm run format         # prettier --write
-npm run check:api      # live upstream health-check (Storefront keyless; Web key check skipped without STEAM_API_KEY)
+npm run check:api      # live upstream health-check (Storefront keyless; Web key checks skipped without STEAM_API_KEY)
 npm run inspector      # run under the MCP Inspector
 ```
 

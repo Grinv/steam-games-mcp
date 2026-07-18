@@ -6,6 +6,24 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Add `get_recommended_games` — personalized picks derived from the player's own playtime-weighted tag preferences, ranked with a review-quality discount, and `exclude_tags`/`min_discount` options, excluding owned games.
+- Add `check_appids` to `get_owned_games` — reliably checks the player's own ownership of specific appids against the full library, unlike the top-50-by-playtime-capped `games` list.
+- Add a `vr_support` field (none/supported/required) to `get_items`, `discover_games` and `get_wishlist`'s detailed cards.
+
+### Fixed
+
+- Fix `get_recommended_games` treating free-to-play owned games as unowned (missing `include_played_free_games`), which could recommend a game the player already plays.
+- Fix `get_recommended_games` sometimes returning far fewer than the requested `count` under a heavy `exclude_tags`/`min_discount` combination by widening its internal catalog scan (150 → 300 candidates).
+
+### Changed
+
+- Rename the display name to "Steam MCP Server" in `manifest.json` and `server.json` (new `title`/`websiteUrl` fields) for consistent, unambiguous branding across the .mcpb installer and MCP Registry.
+- `what_should_i_play` now calls `get_recommended_games` directly when no explicit `tags` are given, instead of manually orchestrating `get_owned_games` + `get_items` + `discover_games`.
+- Cross-reference `get_recommended_games`/`discover_games`, `get_owned_games`/`find_friends_who_own`, `get_recently_played`/`get_owned_games`, and `get_player_achievements`/`get_game_achievements`/`get_global_achievements` in each other's descriptions.
+- Mention `get_recommended_games` in the server's MCP `instructions` and add it (plus `check_appids`) to README's tool table and example queries.
+
 ## [0.8.1] - 2026-07-18
 
 ### Changed

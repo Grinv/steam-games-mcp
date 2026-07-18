@@ -27,6 +27,19 @@ describe("prompts", () => {
     assert.match(text, /discover_games/);
   });
 
+  test("what_should_i_play defers to get_recommended_games when no tags are given", async (t) => {
+    const { client, close } = await connectServer(ENV);
+    t.after(close);
+    const res = await client.getPrompt({
+      name: "what_should_i_play",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const text = (res.messages[0]!.content as { text: string }).text;
+    assert.match(text, /get_recommended_games/);
+    assert.match(text, /76561197960287930/);
+    assert.doesNotMatch(text, /discover_games/);
+  });
+
   test("is_it_worth_buying requires the game argument", async (t) => {
     const { client, close } = await connectServer(ENV);
     t.after(close);

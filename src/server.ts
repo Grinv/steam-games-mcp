@@ -21,8 +21,9 @@ const INSTRUCTIONS =
   "for a game's news and achievement rarity, get_current_players for live player counts. Player " +
   "data needs a free Steam Web API key (STEAM_API_KEY): get_player_summary, get_owned_games, " +
   "get_recently_played and get_player_achievements take a 17-digit SteamID64 — use resolve_vanity_url " +
-  "to convert a custom profile name first, and note the target profile must be public. Tools that " +
-  "need the key report clearly when it is unset.";
+  "to convert a custom profile name first, and note the target profile must be public. For " +
+  "personalized picks based on a player's own library (not manual filters), use get_recommended_games. " +
+  "Tools that need the key report clearly when it is unset.";
 
 /** Construct a fully-registered MCP server. Shared by start() and tests. */
 export function buildServer(config: Config, logger: Logger): McpServer {

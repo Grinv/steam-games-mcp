@@ -5,6 +5,10 @@ import {
   summarizeDiscover,
   summarizeWishlistDetailed,
   summarizeTagList,
+  computeFavoriteTagWeights,
+  summarizeRecommendations,
+  type StoreItem,
+  type TagMap,
 } from "../format/store.js";
 
 // Focused unit tests for the store-service card builders and their edge cases —
@@ -71,6 +75,26 @@ test("summarizeItems: missing appid → available:false; free game → price {is
   assert.equal(free.is_free, true);
   assert.deepEqual(free.price, { is_free: true });
   assert.equal(s.items.find((i) => i.appid === 999)!.available, false);
+});
+
+test("summarizeItems: vr_support is none/supported/required depending on vrhmd/vrhmd_only", () => {
+  const r = {
+    response: {
+      store_items: [
+        { appid: 1, name: "Flatscreen Only" }, // no vr_support key at all
+        { appid: 2, name: "VR Optional", platforms: { vr_support: { vrhmd: true } } },
+        {
+          appid: 3,
+          name: "VR Exclusive",
+          platforms: { vr_support: { vrhmd: true, vrhmd_only: true } },
+        },
+      ],
+    },
+  };
+  const s = summarizeItems(r, [1, 2, 3]) as { items: { appid: number; vr_support: string }[] };
+  assert.equal(s.items.find((i) => i.appid === 1)!.vr_support, "none");
+  assert.equal(s.items.find((i) => i.appid === 2)!.vr_support, "supported");
+  assert.equal(s.items.find((i) => i.appid === 3)!.vr_support, "required");
 });
 
 test("summarizeDiscover: empty page returns metadata + no deals", () => {
@@ -150,4 +174,100 @@ test("summarizeTagList maps tagid→name and skips malformed entries", () => {
     },
   });
   assert.deepEqual(m, { 1: "Action" });
+});
+
+const RECO_TAG_MAP: TagMap = { 1: "Roguelike", 2: "Horror", 3: "Souls-like" };
+
+test("computeFavoriteTagWeights: weights tags by hours played, ignores zero/no playtime", () => {
+  const items: StoreItem[] = [
+    { appid: 10, tags: [{ tagid: 1, weight: 900 }] }, // 120 min = 2h
+    {
+      appid: 20,
+      tags: [
+        { tagid: 1, weight: 500 },
+        { tagid: 2, weight: 400 },
+      ],
+    }, // 60 min = 1h
+    { appid: 30, tags: [{ tagid: 2, weight: 900 }] }, // 0 min → contributes nothing
+  ];
+  const playtime = new Map([
+    [10, 120],
+    [20, 60],
+    [30, 0],
+  ]);
+  const weights = computeFavoriteTagWeights(items, playtime, RECO_TAG_MAP);
+  assert.equal(weights.get("Roguelike"), 3); // 2h (appid 10) + 1h (appid 20)
+  assert.equal(weights.get("Horror"), 1); // only appid 20's 1h; appid 30 ignored
+});
+
+test("summarizeRecommendations: excludes owned/zero-overlap candidates, ranks by tag weight × review %", () => {
+  const candidates: StoreItem[] = [
+    { appid: 100, name: "Owned", tags: [{ tagid: 1, weight: 900 }] },
+    {
+      appid: 200,
+      name: "Great Roguelike",
+      tags: [{ tagid: 1, weight: 900 }],
+      reviews: { summary_filtered: { percent_positive: 90 } },
+    },
+    {
+      appid: 300,
+      name: "Poorly-received Roguelike",
+      tags: [{ tagid: 1, weight: 900 }],
+      reviews: { summary_filtered: { percent_positive: 20 } },
+    },
+    { appid: 400, name: "No overlap", tags: [{ tagid: 2, weight: 900 }] },
+  ];
+  const tagWeights = new Map([["Roguelike", 10]]);
+  const s = summarizeRecommendations(
+    candidates,
+    tagWeights,
+    new Set([100]), // owned
+    RECO_TAG_MAP,
+    10,
+    ["Roguelike"],
+  ) as {
+    found: boolean;
+    based_on_tags: string[];
+    count: number;
+    recommendations: { appid: number }[];
+  };
+  assert.equal(s.found, true);
+  assert.deepEqual(s.based_on_tags, ["Roguelike"]);
+  // Owned (100) and the tag-less-overlap item (400) never appear.
+  assert.deepEqual(
+    s.recommendations.map((r) => r.appid),
+    [200, 300],
+  );
+  // 90%-reviewed beats 20%-reviewed despite an identical tag match.
+  assert.equal(s.recommendations[0]!.appid, 200);
+});
+
+test("summarizeRecommendations: exclude_tags drops a match even via its FULL tag set, not just the display cap", () => {
+  const candidates: StoreItem[] = [
+    {
+      appid: 500,
+      name: "Secretly a Souls-like",
+      // Souls-like (3) is present but far from the top-weighted tag, so it
+      // would fall outside resolveTags' display cap — exclusion must still see it.
+      tags: [
+        { tagid: 1, weight: 900 },
+        { tagid: 3, weight: 1 },
+      ],
+    },
+    { appid: 600, name: "Not a Souls-like", tags: [{ tagid: 1, weight: 900 }] },
+  ];
+  const tagWeights = new Map([["Roguelike", 10]]);
+  const s = summarizeRecommendations(
+    candidates,
+    tagWeights,
+    new Set(),
+    RECO_TAG_MAP,
+    10,
+    ["Roguelike"],
+    ["souls-like"], // case-insensitive
+  ) as { recommendations: { appid: number }[] };
+  assert.deepEqual(
+    s.recommendations.map((r) => r.appid),
+    [600],
+  );
 });

@@ -46,6 +46,8 @@ Once it's connected, just ask your agent in natural language.
 "Show my Steam profile."
 "List my games by playtime."
 "What have I played in the last two weeks?"
+"Recommend something I'd like based on my library, on a good discount."
+"Do I already own Hollow Knight and Hades?"
 "What's on my wishlist that's discounted and well-reviewed?"
 "List Hollow Knight's achievements and how rare each one is."
 "How far am I through Elden Ring's achievements?"
@@ -142,8 +144,9 @@ Key: **–** no credentials · **K** Steam Web API key.
 | `resolve_vanity_url`      | K   | Custom profile name → SteamID64                                                                                      |
 | `get_player_summary`      | K   | Player public profile (incl. Steam level)                                                                            |
 | `get_player_bans`         | K   | VAC/game/community/economy ban status (works even on private profiles)                                               |
-| `get_owned_games`         | K   | A player's games + playtime (top 50 by playtime — not for checking one specific game)                                |
+| `get_owned_games`         | K   | A player's games + playtime (top 50 by playtime; `check_appids` reliably checks specific appids past that cap)       |
 | `get_recently_played`     | K   | Games played in the last two weeks                                                                                   |
+| `get_recommended_games`   | K   | Personalized picks from playtime-weighted tags + review quality, excluding owned games                               |
 | `get_player_achievements` | K   | A player's achievement progress in a game                                                                            |
 | `get_friend_list`         | K   | A player's friends — name, online state, current game (public friends list)                                          |
 | `find_friends_who_own`    | K   | Which friends own given appid(s) + their playtime — checks each friend's FULL library, not just top 50               |

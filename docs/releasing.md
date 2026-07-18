@@ -18,6 +18,13 @@ provenance — no token) → **publish to the official MCP Registry** (`mcp-publ
 GitHub OIDC). Never hand-edit the version in the derived files; bump `package.json`
 via `npm version` and let the hook sync the rest.
 
+`release.yml` runs `check:api` with no `STEAM_API_KEY` secret configured, so its
+key-gated checks always skip there — only the keyless Storefront/Web API checks
+actually gate CI. Before tagging, run `STEAM_API_KEY=... npm run check:api`
+locally with your own key to also exercise the key-gated player endpoints
+(`GetOwnedGames`, `GetFriendList`, `GetPlayerBans`, `ResolveVanityURL`,
+`GetSchemaForGame`, …) against live Steam.
+
 ## MCP Registry
 
 The server is listed at `registry.modelcontextprotocol.io` as

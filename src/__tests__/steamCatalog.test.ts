@@ -5,16 +5,15 @@
 // (Storefront tools) and steamPlayer.test.ts (key-gated player tools).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { connectServer, installFetch, mockFetch, jsonResponse } from "./helpers.js";
+import { setupServer, jsonResponse, assertToolError } from "./helpers.js";
 import { ENV, FOLLOWED, router, routerWithBrokenTagList } from "./steamFixtures.js";
 
 test("get_game_news works without a key", async (t) => {
-  installFetch(t, mockFetch(router));
-  const { client, close } = await connectServer({
-    STEAM_STORE_MIN_INTERVAL_MS: "0",
-    STEAM_API_MIN_INTERVAL_MS: "0",
-  });
-  t.after(close);
+  const { client } = await setupServer(
+    t,
+    { STEAM_STORE_MIN_INTERVAL_MS: "0", STEAM_API_MIN_INTERVAL_MS: "0" },
+    router,
+  );
   const res = await client.callTool({ name: "get_game_news", arguments: { appid: 620 } });
   const s = res.structuredContent as { items: { title: string; excerpt: string }[] };
   assert.equal(s.items[0]!.title, "Update");
@@ -22,9 +21,7 @@ test("get_game_news works without a key", async (t) => {
 });
 
 test("get_global_achievements parses percentages as numbers", async (t) => {
-  installFetch(t, mockFetch(router));
-  const { client, close } = await connectServer(ENV);
-  t.after(close);
+  const { client } = await setupServer(t, ENV, router);
   const res = await client.callTool({
     name: "get_global_achievements",
     arguments: { appid: 620 },
@@ -35,9 +32,7 @@ test("get_global_achievements parses percentages as numbers", async (t) => {
 });
 
 test("get_current_players works without a key and returns the count", async (t) => {
-  installFetch(t, mockFetch(router));
-  const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-  t.after(close);
+  const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
   const res = await client.callTool({ name: "get_current_players", arguments: { appid: 730 } });
   const s = res.structuredContent as { appid: number; player_count: number };
   assert.equal(s.appid, 730);
@@ -46,9 +41,7 @@ test("get_current_players works without a key and returns the count", async (t) 
 
 describe("get_wishlist", () => {
   test("get_wishlist sorts by priority (no key) and reports private as not-found", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "get_wishlist",
       arguments: { steamid: "76561198028121353" },
@@ -64,9 +57,7 @@ describe("get_wishlist", () => {
   });
 
   test("get_wishlist include_details returns full store cards (name, price, tags) in one call", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "get_wishlist",
       arguments: { steamid: "76561198028121353", include_details: true },
@@ -86,9 +77,7 @@ describe("get_wishlist", () => {
   });
 
   test("get_wishlist on_sale_only keeps only discounted items, ranked by discount", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "get_wishlist",
       arguments: { steamid: "76561198028121353", on_sale_only: true },
@@ -106,9 +95,7 @@ describe("get_wishlist", () => {
   });
 
   test("get_wishlist filters detailed items by tag + min_discount over the whole wishlist", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     // "Puzzle games on my wishlist with a good discount" — 620 (Puzzle, 80% off)
     // matches; 660 (Action Roguelike, 0% off) fails both the tag and the discount.
     const res = await client.callTool({
@@ -127,9 +114,7 @@ describe("get_wishlist", () => {
   });
 
   test("get_wishlist filters by steam_os (Proton) compatibility, distinct from native platform", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "get_wishlist",
       arguments: { steamid: "76561198028121353", steam_os: "playable" },
@@ -147,9 +132,7 @@ describe("get_wishlist", () => {
   });
 
   test("get_wishlist filters by steam_machine compatibility, distinct from steam_os", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "get_wishlist",
       arguments: { steamid: "76561198028121353", steam_machine: "playable" },
@@ -225,21 +208,16 @@ describe("get_wishlist", () => {
         ],
       },
     };
-    installFetch(
-      t,
-      mockFetch((url) => {
-        if (url.includes("GetTagList"))
-          return jsonResponse({
-            response: {
-              tags: Object.entries(tagNames).map(([id, name]) => ({ tagid: Number(id), name })),
-            },
-          });
-        if (url.includes("GetWishlistSortedFiltered")) return jsonResponse(detailed);
-        return jsonResponse({});
-      }),
-    );
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) => {
+      if (url.includes("GetTagList"))
+        return jsonResponse({
+          response: {
+            tags: Object.entries(tagNames).map(([id, name]) => ({ tagid: Number(id), name })),
+          },
+        });
+      if (url.includes("GetWishlistSortedFiltered")) return jsonResponse(detailed);
+      return jsonResponse({});
+    });
     const res = await client.callTool({
       name: "get_wishlist",
       arguments: {
@@ -263,14 +241,9 @@ describe("get_wishlist", () => {
   });
 
   test("get_wishlist returns found:false when empty/private", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) =>
-        url.includes("GetWishlist") ? jsonResponse({ response: {} }) : jsonResponse({}),
-      ),
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+      url.includes("GetWishlist") ? jsonResponse({ response: {} }) : jsonResponse({}),
     );
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
     const res = await client.callTool({
       name: "get_wishlist",
       arguments: { steamid: "76561197960287930" },
@@ -281,25 +254,20 @@ describe("get_wishlist", () => {
   });
 
   test("get_wishlist: tags filter errors clearly when GetTagList is unavailable (no silent empty result)", async (t) => {
-    installFetch(t, mockFetch(routerWithBrokenTagList));
-    const { client, close } = await connectServer({
-      STEAM_API_MIN_INTERVAL_MS: "0",
-      HTTP_RETRIES: "0",
-    });
-    t.after(close);
+    const { client } = await setupServer(
+      t,
+      { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
+      routerWithBrokenTagList,
+    );
     const res = await client.callTool({
       name: "get_wishlist",
       arguments: { steamid: "76561198028121353", tags: ["Metroidvania"] },
     });
-    assert.equal(res.isError, true);
-    const text = (res.content as { type: string; text: string }[])[0]?.text ?? "";
-    assert.match(text, /tag dictionary/i);
+    assertToolError(res, /tag dictionary/i);
   });
 
   test("get_wishlist: country/language alone switch to detailed mode (not silently ignored)", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "get_wishlist",
       arguments: { steamid: "76561198028121353", country: "DE" },
@@ -313,9 +281,7 @@ describe("get_wishlist", () => {
 
 describe("get_items", () => {
   test("get_items returns batch store cards (price, review %, release) keyless", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({ name: "get_items", arguments: { appids: [620, 999] } });
     const s = res.structuredContent as {
       count: number;
@@ -329,6 +295,7 @@ describe("get_items", () => {
         steam_os?: string;
         steam_machine?: string;
         steam_frame?: string;
+        vr_support?: string;
         tags?: string[];
         release_date?: string;
       }[];
@@ -343,6 +310,7 @@ describe("get_items", () => {
     assert.equal(a.steam_os, "playable"); // steam_os_compat_category 2 → playable
     assert.equal(a.steam_machine, "unsupported"); // steam_machine_compat_category 1 → unsupported
     assert.equal(a.steam_frame, "unknown"); // steam_frame_compat_category 0 → unknown
+    assert.equal(a.vr_support, "none"); // fixture carries no vr_support key
     // tagids 10,20 resolved via GetTagList, ordered by weight (900 > 500).
     assert.deepEqual(a.tags, ["Puzzle", "Co-op"]);
     assert.equal(a.release_date, "2011-04-19");
@@ -351,12 +319,11 @@ describe("get_items", () => {
   });
 
   test("get_items: still succeeds when GetTagList is unavailable (tags are display-only there)", async (t) => {
-    installFetch(t, mockFetch(routerWithBrokenTagList));
-    const { client, close } = await connectServer({
-      STEAM_API_MIN_INTERVAL_MS: "0",
-      HTTP_RETRIES: "0",
-    });
-    t.after(close);
+    const { client } = await setupServer(
+      t,
+      { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
+      routerWithBrokenTagList,
+    );
     const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
     const s = res.structuredContent as { items: { appid: number; tags: string[] }[] };
     assert.equal(s.items[0]!.tags.length, 0);
@@ -365,9 +332,7 @@ describe("get_items", () => {
 
 describe("get_followed_games", () => {
   test("get_followed_games returns followed appids keyless, with the true total", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "get_followed_games",
       arguments: { steamid: "76561197960287930" },
@@ -389,14 +354,9 @@ describe("get_followed_games", () => {
   });
 
   test("get_followed_games reports found:false for an empty/private follow list", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) =>
-        url.includes("GetGamesFollowed") ? jsonResponse({ response: {} }) : jsonResponse({}),
-      ),
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+      url.includes("GetGamesFollowed") ? jsonResponse({ response: {} }) : jsonResponse({}),
     );
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
     const res = await client.callTool({
       name: "get_followed_games",
       arguments: { steamid: "76561197960287930" },
@@ -407,16 +367,11 @@ describe("get_followed_games", () => {
   });
 
   test("get_followed_games still succeeds when GetGamesFollowedCount fails (falls back to appids.length)", async (t) => {
-    installFetch(
-      t,
-      mockFetch((url) => {
-        if (url.includes("GetGamesFollowedCount")) return jsonResponse({}, { status: 500 });
-        if (url.includes("GetGamesFollowed")) return jsonResponse(FOLLOWED);
-        return jsonResponse({});
-      }),
-    );
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) => {
+      if (url.includes("GetGamesFollowedCount")) return jsonResponse({}, { status: 500 });
+      if (url.includes("GetGamesFollowed")) return jsonResponse(FOLLOWED);
+      return jsonResponse({});
+    });
     const res = await client.callTool({
       name: "get_followed_games",
       arguments: { steamid: "76561197960287930" },
@@ -431,9 +386,7 @@ describe("get_followed_games", () => {
 
 describe("discover_games", () => {
   test("discover_games filters by min discount + review quality, skips hidden, keyless", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "discover_games",
       arguments: { min_discount: 80, min_review: 90, min_reviews: 100 },
@@ -457,9 +410,7 @@ describe("discover_games", () => {
   });
 
   test("discover_games filters by recency + Deck + rating (no discount required)", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     // Portal 2 (released 2011-04-19, deck verified, 98%) passes; the unsupported
     // shovelware and the hidden item drop out.
     const res = await client.callTool({
@@ -476,9 +427,7 @@ describe("discover_games", () => {
   });
 
   test("discover_games recency cutoff excludes older releases", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     // Cutoff in 2020 → Portal 2 (2011) is excluded; nothing else has a date.
     const res = await client.callTool({
       name: "discover_games",
@@ -489,9 +438,7 @@ describe("discover_games", () => {
   });
 
   test("discover_games filters by Steam Deck compatibility and tags each result", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "discover_games",
       arguments: { min_discount: 80, steam_deck: "verified" },
@@ -506,9 +453,7 @@ describe("discover_games", () => {
   });
 
   test("discover_games filters by SteamOS compatibility and tags each result", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "discover_games",
       arguments: { min_discount: 80, steam_os: "playable" },
@@ -524,9 +469,7 @@ describe("discover_games", () => {
   });
 
   test("discover_games filters by Steam Machine compatibility, distinct from steam_os", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "discover_games",
       arguments: { min_discount: 80, steam_machine: "playable" },
@@ -541,9 +484,7 @@ describe("discover_games", () => {
   });
 
   test("discover_games filters by native platform and surfaces the platforms list", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "discover_games",
       arguments: { min_discount: 80, platform: "linux" },
@@ -558,9 +499,7 @@ describe("discover_games", () => {
   });
 
   test("discover_games surfaces resolved tags and filters by tag (client-side, case-insensitive)", async (t) => {
-    installFetch(t, mockFetch(router));
-    const { client, close } = await connectServer({ STEAM_API_MIN_INTERVAL_MS: "0" });
-    t.after(close);
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "discover_games",
       arguments: { min_discount: 80, tags: ["puzzle"] },
@@ -576,28 +515,24 @@ describe("discover_games", () => {
   });
 
   test("discover_games: tags filter errors clearly when GetTagList is unavailable (no silent empty result)", async (t) => {
-    installFetch(t, mockFetch(routerWithBrokenTagList));
-    const { client, close } = await connectServer({
-      STEAM_API_MIN_INTERVAL_MS: "0",
-      HTTP_RETRIES: "0",
-    });
-    t.after(close);
+    const { client } = await setupServer(
+      t,
+      { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
+      routerWithBrokenTagList,
+    );
     const res = await client.callTool({
       name: "discover_games",
       arguments: { min_discount: 80, tags: ["puzzle"] },
     });
-    assert.equal(res.isError, true);
-    const text = (res.content as { type: string; text: string }[])[0]?.text ?? "";
-    assert.match(text, /tag dictionary/i);
+    assertToolError(res, /tag dictionary/i);
   });
 
   test("discover_games: still succeeds without a tags filter even when GetTagList is unavailable", async (t) => {
-    installFetch(t, mockFetch(routerWithBrokenTagList));
-    const { client, close } = await connectServer({
-      STEAM_API_MIN_INTERVAL_MS: "0",
-      HTTP_RETRIES: "0",
-    });
-    t.after(close);
+    const { client } = await setupServer(
+      t,
+      { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
+      routerWithBrokenTagList,
+    );
     const res = await client.callTool({
       name: "discover_games",
       arguments: { min_discount: 80 },

@@ -40,6 +40,9 @@ export interface StoreItem {
     steam_os_compat_category?: number;
     steam_machine_compat_category?: number;
     steam_frame_compat_category?: number;
+    // Absent entirely for a non-VR game; vrhmd present (true) means VR is
+    // supported, vrhmd_only means it's VR-exclusive (no flatscreen mode).
+    vr_support?: { vrhmd?: boolean; vrhmd_only?: boolean };
   };
   // Popular user-defined tags (returned with include_tag_count), most-weighted
   // first. Only tagid + weight — names are resolved from the tag dictionary (see
@@ -81,22 +84,43 @@ function resolveTags(
     .slice(0, TAG_LIMIT);
 }
 
-// Case-insensitive AND-match against an item's FULL tag set — NOT the capped
-// display list a card shows. Filtering must see every fetched tag, or a match on
-// a lower-weighted tag (e.g. "Metroidvania" on a game whose top tags are others)
-// would be dropped just because it fell past the display cap.
-function matchesAllTags(
+// An item's FULL resolved tag-name set, lowercased — NOT the capped display
+// list a card shows (see resolveTags' TAG_LIMIT). Shared by matchesAllTags and
+// matchesAnyTag so both see every fetched tag, not just the most-weighted ones.
+function fullTagNamesLower(
   tags: { tagid?: number; weight?: number }[] | undefined,
   tagMap: TagMap | undefined,
-  wantLower: string[],
-): boolean {
-  const have = new Set(
+): Set<string> {
+  return new Set(
     (tags ?? [])
       .map((t) => (t.tagid !== undefined ? tagMap?.[t.tagid] : undefined))
       .filter((n): n is string => Boolean(n))
       .map((n) => n.toLowerCase()),
   );
+}
+
+// Case-insensitive AND-match against an item's FULL tag set — a match on a
+// lower-weighted tag (e.g. "Metroidvania" on a game whose top tags are others)
+// must still count, or it'd be dropped just because it fell past the display cap.
+function matchesAllTags(
+  tags: { tagid?: number; weight?: number }[] | undefined,
+  tagMap: TagMap | undefined,
+  wantLower: string[],
+): boolean {
+  const have = fullTagNamesLower(tags, tagMap);
   return wantLower.every((t) => have.has(t));
+}
+
+// Case-insensitive OR-match against an item's FULL tag set — used to EXCLUDE
+// candidates carrying ANY of a set of unwanted tags (e.g. "recommend me
+// something except Souls-like").
+function matchesAnyTag(
+  tags: { tagid?: number; weight?: number }[] | undefined,
+  tagMap: TagMap | undefined,
+  unwantedLower: string[],
+): boolean {
+  const have = fullTagNamesLower(tags, tagMap);
+  return unwantedLower.some((t) => have.has(t));
 }
 
 // ---- compatibility + native platforms ---------------------------------------
@@ -111,6 +135,16 @@ const COMPAT_CATEGORY: Record<number, string> = {
 };
 function compat(cat?: number): string {
   return COMPAT_CATEGORY[cat ?? 0] ?? "unknown";
+}
+
+// "none": no VR headset support at all (the common case); "supported": works
+// with a VR headset but also playable flatscreen; "required": VR-only, no
+// flatscreen mode. Steam omits vr_support (or its sub-fields) entirely rather
+// than sending explicit false, hence the `?? false` defaults below.
+function vrSupport(p: StoreItem["platforms"]): "none" | "supported" | "required" {
+  const vr = p?.vr_support;
+  if (!vr?.vrhmd) return "none";
+  return vr.vrhmd_only ? "required" : "supported";
 }
 // Map a user-facing compat filter to the minimum acceptable category: "verified"
 // keeps only Verified; "playable" keeps Playable or Verified (i.e. "runs on it").
@@ -179,6 +213,7 @@ function baseCard(it: StoreItem, tagMap?: TagMap): Record<string, unknown> {
     steam_os: compat(it.platforms?.steam_os_compat_category),
     steam_machine: compat(it.platforms?.steam_machine_compat_category),
     steam_frame: compat(it.platforms?.steam_frame_compat_category),
+    vr_support: vrSupport(it.platforms),
     tags: resolveTags(it.tags, tagMap),
     release_date: isoDay(it.release?.steam_release_date),
   };
@@ -388,5 +423,78 @@ export function summarizeWishlistDetailed(
     matched: cards.length,
     returned: Math.min(cards.length, WISHLIST_DETAIL_MAX),
     items: cards.slice(0, WISHLIST_DETAIL_MAX),
+  };
+}
+
+// ---- personalized recommendations (derived from the player's own library) --
+
+// Turns a sample of the player's owned games (already fetched as store items,
+// so their tags can be resolved) into weighted tag preferences: each game's
+// tags gain its own playtime (hours) as weight, so heavily-played games
+// dominate. Zero/unknown playtime contributes nothing. Used by
+// clients/storeService.ts#getRecommendedGames.
+export function computeFavoriteTagWeights(
+  ownedItems: StoreItem[],
+  playtimeMinutesByAppid: Map<number, number>,
+  tagMap: TagMap,
+): Map<string, number> {
+  const weights = new Map<string, number>();
+  for (const it of ownedItems) {
+    if (typeof it.appid !== "number") continue;
+    const hoursPlayed = (playtimeMinutesByAppid.get(it.appid) ?? 0) / 60;
+    if (hoursPlayed <= 0) continue;
+    for (const tag of resolveTags(it.tags, tagMap)) {
+      weights.set(tag, (weights.get(tag) ?? 0) + hoursPlayed);
+    }
+  }
+  return weights;
+}
+
+// Ranks unowned catalog items by overlap with the player's weighted tag
+// preferences, discounted by how well-reviewed each candidate is — a locally
+// computed ranking, since the Query API has no "similar to my library" or
+// OR-tag mode of its own (its own tags filter is AND-only, unsuitable for "any
+// of my several favorite tags"), and doesn't rank by review quality either.
+export function summarizeRecommendations(
+  candidates: StoreItem[],
+  tagWeights: Map<string, number>,
+  ownedAppids: Set<number>,
+  tagMap: TagMap | undefined,
+  max: number,
+  basedOnTags: string[],
+  excludeTags: string[] = [],
+): Record<string, unknown> {
+  const excludeLower = excludeTags.map((t) => t.toLowerCase());
+  const scored = candidates
+    .filter(
+      (it) =>
+        it.visible !== false &&
+        typeof it.appid === "number" &&
+        !ownedAppids.has(it.appid) &&
+        !(excludeLower.length && matchesAnyTag(it.tags, tagMap, excludeLower)),
+    )
+    .map((it) => {
+      const tags = resolveTags(it.tags, tagMap);
+      const matchedTags = tags.filter((t) => tagWeights.has(t));
+      const tagScore = matchedTags.reduce((sum, t) => sum + (tagWeights.get(t) ?? 0), 0);
+      // Discount by review quality so a tag match on a poorly-received game
+      // doesn't outrank a better one; missing review data (too new/rare to
+      // judge) stays neutral (×1) rather than being penalized as if bad.
+      const reviewPercent = it.reviews?.summary_filtered?.percent_positive;
+      const reviewMultiplier = typeof reviewPercent === "number" ? reviewPercent / 100 : 1;
+      return { it, matchedTags, matchScore: tagScore * reviewMultiplier };
+    })
+    .filter((x) => x.matchScore > 0)
+    .sort((a, b) => b.matchScore - a.matchScore)
+    .slice(0, max);
+  return {
+    found: true,
+    based_on_tags: basedOnTags,
+    count: scored.length,
+    recommendations: scored.map(({ it, matchedTags, matchScore }) => ({
+      ...storeCard(it, tagMap),
+      matched_tags: matchedTags,
+      match_score: Math.round(matchScore * 10) / 10,
+    })),
   };
 }

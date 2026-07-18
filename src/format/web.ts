@@ -87,12 +87,28 @@ function isPrivate(r: OwnedGamesResponse): boolean {
   return r.response?.game_count === undefined && r.response?.games === undefined;
 }
 
-// Sort by playtime desc and cap; a big library would otherwise blow the budget.
-export function summarizeOwnedGames(r: OwnedGamesResponse, max = 50): Record<string, unknown> {
-  if (isPrivate(r)) return { found: false, reason: PRIVATE_REASON, game_count: null, games: [] };
-  const games = (r.response?.games ?? [])
-    .slice()
-    .sort((a, b) => (b.playtime_forever ?? 0) - (a.playtime_forever ?? 0));
+// `games` is sorted by playtime desc and capped (a big library would otherwise
+// blow the budget), so it's NOT reliable for "does this player own game X" —
+// pass checkAppids to check specific appids against the FULL, uncapped list
+// instead; `owns` then answers that reliably regardless of the games cap.
+export function summarizeOwnedGames(
+  r: OwnedGamesResponse,
+  opts: { max?: number; checkAppids?: number[] } = {},
+): Record<string, unknown> {
+  if (isPrivate(r)) {
+    const base = { found: false, reason: PRIVATE_REASON, game_count: null, games: [] };
+    return opts.checkAppids
+      ? { ...base, owns: opts.checkAppids.map((appid) => ({ appid, owned: false })) }
+      : base;
+  }
+  const all = r.response?.games ?? [];
+  const games = all.slice().sort((a, b) => (b.playtime_forever ?? 0) - (a.playtime_forever ?? 0));
+  const max = opts.max ?? 50;
+  const byAppid = new Map(
+    all
+      .filter((g): g is OwnedGame & { appid: number } => typeof g.appid === "number")
+      .map((g) => [g.appid, g]),
+  );
   return {
     found: true,
     game_count: r.response?.game_count ?? games.length,
@@ -103,6 +119,16 @@ export function summarizeOwnedGames(r: OwnedGamesResponse, max = 50): Record<str
       playtime_hours: hours(g.playtime_forever),
       playtime_2weeks_hours: hours(g.playtime_2weeks),
     })),
+    ...(opts.checkAppids && {
+      owns: opts.checkAppids.map((appid) => {
+        const g = byAppid.get(appid);
+        return {
+          appid,
+          owned: g !== undefined,
+          playtime_hours: g ? hours(g.playtime_forever) : null,
+        };
+      }),
+    }),
   };
 }
 

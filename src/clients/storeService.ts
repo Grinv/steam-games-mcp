@@ -13,8 +13,10 @@
 import { ApiError } from "../lib/errors.js";
 import type { TtlCache } from "../lib/cache.js";
 import {
+  computeFavoriteTagWeights,
   summarizeDiscover,
   summarizeItems,
+  summarizeRecommendations,
   summarizeTagList,
   summarizeWishlistDetailed,
   type CompatFilters,
@@ -41,18 +43,20 @@ const storeCardDataRequest = (tagCount: number) => ({
   include_tag_count: tagCount,
 });
 
+// getRecommendedGames tuning: how many of the player's most-played owned games
+// feed the tag-weighting step, how many of the resulting top tags are surfaced
+// as `based_on_tags`, and how big a catalog page is scored against them.
+const FAVORITE_TAG_SAMPLE_SIZE = 30;
+const BASED_ON_TAGS_LIMIT = 6;
+const RECOMMENDATION_POOL_SIZE = 300;
+
 export class StoreServiceClient {
   readonly #get: Get;
-  readonly #cache: TtlCache<Record<string, unknown>>;
+  readonly #cache: TtlCache;
   readonly #l: string;
   readonly #country: string;
 
-  constructor(opts: {
-    get: Get;
-    cache: TtlCache<Record<string, unknown>>;
-    language: string;
-    country: string;
-  }) {
+  constructor(opts: { get: Get; cache: TtlCache; language: string; country: string }) {
     this.#get = opts.get;
     this.#cache = opts.cache;
     this.#l = opts.language;
@@ -70,13 +74,12 @@ export class StoreServiceClient {
   // reject every item, indistinguishable from "no games matched").
   async #tagNames(language: string): Promise<TagMap | null> {
     try {
-      const map = await this.#cache.wrapStaleOnError(`tags:${language}`, async () => {
+      return await this.#cache.wrapStaleOnError(`tags:${language}`, async () => {
         const res = await this.#get<GetTagListResponse>("IStoreService/GetTagList/v1/", {
           language,
         });
-        return summarizeTagList(res) as Record<string, unknown>;
+        return summarizeTagList(res);
       });
-      return map as TagMap;
     } catch {
       return null;
     }
@@ -136,6 +139,96 @@ export class StoreServiceClient {
       l,
     );
     return summarizeItems(res, appids, tagMap);
+  }
+
+  // Personalized recommendations: derive weighted tag preferences from a
+  // sample of the player's most-played owned games, then rank a broad,
+  // popularity-sorted catalog page by overlap with those weights, excluding
+  // anything already owned. `ownedGames` must be the player's FULL library
+  // (correct exclusion needs all of it) — only the top FAVORITE_TAG_SAMPLE_SIZE
+  // by playtime are actually fetched to derive tags.
+  async getRecommendedGames(
+    ownedGames: { appid: number; playtimeMinutes: number }[],
+    opts: {
+      count?: number;
+      country?: string;
+      language?: string;
+      excludeTags?: string[];
+      minDiscount?: number;
+    } = {},
+  ): Promise<Record<string, unknown>> {
+    if (ownedGames.length === 0) {
+      return {
+        found: false,
+        reason: "This player's library has no games to base recommendations on.",
+      };
+    }
+    const l = opts.language ?? this.#l;
+    const cc = opts.country ?? this.#country;
+    const tagMap = await this.#tagNames(l);
+    if (tagMap === null) {
+      // Same "fail loudly, don't silently degrade" rule as
+      // #requireTagMapIfFiltering — recommendations are meaningless without it.
+      throw new ApiError({
+        code: "unknown",
+        message:
+          "could not fetch Steam's tag dictionary right now, so recommendations can't be " +
+          "computed. Retry shortly.",
+        retryable: true,
+      });
+    }
+
+    const sample = ownedGames
+      .slice()
+      .sort((a, b) => b.playtimeMinutes - a.playtimeMinutes)
+      .slice(0, FAVORITE_TAG_SAMPLE_SIZE);
+    const sampleRes = await this.#get<StoreItemsResponse>("IStoreBrowseService/GetItems/v1/", {
+      input_json: JSON.stringify({
+        ids: sample.map((g) => ({ appid: g.appid })),
+        context: { language: l, country_code: cc },
+        data_request: storeCardDataRequest(20),
+      }),
+    });
+    const tagWeights = computeFavoriteTagWeights(
+      sampleRes.response?.store_items ?? [],
+      new Map(sample.map((g) => [g.appid, g.playtimeMinutes])),
+      tagMap,
+    );
+    if (tagWeights.size === 0) {
+      return {
+        found: false,
+        reason: "Not enough played games with resolvable tags to build recommendations.",
+      };
+    }
+    const basedOnTags = [...tagWeights.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, BASED_ON_TAGS_LIMIT)
+      .map(([tag]) => tag);
+
+    const count = Math.min(Math.max(opts.count ?? 10, 1), 25);
+    // Same server-side price filter #queryCatalog uses for discover_games — cuts
+    // the candidate pool down to matching deals instead of scoring 150 items and
+    // discarding most of them locally for a "good discounts only" request.
+    const filters: Record<string, unknown> = {};
+    if (typeof opts.minDiscount === "number")
+      filters.price_filters = { min_discount_percent: opts.minDiscount };
+    const poolRes = await this.#get<StoreQueryResponse>("IStoreQueryService/Query/v1/", {
+      input_json: JSON.stringify({
+        query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
+        context: { language: l, country_code: cc, steam_realm: 1 },
+        data_request: storeCardDataRequest(20),
+      }),
+    });
+    const ownedAppids = new Set(ownedGames.map((g) => g.appid));
+    return summarizeRecommendations(
+      poolRes.response?.store_items ?? [],
+      tagWeights,
+      ownedAppids,
+      tagMap,
+      count,
+      basedOnTags,
+      opts.excludeTags,
+    );
   }
 
   // Shared catalog discovery over the keyless store query backend (discoverGames

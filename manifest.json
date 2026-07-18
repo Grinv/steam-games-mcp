@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "steam-games-mcp",
-  "display_name": "Steam (Games & Players)",
+  "display_name": "Steam MCP Server",
   "version": "0.8.1",
   "description": "Search Steam games and read store details, prices, reviews and discounts (no key), plus player profiles, libraries and achievements via the Steam Web API.",
   "author": {
@@ -73,6 +73,10 @@
     { "name": "get_owned_games", "description": "A player's games + playtime (key)." },
     { "name": "get_recently_played", "description": "Games played in the last 2 weeks (key)." },
     {
+      "name": "get_recommended_games",
+      "description": "Personalized picks from the player's own tag/playtime taste (key)."
+    },
+    {
       "name": "get_player_achievements",
       "description": "A player's achievements in a game (key)."
     },
@@ -80,6 +84,10 @@
     {
       "name": "find_friends_who_own",
       "description": "Which friends own given appid(s), checking their full library (key)."
+    },
+    {
+      "name": "compare_players",
+      "description": "Games two players both own, with each one's playtime (key)."
     }
   ],
   "user_config": {
