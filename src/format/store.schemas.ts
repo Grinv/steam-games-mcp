@@ -73,8 +73,20 @@ export const getItemsOutput = z
 
 export const discoverGamesOutput = z
   .object({
-    total_matching: z.number().nullable(),
-    returned: z.number(),
+    total_matching: z
+      .number()
+      .nullable()
+      .describe(
+        "Count from whichever filters Steam actually applies server-side — min_discount, and (if " +
+          "released_after/released_within_days was set) excluding not-yet-released games — or the " +
+          "whole catalog's size if neither was given. NOT the number of games matching tags/" +
+          "platform/compat/review/the exact release-date cutoff, which have no server-side filter " +
+          "and this tool applies only over the scanned `count`-sized window below. Don't read this " +
+          "as 'N games match all my filters' — use `returned` for that instead.",
+      ),
+    returned: z
+      .number()
+      .describe("How many results survived every filter, out of the scanned window (see `count`)."),
     deals: z.array(storeCardSchema),
   })
   .strict();
@@ -87,11 +99,27 @@ export const discoverGamesOutput = z
 export const wishlistDetailedFound = z
   .object({
     found: z.literal(true),
-    total: z.number(),
-    enriched: z.number(),
+    total: z
+      .number()
+      .describe(
+        "The player's full wishlist size, including entries Steam never sent store data for (see `enriched`).",
+      ),
+    enriched: z
+      .number()
+      .describe(
+        "How many of `total` Steam actually attached store data to (it caps around the first " +
+          "100) — every filter below only runs over these, never the full `total`.",
+      ),
     note: z.string().optional(),
-    matched: z.number(),
-    returned: z.number(),
+    matched: z
+      .number()
+      .describe(
+        "How many of the enriched items satisfied the filters, BEFORE the display cap — a big " +
+          "gap between this and `returned` means results were capped, not that fewer items matched.",
+      ),
+    returned: z
+      .number()
+      .describe("How many items are actually in `items` below, after the display cap."),
     items: z.array(
       storeCardSchema.extend({ priority: z.number().nullable(), added: z.string().nullable() }),
     ),
@@ -108,7 +136,16 @@ export const recommendedGamesFound = z
     based_on_tags: z.array(z.string()),
     count: z.number(),
     recommendations: z.array(
-      storeCardSchema.extend({ matched_tags: z.array(z.string()), match_score: z.number() }),
+      storeCardSchema.extend({
+        matched_tags: z.array(z.string()),
+        match_score: z
+          .number()
+          .describe(
+            "An internal ranking weight (playtime-on-matched-tags, discounted by review score) — " +
+              "not a percentage or 0-100 scale. Only meaningful relative to the other scores in " +
+              "this same response, to explain why one pick outranks another.",
+          ),
+      }),
     ),
   })
   .strict();

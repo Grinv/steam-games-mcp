@@ -165,7 +165,14 @@ export const rollupSchema = z
 
 export const getReviewHistogramOutput = z
   .object({
-    rollup_type: z.string().nullable(),
+    rollup_type: z
+      .string()
+      .nullable()
+      .describe(
+        "Granularity of each `history` entry's date bucket, e.g. 'week' or 'month' — chosen " +
+          "server-side by Steam and passed through as a free-form string (not validated or " +
+          "enumerated here), so don't assume a fixed set of possible values.",
+      ),
     history: z.array(rollupSchema),
     recent: z.array(rollupSchema),
   })

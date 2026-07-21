@@ -101,10 +101,11 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       title: "Get a player's friend list",
       description:
         "List a player's Steam friends by SteamID64: name, online state, current game and how " +
-        "long they've been friends, most-recently-added first. Requires STEAM_API_KEY and the " +
-        "friends list to be public — otherwise it returns found:false. For 'which of my friends own " +
-        "game X', use find_friends_who_own instead — it checks each friend's full library, not just " +
-        "this list. Get the SteamID64 from resolve_vanity_url.",
+        "long they've been friends, most-recently-added first (capped at the 100 most-recently-" +
+        "added; check `returned` vs `total`). Requires STEAM_API_KEY and the friends list to be " +
+        "public — otherwise it returns found:false. For 'which of my friends own game X', use " +
+        "find_friends_who_own instead — it checks each friend's full library, not just this list. " +
+        "Get the SteamID64 from resolve_vanity_url.",
       inputSchema: z.object({ steamid }),
       outputSchema: getFriendListOutput,
       annotations: READ_ONLY,
@@ -173,9 +174,11 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
     {
       title: "Get player profile",
       description:
-        "Get a player's public profile by SteamID64: display name, online state, country, account " +
-        "age, Steam level, and the game they're currently in. Requires STEAM_API_KEY and a public " +
-        "profile. For VAC/game/trade ban status instead, use get_player_bans.",
+        "Get a player's profile by SteamID64: display name, online state, country, account age, " +
+        "Steam level, and the game they're currently in. Requires STEAM_API_KEY, but works even for " +
+        "a private profile (visibility reports 'private') — country, account age and the current " +
+        "game only populate when the profile is public. For VAC/game/trade ban status instead, use " +
+        "get_player_bans.",
       inputSchema: z.object({ steamid }),
       outputSchema: getPlayerSummaryOutput,
       annotations: READ_ONLY,
@@ -236,7 +239,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       description:
         "List the games a player has played in the last two weeks, with recent and total playtime. " +
         "For all-time top games by playtime instead (capped to the top 50), use get_owned_games. " +
-        "Requires STEAM_API_KEY and a public profile.",
+        "Requires STEAM_API_KEY and a public profile with game-details visibility (same requirement " +
+        "as get_owned_games) — otherwise it returns found:false.",
       inputSchema: z.object({ steamid }),
       outputSchema: getRecentlyPlayedOutput,
       annotations: READ_ONLY,
@@ -265,7 +269,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "instead. Note: candidates are scored from a large but fixed-size catalog scan, so a heavy " +
         "exclude_tags/min_discount combination can return fewer than `count` — there's no larger scan " +
         "to fall back to. Requires STEAM_API_KEY and a public profile with game-details visible " +
-        "(same requirement as get_owned_games) — otherwise it returns found:false.",
+        "(same requirement as get_owned_games) — found:false is also returned if the player owns " +
+        "no games at all to base recommendations on.",
       inputSchema: z.object({
         steamid,
         count: z
@@ -315,8 +320,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "unlock dates) by SteamID64 + appid. For the game's full achievement list (names, " +
         "descriptions, global rarity) independent of any player, use get_game_achievements instead; " +
         "for just the rarity without a key, use get_global_achievements. Requires STEAM_API_KEY and " +
-        "a public profile — otherwise it returns found:false (also returned if the game has no " +
-        "achievements at all).",
+        "a public profile with game-details visibility — otherwise it returns found:false (also " +
+        "returned if the game has no achievements at all).",
       inputSchema: z.object({
         steamid,
         appid,

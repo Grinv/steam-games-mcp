@@ -54,6 +54,26 @@ test("manifest.json's tools list matches every tool the server actually register
   }
 });
 
+// AGENTS.md mandates a .describe() on every tool parameter, written for the
+// calling model — this guards that convention going forward instead of relying
+// on review to catch a new undocumented parameter (see docs/tool-descriptions.md).
+test("every tool parameter has a .describe() for the calling model", async () => {
+  const { client, close } = await connectServer({});
+  try {
+    const { tools } = await client.listTools();
+    const missing: string[] = [];
+    for (const tool of tools) {
+      const schema = tool.inputSchema as { properties?: Record<string, { description?: string }> };
+      for (const [param, paramSchema] of Object.entries(schema.properties ?? {})) {
+        if (!paramSchema.description) missing.push(`${tool.name}.${param}`);
+      }
+    }
+    assert.deepEqual(missing, [], `parameters missing a .describe(): ${missing.join(", ")}`);
+  } finally {
+    await close();
+  }
+});
+
 // Same drift risk as the tools list above, for manifest.json's `prompts` array.
 test("manifest.json's prompts list matches every prompt the server actually registers", async () => {
   const { client, close } = await connectServer({});

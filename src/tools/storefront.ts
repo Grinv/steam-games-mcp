@@ -82,7 +82,9 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Get game reviews",
       description:
         "Get the review summary (score label, positive/negative counts, %) and a few recent " +
-        "reviews for a game by appid. Get the appid from search_games. No API key required.",
+        "reviews for a game by appid. Review text over 600 characters is truncated. For long-term " +
+        "trend instead of a snapshot, use get_review_histogram. Get the appid from search_games. " +
+        "No API key required.",
       inputSchema: z.object({
         appid,
         limit: z
@@ -98,7 +100,11 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
           .optional(),
         type: z
           .enum(["all", "positive", "negative"])
-          .describe("Only positive or negative reviews. Default 'all'.")
+          .describe(
+            "Only positive or negative reviews. Default 'all'. Steam only computes the summary " +
+              "(score label, totals, %) for 'all' — filtering to positive/negative nulls those " +
+              "fields out, leaving only the review excerpts.",
+          )
           .optional(),
       }),
       outputSchema: getGameReviewsOutput,
@@ -113,9 +119,12 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
     {
       title: "Get review trend over time",
       description:
-        "Get how a game's reviews trend over time by appid: a long-term (monthly) history and the " +
-        "recent per-day breakdown, each with positive/negative counts and positive %. Good for " +
-        "'are reviews improving / did an update hurt reception'. Get the appid from search_games. No key.",
+        "Get how a game's reviews trend over time by appid: a long-term history (rollup_type " +
+        "reports each entry's granularity, e.g. 'week' or 'month', chosen server-side by Steam) " +
+        "and the recent per-day breakdown, each with positive/negative counts and positive %. Good " +
+        "for 'are reviews improving / did an update hurt reception'. For a current summary and " +
+        "example review text instead of a trend, use get_game_reviews. Get the appid from " +
+        "search_games. No key.",
       inputSchema: z.object({ appid }),
       outputSchema: getReviewHistogramOutput,
       annotations: READ_ONLY,

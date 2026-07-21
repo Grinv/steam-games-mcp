@@ -139,11 +139,12 @@ export function registerStoreWebTools(
         "No appids needed — unlike get_items, which prices a list you already have. For 'games like " +
         "X' from a SINGLE named title, get its tags via get_items and pass them here; for taste " +
         "inferred from the player's WHOLE library instead, use get_recommended_games (key-gated). " +
-        "Note: only min_discount is filtered server-side — the Steam catalog API has no release-date, " +
-        "compat, platform, review or tag sort/filter, so results are scanned popularity-first and " +
-        "recency/compat/platform/review/tag filters are all applied afterward over that same window — " +
-        "great for popular titles; a niche match may fall outside the top `count` (raise count for " +
-        "stricter filters).",
+        "Note: min_discount is filtered server-side, and setting released_after/released_within_days " +
+        "also excludes not-yet-released games server-side — but the actual date cutoff, plus compat, " +
+        "platform, review and tag filtering, have no server-side support in the Steam catalog API, so " +
+        "those are scanned popularity-first and applied afterward over that same window — great for " +
+        "popular titles; a niche match may fall outside the top `count` (raise count for stricter " +
+        "filters).",
       inputSchema: z.object({
         released_after: z
           .string()
