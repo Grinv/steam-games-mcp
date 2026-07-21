@@ -5,8 +5,15 @@
 // (keyless-capable Web API store tools).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { setupServer, jsonResponse, assertToolError } from "./helpers.js";
+import { setupServer, jsonResponse, htmlResponse, assertToolError } from "./helpers.js";
 import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.js";
+
+// Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
+// some malformed/out-of-range steamids — e.g. the SteamID64 base constant
+// (accountid 0), which is 17 digits and passes the tool schema but is never a
+// real account. Regression coverage for that raw body leaking to the agent.
+const ROUTING_400 =
+  "<html><body><h1>Bad Request</h1>Missing required routing parameter</body></html>";
 
 test("player tools error clearly without STEAM_API_KEY", async (t) => {
   const { client } = await setupServer(t);
@@ -49,6 +56,20 @@ describe("get_owned_games", () => {
     };
     assert.equal(s.found, false);
     assert.equal(s.game_count, null);
+    assert.match(s.reason, /private/i);
+  });
+
+  test("get_owned_games: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetOwnedGames") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "76561197960265728" }, // accountid 0
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
     assert.match(s.reason, /private/i);
   });
 
@@ -125,6 +146,20 @@ describe("get_recently_played", () => {
     const s = res.structuredContent as { found: boolean; total: number; games: unknown[] };
     assert.equal(s.found, false);
     assert.equal(s.total, 0);
+    assert.deepEqual(s.games, []);
+  });
+
+  test("get_recently_played: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetRecentlyPlayedGames") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_recently_played",
+      arguments: { steamid: "76561197960265728" }, // accountid 0
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { found: boolean; total: number; games: unknown[] };
+    assert.equal(s.found, false);
     assert.deepEqual(s.games, []);
   });
 });
@@ -285,6 +320,20 @@ describe("get_recommended_games", () => {
       name: "get_recommended_games",
       arguments: { steamid: "76561197960287930" },
     });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /private/i);
+  });
+
+  test("get_recommended_games: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetOwnedGames") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960265728" }, // accountid 0
+    });
+    assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
     assert.match(s.reason, /private/i);
@@ -515,6 +564,20 @@ describe("get_friend_list", () => {
     assert.match(s.reason, /friends list/i);
   });
 
+  test("get_friend_list: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetFriendList") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_friend_list",
+      arguments: { steamid: "76561197960265728" }, // accountid 0
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /friends list/i);
+  });
+
   test("get_friend_list: a genuine 500 propagates as a tool error, not found:false", async (t) => {
     // #friendsRaw only swallows 403/401 into null (→ found:false); every
     // other failure code must still surface as a real error.
@@ -573,6 +636,20 @@ describe("find_friends_who_own", () => {
       name: "find_friends_who_own",
       arguments: { appids: [620], steamid: "76561197960287930" },
     });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /friends list/i);
+  });
+
+  test("find_friends_who_own: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetFriendList") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [620], steamid: "76561197960265728" }, // accountid 0
+    });
+    assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
     assert.match(s.reason, /friends list/i);
@@ -658,6 +735,22 @@ describe("compare_players", () => {
       name: "compare_players",
       arguments: { steamid: "76561197960287930", other_steamid: "76561197960287931" },
     });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /private/i);
+  });
+
+  test("compare_players: a malformed/out-of-range other_steamid reports found:false, not a raw HTML error", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (!url.includes("GetOwnedGames")) return jsonResponse({});
+      if (url.includes("steamid=76561197960265728")) return htmlResponse(ROUTING_400);
+      return jsonResponse(OWNED);
+    });
+    const res = await client.callTool({
+      name: "compare_players",
+      arguments: { steamid: "76561197960287930", other_steamid: "76561197960265728" }, // accountid 0
+    });
+    assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
     assert.match(s.reason, /private/i);

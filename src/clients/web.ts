@@ -180,9 +180,26 @@ export class SteamWebClient {
     return summarizePlayerBans(res);
   }
 
+  // GetOwnedGames, wrapped so a handful of malformed/out-of-range steamids (e.g.
+  // accountid 0 — 17 digits, passes the schema, but never a real account) that
+  // make Steam answer a raw HTTP 400 instead of its usual "empty response"
+  // private/not-found shape get normalized the same way as that usual shape,
+  // rather than leaking the raw upstream body to the agent. Shared by
+  // getOwnedGames, getRecommendedGames, comparePlayers and #ownedPlaytimes.
+  async #ownedGamesRaw(steamid: string, query: Query): Promise<OwnedGamesResponse> {
+    try {
+      return await this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
+        steamid,
+        ...query,
+      });
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "bad_request") return {};
+      throw e;
+    }
+  }
+
   async getOwnedGames(steamid: string, checkAppids?: number[]): Promise<Record<string, unknown>> {
-    const res = await this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
-      steamid,
+    const res = await this.#ownedGamesRaw(steamid, {
       include_appinfo: true,
       include_played_free_games: true,
     });
@@ -190,10 +207,15 @@ export class SteamWebClient {
   }
 
   async getRecentlyPlayed(steamid: string): Promise<Record<string, unknown>> {
-    const res = await this.#get<OwnedGamesResponse>("IPlayerService/GetRecentlyPlayedGames/v1/", {
-      steamid,
-    });
-    return summarizeRecentlyPlayed(res);
+    try {
+      const res = await this.#get<OwnedGamesResponse>("IPlayerService/GetRecentlyPlayedGames/v1/", {
+        steamid,
+      });
+      return summarizeRecentlyPlayed(res);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "bad_request") return summarizeRecentlyPlayed({});
+      throw e;
+    }
   }
 
   // Personalized recommendations derived from the player's own library: tags
@@ -210,8 +232,7 @@ export class SteamWebClient {
       minDiscount?: number;
     } = {},
   ): Promise<Record<string, unknown>> {
-    const res = await this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
-      steamid,
+    const res = await this.#ownedGamesRaw(steamid, {
       include_appinfo: false,
       // Without this, Steam omits free-to-play games from the owned list
       // entirely — they'd then not only miss tag-weighting but, worse, never
@@ -231,14 +252,8 @@ export class SteamWebClient {
   // which caps to the top 50 by playtime — comparing needs the whole list.
   async comparePlayers(steamidA: string, steamidB: string): Promise<Record<string, unknown>> {
     const [a, b] = await Promise.all([
-      this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
-        steamid: steamidA,
-        include_appinfo: true,
-      }),
-      this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
-        steamid: steamidB,
-        include_appinfo: true,
-      }),
+      this.#ownedGamesRaw(steamidA, { include_appinfo: true }),
+      this.#ownedGamesRaw(steamidB, { include_appinfo: true }),
     ]);
     return summarizeComparePlayers(a, b);
   }
@@ -330,7 +345,13 @@ export class SteamWebClient {
         relationship: "friend",
       });
     } catch (e) {
-      if (e instanceof ApiError && (e.code === "forbidden" || e.code === "unauthorized"))
+      // bad_request alongside forbidden/unauthorized: Steam answers a raw 400 for
+      // some malformed/out-of-range steamids (e.g. accountid 0) instead of its
+      // usual private-profile response — treat it the same way.
+      if (
+        e instanceof ApiError &&
+        (e.code === "forbidden" || e.code === "unauthorized" || e.code === "bad_request")
+      )
         return null;
       throw e;
     }
@@ -367,10 +388,7 @@ export class SteamWebClient {
   // steamid owns, or null when the profile/game-details are private. Only
   // requested appids are kept — the caller never needs the rest of the library.
   async #ownedPlaytimes(steamid: string, appids: number[]): Promise<Map<number, number> | null> {
-    const res = await this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
-      steamid,
-      include_appinfo: false,
-    });
+    const res = await this.#ownedGamesRaw(steamid, { include_appinfo: false });
     if (res.response?.games === undefined && res.response?.game_count === undefined) return null;
     const wanted = new Set(appids);
     const playtimes = new Map<number, number>();
@@ -438,8 +456,15 @@ export class SteamWebClient {
 
   // A player's wishlist (needs the wishlist/profile to be public). Keyless.
   async #getWishlistLight(steamid: string): Promise<Record<string, unknown>> {
-    const res = await this.#get<WishlistResponse>("IWishlistService/GetWishlist/v1/", { steamid });
-    return summarizeWishlist(res);
+    try {
+      const res = await this.#get<WishlistResponse>("IWishlistService/GetWishlist/v1/", {
+        steamid,
+      });
+      return summarizeWishlist(res);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "bad_request") return summarizeWishlist({});
+      throw e;
+    }
   }
 
   // A player's followed games (needs the profile to be public). Keyless — a
@@ -447,10 +472,21 @@ export class SteamWebClient {
   // reports the true total independent of any cap on the appid list.
   async getFollowedGames(steamid: string): Promise<Record<string, unknown>> {
     const [list, count] = await Promise.all([
-      this.#get<FollowedGamesResponse>("IStoreService/GetGamesFollowed/v1/", { steamid }),
+      this.#followedGamesRaw(steamid),
       this.#followedGamesCount(steamid),
     ]);
     return summarizeFollowedGames(list, count);
+  }
+
+  async #followedGamesRaw(steamid: string): Promise<FollowedGamesResponse> {
+    try {
+      return await this.#get<FollowedGamesResponse>("IStoreService/GetGamesFollowed/v1/", {
+        steamid,
+      });
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "bad_request") return {};
+      throw e;
+    }
   }
 
   // The count is a best-effort cross-check (summarizeFollowedGames falls back to

@@ -6,6 +6,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix `get_owned_games`, `get_recently_played`, `get_recommended_games`, `compare_players`, `get_friend_list`, `find_friends_who_own`, `get_wishlist` and `get_followed_games` leaking a raw upstream HTML error instead of a clean `found:false` for a handful of malformed/out-of-range SteamID64s (e.g. accountid 0) that Steam itself answers with a raw HTTP 400 for.
+
 ## [0.10.1] - 2026-07-21
 
 ### Fixed

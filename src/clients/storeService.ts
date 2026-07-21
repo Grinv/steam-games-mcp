@@ -331,13 +331,7 @@ export class StoreServiceClient {
       data_request: storeCardDataRequest(20), // 20 tags: full set so tag filtering isn't capped
       sort: 0,
     };
-    const { res, tagMap } = await this.#fetchWithTags<WishlistDetailedResponse>(
-      "IWishlistService/GetWishlistSortedFiltered/v1/",
-      { input_json: JSON.stringify(input) },
-      l,
-      opts.tags,
-    );
-    return summarizeWishlistDetailed(res, tagMap, {
+    const filters = {
       onSaleOnly: opts.onSaleOnly,
       tags: opts.tags,
       minReview: opts.minReview,
@@ -347,6 +341,23 @@ export class StoreServiceClient {
       steamOs: opts.steamOs,
       steamMachine: opts.steamMachine,
       steamFrame: opts.steamFrame,
-    });
+    };
+    try {
+      const { res, tagMap } = await this.#fetchWithTags<WishlistDetailedResponse>(
+        "IWishlistService/GetWishlistSortedFiltered/v1/",
+        { input_json: JSON.stringify(input) },
+        l,
+        opts.tags,
+      );
+      return summarizeWishlistDetailed(res, tagMap, filters);
+    } catch (e) {
+      // Some malformed/out-of-range steamids (e.g. accountid 0) make Steam answer
+      // a raw HTTP 400 here instead of its usual empty-wishlist response — treat
+      // it the same way rather than leaking the raw upstream body to the agent.
+      if (e instanceof ApiError && e.code === "bad_request") {
+        return summarizeWishlistDetailed({}, undefined, filters);
+      }
+      throw e;
+    }
   }
 }

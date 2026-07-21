@@ -5,8 +5,15 @@
 // (Storefront tools) and steamPlayer.test.ts (key-gated player tools).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { setupServer, jsonResponse, assertToolError } from "./helpers.js";
+import { setupServer, jsonResponse, htmlResponse, assertToolError } from "./helpers.js";
 import { ENV, FOLLOWED, router, routerWithBrokenTagList } from "./steamFixtures.js";
+
+// Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
+// some malformed/out-of-range steamids — e.g. the SteamID64 base constant
+// (accountid 0), which is 17 digits and passes the tool schema but is never a
+// real account. Regression coverage for that raw body leaking to the agent.
+const ROUTING_400 =
+  "<html><body><h1>Bad Request</h1>Missing required routing parameter</body></html>";
 
 test("get_game_news works without a key", async (t) => {
   const { client } = await setupServer(
@@ -105,6 +112,20 @@ describe("get_wishlist", () => {
     assert.equal(s.items[0]!.name, "Portal 2");
     assert.equal(s.items[0]!.discount_pct, 80);
     assert.deepEqual(s.items[0]!.tags, ["Puzzle"]); // tagid 10 → Puzzle
+  });
+
+  test("get_wishlist include_details: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+      url.includes("GetWishlistSortedFiltered") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561197960265728", include_details: true }, // accountid 0
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /private/i);
   });
 
   test("get_wishlist on_sale_only keeps only discounted items, ranked by discount", async (t) => {
@@ -284,6 +305,20 @@ describe("get_wishlist", () => {
     assert.match(s.reason, /private/);
   });
 
+  test("get_wishlist: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+      url.includes("GetWishlist") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561197960265728" }, // accountid 0
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /private/i);
+  });
+
   test("get_wishlist: tags filter errors clearly when GetTagList is unavailable (no silent empty result)", async (t) => {
     const { client } = await setupServer(
       t,
@@ -416,6 +451,20 @@ describe("get_followed_games", () => {
       name: "get_followed_games",
       arguments: { steamid: "76561197960287930" },
     });
+    const s = res.structuredContent as { found: boolean; total: number };
+    assert.equal(s.found, false);
+    assert.equal(s.total, 0);
+  });
+
+  test("get_followed_games: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+      url.includes("GetGamesFollowed") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_followed_games",
+      arguments: { steamid: "76561197960265728" }, // accountid 0
+    });
+    assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; total: number };
     assert.equal(s.found, false);
     assert.equal(s.total, 0);

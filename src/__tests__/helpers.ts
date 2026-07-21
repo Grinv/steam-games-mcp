@@ -20,6 +20,16 @@ export function jsonResponse(
   });
 }
 
+/** A non-JSON error body, like the raw HTML "Bad Request" page Steam answers
+ *  for some malformed/out-of-range steamids (e.g. accountid 0) — jsonResponse
+ *  always JSON-encodes, which can't reproduce that shape. */
+export function htmlResponse(body: string, init: { status?: number } = {}): Response {
+  return new Response(body, {
+    status: init.status ?? 400,
+    headers: { "content-type": "text/html" },
+  });
+}
+
 type FetchArgs = Parameters<typeof fetch>;
 
 export interface FetchMock {
