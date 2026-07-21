@@ -3,8 +3,32 @@
 // achievement rarity and the (light) wishlist. The keyless store-service
 // formatters (GetItems/Query/tags/enriched wishlist) live in ./store.ts.
 // Companion to ./storefront.ts and ./shared.ts.
+//
+// Every exported summarizer builds its return value via a matching `.strict()`
+// zod schema's `.parse({...})` (see web.schemas.ts) instead of a bare object
+// literal — the schema is the single source of truth for the shape (see
+// storefront.ts's header comment for the full rationale).
 
+import { z } from "zod";
 import { hours, isoDay, storeUrl, stripHtml } from "./shared.js";
+import { notFoundReason, wishlistNotFound } from "./shared.schemas.js";
+import {
+  comparePlayersFound,
+  findFriendsWhoOwnFound,
+  friendListFound,
+  getCurrentPlayersOutput,
+  getFollowedGamesOutput,
+  getGameAchievementsOutput,
+  getGameNewsOutput,
+  getGlobalAchievementsOutput,
+  getOwnedGamesOutput,
+  getPlayerBansOutput,
+  getPlayerSummaryOutput,
+  getRecentlyPlayedOutput,
+  playerAchievementsFound,
+  vanityFound,
+  wishlistLightFound,
+} from "./web.schemas.js";
 
 // ---- Web API: player summary ------------------------------------------------
 
@@ -45,10 +69,10 @@ export interface SteamLevelResponse {
 export function summarizePlayer(
   r: PlayerSummariesResponse,
   level?: number | null,
-): Record<string, unknown> {
+): z.infer<typeof getPlayerSummaryOutput> {
   const p = r.response?.players?.[0];
-  if (!p) return { found: false };
-  return {
+  if (!p) return getPlayerSummaryOutput.parse({ found: false });
+  return getPlayerSummaryOutput.parse({
     found: true,
     steamid: p.steamid,
     name: p.personaname ?? null,
@@ -61,7 +85,7 @@ export function summarizePlayer(
     in_game: p.gameextrainfo || null,
     profile_url: p.profileurl ?? null,
     avatar: p.avatarfull ?? null,
-  };
+  });
 }
 
 // ---- Web API: owned / recently played ---------------------------------------
@@ -94,12 +118,14 @@ function isPrivate(r: OwnedGamesResponse): boolean {
 export function summarizeOwnedGames(
   r: OwnedGamesResponse,
   opts: { max?: number; checkAppids?: number[] } = {},
-): Record<string, unknown> {
+): z.infer<typeof getOwnedGamesOutput> {
   if (isPrivate(r)) {
     const base = { found: false, reason: PRIVATE_REASON, game_count: null, games: [] };
-    return opts.checkAppids
-      ? { ...base, owns: opts.checkAppids.map((appid) => ({ appid, owned: false })) }
-      : base;
+    return getOwnedGamesOutput.parse(
+      opts.checkAppids
+        ? { ...base, owns: opts.checkAppids.map((appid) => ({ appid, owned: false })) }
+        : base,
+    );
   }
   const all = r.response?.games ?? [];
   const games = all.slice().sort((a, b) => (b.playtime_forever ?? 0) - (a.playtime_forever ?? 0));
@@ -109,7 +135,7 @@ export function summarizeOwnedGames(
       .filter((g): g is OwnedGame & { appid: number } => typeof g.appid === "number")
       .map((g) => [g.appid, g]),
   );
-  return {
+  return getOwnedGamesOutput.parse({
     found: true,
     game_count: r.response?.game_count ?? games.length,
     returned: Math.min(games.length, max),
@@ -129,7 +155,7 @@ export function summarizeOwnedGames(
         };
       }),
     }),
-  };
+  });
 }
 
 const COMPARE_PRIVATE_REASON =
@@ -143,8 +169,10 @@ export function summarizeComparePlayers(
   a: OwnedGamesResponse,
   b: OwnedGamesResponse,
   max = 50,
-): Record<string, unknown> {
-  if (isPrivate(a) || isPrivate(b)) return { found: false, reason: COMPARE_PRIVATE_REASON };
+): z.infer<typeof notFoundReason> | z.infer<typeof comparePlayersFound> {
+  if (isPrivate(a) || isPrivate(b)) {
+    return notFoundReason.parse({ found: false, reason: COMPARE_PRIVATE_REASON });
+  }
   const gamesA = new Map((a.response?.games ?? []).map((g) => [g.appid, g]));
   const gamesB = new Map((b.response?.games ?? []).map((g) => [g.appid, g]));
   const shared = [...gamesA.keys()]
@@ -165,17 +193,26 @@ export function summarizeComparePlayers(
         (y.playtime_hours_b ?? 0) -
         ((x.playtime_hours_a ?? 0) + (x.playtime_hours_b ?? 0)),
     );
-  return {
+  return comparePlayersFound.parse({
     found: true,
     shared_count: shared.length,
     returned: Math.min(shared.length, max),
     games: shared.slice(0, max),
-  };
+  });
 }
 
-export function summarizeRecentlyPlayed(r: OwnedGamesResponse): Record<string, unknown> {
-  if (isPrivate(r)) return { found: false, reason: PRIVATE_REASON, total: 0, games: [] };
-  return {
+export function summarizeRecentlyPlayed(
+  r: OwnedGamesResponse,
+): z.infer<typeof getRecentlyPlayedOutput> {
+  if (isPrivate(r)) {
+    return getRecentlyPlayedOutput.parse({
+      found: false,
+      reason: PRIVATE_REASON,
+      total: 0,
+      games: [],
+    });
+  }
+  return getRecentlyPlayedOutput.parse({
     found: true,
     total: r.response?.game_count ?? r.response?.games?.length ?? 0,
     games: (r.response?.games ?? []).map((g) => ({
@@ -184,7 +221,7 @@ export function summarizeRecentlyPlayed(r: OwnedGamesResponse): Record<string, u
       playtime_2weeks_hours: hours(g.playtime_2weeks),
       playtime_hours: hours(g.playtime_forever),
     })),
-  };
+  });
 }
 
 // ---- Web API: player achievements -------------------------------------------
@@ -200,12 +237,14 @@ export interface PlayerAchievementsResponse {
 
 export function summarizePlayerAchievements(
   r: PlayerAchievementsResponse,
-): Record<string, unknown> {
+): z.infer<typeof notFoundReason> | z.infer<typeof playerAchievementsFound> {
   const ps = r.playerstats;
-  if (!ps?.success) return { found: false, reason: ps?.error ?? "No achievement stats" };
+  if (!ps?.success) {
+    return notFoundReason.parse({ found: false, reason: ps?.error ?? "No achievement stats" });
+  }
   const all = ps.achievements ?? [];
   const unlocked = all.filter((a) => a.achieved === 1);
-  return {
+  return playerAchievementsFound.parse({
     found: true,
     game: ps.gameName ?? null,
     total: all.length,
@@ -216,7 +255,7 @@ export function summarizePlayerAchievements(
       achieved: a.achieved === 1,
       unlocked_at: a.achieved === 1 ? isoDay(a.unlocktime) : null,
     })),
-  };
+  });
 }
 
 // ---- Web API: global achievement percentages --------------------------------
@@ -227,15 +266,15 @@ export interface GlobalAchievementsResponse {
 
 export function summarizeGlobalAchievements(
   r: GlobalAchievementsResponse,
-): Record<string, unknown> {
+): z.infer<typeof getGlobalAchievementsOutput> {
   const a = r.achievementpercentages?.achievements ?? [];
-  return {
+  return getGlobalAchievementsOutput.parse({
     count: a.length,
     achievements: a.map((x) => ({
       name: x.name,
       percent: typeof x.percent === "string" ? Number(x.percent) : (x.percent ?? null),
     })),
-  };
+  });
 }
 
 // ---- Web API: full achievement schema (key) + global rarity merge -----------
@@ -260,7 +299,7 @@ export interface GameSchemaResponse {
 export function summarizeGameSchema(
   schema: GameSchemaResponse,
   global: GlobalAchievementsResponse,
-): Record<string, unknown> {
+): z.infer<typeof getGameAchievementsOutput> {
   const pct = new Map<string, number>();
   for (const x of global.achievementpercentages?.achievements ?? []) {
     if (x.name != null) {
@@ -268,7 +307,7 @@ export function summarizeGameSchema(
     }
   }
   const list = schema.game?.availableGameStats?.achievements ?? [];
-  return {
+  return getGameAchievementsOutput.parse({
     game: schema.game?.gameName ?? null,
     total: list.length,
     achievements: list.map((a) => {
@@ -281,7 +320,7 @@ export function summarizeGameSchema(
         global_unlock_pct: typeof p === "number" ? Math.round(p * 10) / 10 : null,
       };
     }),
-  };
+  });
 }
 
 // ---- Web API: news ----------------------------------------------------------
@@ -300,8 +339,8 @@ export interface NewsResponse {
   };
 }
 
-export function summarizeNews(r: NewsResponse): Record<string, unknown> {
-  return {
+export function summarizeNews(r: NewsResponse): z.infer<typeof getGameNewsOutput> {
+  return getGameNewsOutput.parse({
     items: (r.appnews?.newsitems ?? []).map((n) => ({
       title: n.title ?? null,
       date: isoDay(n.date),
@@ -310,7 +349,7 @@ export function summarizeNews(r: NewsResponse): Record<string, unknown> {
       excerpt: stripHtml(n.contents),
       url: n.url ?? null,
     })),
-  };
+  });
 }
 
 // ---- Web API: resolve vanity url --------------------------------------------
@@ -319,10 +358,15 @@ export interface VanityResponse {
   response?: { success?: number; steamid?: string; message?: string };
 }
 
-export function summarizeVanity(r: VanityResponse): Record<string, unknown> {
+export function summarizeVanity(
+  r: VanityResponse,
+): z.infer<typeof vanityFound> | z.infer<typeof notFoundReason> {
   const v = r.response;
-  if (v?.success === 1 && v.steamid) return { found: true, steamid: v.steamid };
-  return { found: false, reason: v?.message ?? "No match for that vanity name" };
+  if (v?.success === 1 && v.steamid) return vanityFound.parse({ found: true, steamid: v.steamid });
+  return notFoundReason.parse({
+    found: false,
+    reason: v?.message ?? "No match for that vanity name",
+  });
 }
 
 // ---- Web API: current players (keyless) -------------------------------------
@@ -334,8 +378,8 @@ export interface CurrentPlayersResponse {
 export function summarizeCurrentPlayers(
   r: CurrentPlayersResponse,
   appid: number,
-): Record<string, unknown> {
-  return { appid, player_count: r.response?.player_count ?? null };
+): z.infer<typeof getCurrentPlayersOutput> {
+  return getCurrentPlayersOutput.parse({ appid, player_count: r.response?.player_count ?? null });
 }
 
 // ---- Web API: wishlist (keyless; needs a public wishlist) -------------------
@@ -346,18 +390,21 @@ export interface WishlistResponse {
 
 // A wishlist can hold tens of thousands of items; sort by priority (1 = top of
 // the list) and cap. Names aren't included — use get_game per appid for details.
-export function summarizeWishlist(r: WishlistResponse, max = 100): Record<string, unknown> {
+export function summarizeWishlist(
+  r: WishlistResponse,
+  max = 100,
+): z.infer<typeof wishlistNotFound> | z.infer<typeof wishlistLightFound> {
   const items = r.response?.items ?? [];
   if (items.length === 0) {
-    return {
+    return wishlistNotFound.parse({
       found: false,
       reason: "Empty wishlist, or the profile/wishlist is private.",
       total: 0,
       items: [],
-    };
+    });
   }
   const sorted = items.toSorted((a, b) => (a.priority ?? 1e9) - (b.priority ?? 1e9));
-  return {
+  return wishlistLightFound.parse({
     found: true,
     total: items.length,
     returned: Math.min(items.length, max),
@@ -367,7 +414,7 @@ export function summarizeWishlist(r: WishlistResponse, max = 100): Record<string
       priority: i.priority ?? null,
       added: isoDay(i.date_added),
     })),
-  };
+  });
 }
 
 // ---- Web API: player bans (key required; ban status is always public) ------
@@ -384,10 +431,10 @@ export interface PlayerBansResponse {
   }[];
 }
 
-export function summarizePlayerBans(r: PlayerBansResponse): Record<string, unknown> {
+export function summarizePlayerBans(r: PlayerBansResponse): z.infer<typeof getPlayerBansOutput> {
   const p = r.players?.[0];
-  if (!p) return { found: false };
-  return {
+  if (!p) return getPlayerBansOutput.parse({ found: false });
+  return getPlayerBansOutput.parse({
     found: true,
     steamid: p.SteamId,
     vac_banned: p.VACBanned ?? false,
@@ -396,7 +443,7 @@ export function summarizePlayerBans(r: PlayerBansResponse): Record<string, unkno
     community_banned: p.CommunityBanned ?? false,
     economy_ban: p.EconomyBan && p.EconomyBan !== "none" ? p.EconomyBan : null,
     days_since_last_ban: p.DaysSinceLastBan ?? null,
-  };
+  });
 }
 
 // ---- Web API: followed games (keyless; needs a public profile) -------------
@@ -416,22 +463,22 @@ export function summarizeFollowedGames(
   r: FollowedGamesResponse,
   countRes: FollowedGamesCountResponse,
   max = FOLLOWED_MAX,
-): Record<string, unknown> {
+): z.infer<typeof getFollowedGamesOutput> {
   const appids = r.response?.appids ?? [];
   if (appids.length === 0) {
-    return {
+    return getFollowedGamesOutput.parse({
       found: false,
       reason: "No followed games, or the profile is private.",
       total: 0,
       games: [],
-    };
+    });
   }
-  return {
+  return getFollowedGamesOutput.parse({
     found: true,
     total: countRes.response?.followed_game_count ?? appids.length,
     returned: Math.min(appids.length, max),
     games: appids.slice(0, max).map((appid) => ({ appid, store_url: storeUrl(appid) })),
-  };
+  });
 }
 
 // ---- Web API: friend list (key required; friends list must be public) ------
@@ -447,13 +494,15 @@ export function summarizeFriendList(
   r: FriendListResponse,
   players: PlayerSummariesResponse,
   max = 100,
-): Record<string, unknown> {
+): z.infer<typeof friendListFound> {
   const friends = r.friendslist?.friends ?? [];
-  if (friends.length === 0) return { found: true, total: 0, returned: 0, friends: [] };
+  if (friends.length === 0) {
+    return friendListFound.parse({ found: true, total: 0, returned: 0, friends: [] });
+  }
   const byId = new Map<string, PlayerSummary>();
   for (const p of players.response?.players ?? []) if (p.steamid) byId.set(p.steamid, p);
   const sorted = friends.toSorted((a, b) => (b.friend_since ?? 0) - (a.friend_since ?? 0));
-  return {
+  return friendListFound.parse({
     found: true,
     total: friends.length,
     returned: Math.min(friends.length, max),
@@ -468,7 +517,7 @@ export function summarizeFriendList(
         friends_since: isoDay(f.friend_since),
       };
     }),
-  };
+  });
 }
 
 // ---- Web API: find friends who own a game (key required) -------------------
@@ -481,7 +530,7 @@ export function summarizeFriendsWhoOwn(
   friendIds: string[],
   ownership: (Map<number, number> | null)[],
   players: PlayerSummariesResponse,
-): Record<string, unknown> {
+): z.infer<typeof findFriendsWhoOwnFound> {
   const byId = new Map<string, PlayerSummary>();
   for (const p of players.response?.players ?? []) if (p.steamid) byId.set(p.steamid, p);
   const nameOf = (steamid: string) => ({ steamid, name: byId.get(steamid)?.personaname ?? null });
@@ -502,10 +551,10 @@ export function summarizeFriendsWhoOwn(
     }
   });
 
-  return {
+  return findFriendsWhoOwnFound.parse({
     found: true,
     total_friends: friendIds.length,
     matches: appids.map((appid) => ({ appid, owners: owners.get(appid) ?? [] })),
     private_friends: privateFriends,
-  };
+  });
 }

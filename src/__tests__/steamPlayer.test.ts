@@ -274,6 +274,53 @@ describe("get_recommended_games", () => {
     assert.match(s.reason, /private/i);
   });
 
+  test("get_recommended_games reports found:false for a PUBLIC profile with zero games (distinct from private)", async (t) => {
+    // web.ts's own private-profile check (games/game_count both undefined)
+    // never fires here — this is storeService.getRecommendedGames' OWN
+    // "ownedGames.length === 0" branch, reached only once the profile is
+    // confirmed public but genuinely empty.
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetOwnedGames")
+        ? jsonResponse({ response: { game_count: 0, games: [] } })
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /no games to base recommendations/i);
+    assert.doesNotMatch(s.reason, /private/i);
+  });
+
+  test("get_recommended_games reports found:false when owned games resolve to no tags at all", async (t) => {
+    // Distinct from the empty-library branch: the player owns played games,
+    // but none of their tags resolve (e.g. GetItems returns items with no
+    // tags for those appids) — tagWeights ends up empty.
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("GetOwnedGames")) {
+        return jsonResponse({
+          response: { game_count: 1, games: [{ appid: 10, playtime_forever: 200 }] },
+        });
+      }
+      if (url.includes("GetTagList")) {
+        return jsonResponse({ response: { tags: [{ tagid: 1, name: "Roguelike" }] } });
+      }
+      if (url.includes("IStoreBrowseService/GetItems")) {
+        return jsonResponse({ response: { store_items: [{ appid: 10 }] } }); // no tags
+      }
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /resolvable tags/i);
+  });
+
   test("get_recommended_games errors clearly when the tag dictionary is unavailable", async (t) => {
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       if (url.includes("GetTagList")) return jsonResponse({}, { status: 500 });
@@ -326,6 +373,27 @@ describe("get_player_achievements", () => {
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
     assert.match(s.reason, /private/i);
+  });
+
+  test("get_player_achievements: 200 + success:false with a 'not public' error → private reason (no schema lookup needed)", async (t) => {
+    // Distinct from the 403 case above: here the HTTP call itself succeeds
+    // (200), so #getPlayerAchievements never throws/catches — the private
+    // disambiguation instead comes from #explainNoPlayerAchievements' OWN
+    // apiError-message regex, short-circuiting before it ever calls
+    // GetSchemaForGame (unlike the no-achievements/hidden tests below).
+    const { client, mock } = await setupServer(t, ENV, (url) =>
+      url.includes("GetPlayerAchievements")
+        ? jsonResponse({ playerstats: { success: false, error: "Profile is not public" } })
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 620 },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /private/i);
+    assert.ok(!mock.calls.some((c) => c.url.includes("GetSchemaForGame")));
   });
 
   test("get_player_achievements: success:false + game has no achievements", async (t) => {
@@ -429,6 +497,19 @@ describe("get_friend_list", () => {
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
     assert.match(s.reason, /friends list/i);
+  });
+
+  test("get_friend_list: a genuine 500 propagates as a tool error, not found:false", async (t) => {
+    // #friendsRaw only swallows 403/401 into null (→ found:false); every
+    // other failure code must still surface as a real error.
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+      url.includes("GetFriendList") ? jsonResponse({}, { status: 500 }) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_friend_list",
+      arguments: { steamid: "76561197960287930" },
+    });
+    assertToolError(res, /5xx|retry later/i);
   });
 });
 
@@ -565,36 +646,58 @@ describe("compare_players", () => {
     assert.equal(s.found, false);
     assert.match(s.reason, /private/i);
   });
+
+  test("compare_players succeeds (found:true, 0 shared) when a profile is public but genuinely empty", async (t) => {
+    // isPrivate() only trips on {game_count, games} BOTH undefined — a public
+    // profile with 0 games ({game_count:0, games:[]}) must NOT be conflated
+    // with private and must still report a real (empty) result.
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (!url.includes("GetOwnedGames")) return jsonResponse({});
+      if (url.includes("steamid=76561197960287931")) {
+        return jsonResponse({ response: { game_count: 0, games: [] } });
+      }
+      return jsonResponse(OWNED);
+    });
+    const res = await client.callTool({
+      name: "compare_players",
+      arguments: { steamid: "76561197960287930", other_steamid: "76561197960287931" },
+    });
+    const s = res.structuredContent as { found: boolean; shared_count: number };
+    assert.equal(s.found, true);
+    assert.equal(s.shared_count, 0);
+  });
 });
 
-test("resolve_vanity_url returns the steamid", async (t) => {
-  const { client, mock } = await setupServer(t, ENV, router);
-  const res = await client.callTool({
-    name: "resolve_vanity_url",
-    arguments: { vanity: "gabe" },
+describe("resolve_vanity_url", () => {
+  test("returns the steamid", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    const res = await client.callTool({
+      name: "resolve_vanity_url",
+      arguments: { vanity: "gabe" },
+    });
+    const s = res.structuredContent as { found: boolean; steamid: string };
+    assert.equal(s.found, true);
+    assert.equal(s.steamid, "76561197960287930");
+    assert.ok(mock.calls.some((c) => c.url.includes("key=test-key")));
   });
-  const s = res.structuredContent as { found: boolean; steamid: string };
-  assert.equal(s.found, true);
-  assert.equal(s.steamid, "76561197960287930");
-  assert.ok(mock.calls.some((c) => c.url.includes("key=test-key")));
-});
 
-// An unmatched vanity name is a normal, successful "no match" result — not a
-// tool error — and Steam's own `message` (when present) is surfaced as the reason.
-test("resolve_vanity_url reports found:false for a vanity name with no match", async (t) => {
-  const { client } = await setupServer(t, ENV, (url) =>
-    url.includes("ResolveVanityURL")
-      ? jsonResponse({ response: { success: 42, message: "No match" } })
-      : jsonResponse({}),
-  );
-  const res = await client.callTool({
-    name: "resolve_vanity_url",
-    arguments: { vanity: "zzzznobody" },
+  // An unmatched vanity name is a normal, successful "no match" result — not a
+  // tool error — and Steam's own `message` (when present) is surfaced as the reason.
+  test("reports found:false for a vanity name with no match", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("ResolveVanityURL")
+        ? jsonResponse({ response: { success: 42, message: "No match" } })
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "resolve_vanity_url",
+      arguments: { vanity: "zzzznobody" },
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /no match/i);
   });
-  assert.equal(res.isError, undefined);
-  const s = res.structuredContent as { found: boolean; reason: string };
-  assert.equal(s.found, false);
-  assert.match(s.reason, /no match/i);
 });
 
 describe("get_game_achievements", () => {
@@ -619,25 +722,73 @@ describe("get_game_achievements", () => {
   });
 });
 
-test("player tools fall back to STEAM_ID (SteamID64) when steamid is omitted", async (t) => {
-  const { client, mock } = await setupServer(t, { ...ENV, STEAM_ID: "76561197960287930" }, router);
-  const res = await client.callTool({ name: "get_owned_games", arguments: {} });
-  const s = res.structuredContent as { game_count: number };
-  assert.equal(s.game_count, 2);
-  // The configured SteamID64 reached the upstream call.
-  assert.ok(mock.calls.some((c) => c.url.includes("steamid=76561197960287930")));
+describe("STEAM_ID default / vanity resolution", () => {
+  test("player tools fall back to STEAM_ID (SteamID64) when steamid is omitted", async (t) => {
+    const { client, mock } = await setupServer(
+      t,
+      { ...ENV, STEAM_ID: "76561197960287930" },
+      router,
+    );
+    const res = await client.callTool({ name: "get_owned_games", arguments: {} });
+    const s = res.structuredContent as { game_count: number };
+    assert.equal(s.game_count, 2);
+    // The configured SteamID64 reached the upstream call.
+    assert.ok(mock.calls.some((c) => c.url.includes("steamid=76561197960287930")));
+  });
+
+  test("a vanity STEAM_ID is resolved once, then reused for player tools", async (t) => {
+    const { client, mock } = await setupServer(t, { ...ENV, STEAM_ID: "gabe" }, router);
+    const res = await client.callTool({ name: "get_player_summary", arguments: {} });
+    const s = res.structuredContent as { found: boolean; steamid: string; level: number };
+    assert.equal(s.found, true);
+    assert.equal(s.steamid, "76561197960287930");
+    assert.equal(s.level, 42); // from GetSteamLevel, merged in alongside the profile
+    assert.ok(mock.calls.some((c) => c.url.includes("ResolveVanityURL")));
+    assert.ok(mock.calls.some((c) => c.url.includes("GetPlayerSummaries")));
+    assert.ok(mock.calls.some((c) => c.url.includes("GetSteamLevel")));
+  });
+
+  // requireSteamId's own "needs a key to resolve" branch (web.ts) is unreachable
+  // from webPlayer.ts tools — requireKey there already gates on the key first.
+  // It's only reachable via a keyless-capable tool (get_followed_games), which
+  // resolves STEAM_ID without requiring a key overall.
+  test("a vanity STEAM_ID without a key errors clearly (needs STEAM_API_KEY to resolve it)", async (t) => {
+    const { client } = await setupServer(t, { STEAM_ID: "gabe" }, router); // no STEAM_API_KEY
+    const res = await client.callTool({ name: "get_followed_games", arguments: {} });
+    assertToolError(res, /STEAM_API_KEY/);
+  });
+
+  test("a vanity STEAM_ID that fails to resolve errors clearly", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, STEAM_ID: "nobody-such-vanity" }, (url) =>
+      url.includes("ResolveVanityURL")
+        ? jsonResponse({ response: { success: 42 } }) // no steamid — unresolvable
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({ name: "get_followed_games", arguments: {} });
+    assertToolError(res, /could not resolve/i);
+  });
+
+  test("player tools error clearly when steamid is omitted and STEAM_ID is unset", async (t) => {
+    const { client } = await setupServer(t, ENV, router); // key set, but no STEAM_ID
+    const res = await client.callTool({ name: "get_player_summary", arguments: {} });
+    assertToolError(res, /STEAM_ID/);
+  });
 });
 
-test("a vanity STEAM_ID is resolved once, then reused for player tools", async (t) => {
-  const { client, mock } = await setupServer(t, { ...ENV, STEAM_ID: "gabe" }, router);
-  const res = await client.callTool({ name: "get_player_summary", arguments: {} });
-  const s = res.structuredContent as { found: boolean; steamid: string; level: number };
+test("get_player_summary still succeeds (level:null) when GetSteamLevel itself fails", async (t) => {
+  // #steamLevel's own try/catch must never turn a working profile lookup into
+  // a tool error — a level fetch failure degrades to null, nothing more.
+  const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+    url.includes("GetSteamLevel") ? jsonResponse({}, { status: 500 }) : router(url),
+  );
+  const res = await client.callTool({
+    name: "get_player_summary",
+    arguments: { steamid: "76561197960287930" },
+  });
+  assert.equal(res.isError, undefined);
+  const s = res.structuredContent as { found: boolean; level: number | null };
   assert.equal(s.found, true);
-  assert.equal(s.steamid, "76561197960287930");
-  assert.equal(s.level, 42); // from GetSteamLevel, merged in alongside the profile
-  assert.ok(mock.calls.some((c) => c.url.includes("ResolveVanityURL")));
-  assert.ok(mock.calls.some((c) => c.url.includes("GetPlayerSummaries")));
-  assert.ok(mock.calls.some((c) => c.url.includes("GetSteamLevel")));
+  assert.equal(s.level, null);
 });
 
 test("get_player_bans reports ban status by steamid", async (t) => {
@@ -660,30 +811,4 @@ test("get_player_bans reports ban status by steamid", async (t) => {
   assert.equal(s.game_ban_count, 0);
   assert.equal(s.community_banned, false);
   assert.equal(s.economy_ban, null); // EconomyBan "none" → null
-});
-
-// requireSteamId's own "needs a key to resolve" branch (web.ts) is unreachable
-// from webPlayer.ts tools — requireKey there already gates on the key first.
-// It's only reachable via a keyless-capable tool (get_followed_games), which
-// resolves STEAM_ID without requiring a key overall.
-test("a vanity STEAM_ID without a key errors clearly (needs STEAM_API_KEY to resolve it)", async (t) => {
-  const { client } = await setupServer(t, { STEAM_ID: "gabe" }, router); // no STEAM_API_KEY
-  const res = await client.callTool({ name: "get_followed_games", arguments: {} });
-  assertToolError(res, /STEAM_API_KEY/);
-});
-
-test("a vanity STEAM_ID that fails to resolve errors clearly", async (t) => {
-  const { client } = await setupServer(t, { ...ENV, STEAM_ID: "nobody-such-vanity" }, (url) =>
-    url.includes("ResolveVanityURL")
-      ? jsonResponse({ response: { success: 42 } }) // no steamid — unresolvable
-      : jsonResponse({}),
-  );
-  const res = await client.callTool({ name: "get_followed_games", arguments: {} });
-  assertToolError(res, /could not resolve/i);
-});
-
-test("player tools error clearly when steamid is omitted and STEAM_ID is unset", async (t) => {
-  const { client } = await setupServer(t, ENV, router); // key set, but no STEAM_ID
-  const res = await client.callTool({ name: "get_player_summary", arguments: {} });
-  assertToolError(res, /STEAM_ID/);
 });

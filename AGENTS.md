@@ -57,7 +57,9 @@ src/
   version.ts      # VERSION/USER_AGENT, kept in sync with package.json by a test
   format/         # raw Steam payloads → trimmed, agent-facing shapes: storefront.ts,
                   #   web.ts (official Web API: player data), store.ts (keyless store
-                  #   services: GetItems/Query/tags/enriched wishlist), shared.ts (helpers)
+                  #   services: GetItems/Query/tags/enriched wishlist), shared.ts (helpers).
+                  #   Each has a co-located *.schemas.ts (schema-first: the shaper builds
+                  #   its return value via `schema.parse({...})`, see Conventions below)
   lib/            # GENERIC carcass: http, rateLimit, cache, errors, logger, result
   clients/        # storefront.ts (keyless store), web.ts (official Web API; key
                   #   optional; builds storeService.ts, exposed via `.store` for
@@ -92,17 +94,23 @@ npm run inspector      # run under the MCP Inspector
 - Runtime floor is **Node ≥ 20** (global `fetch`, stable `node:test`); tsup
   targets `node20`.
 - **Never write to stdout** — it is the MCP protocol channel. Use the logger,
-  which writes to **stderr** and redacts credentials (the Web API key travels as
-  a `key` query param). The logger also mirrors each line to the MCP client as a
-  `notifications/message` (the server declares the `logging` capability); that
-  travels as proper JSON-RPC over the transport, not as raw stdout. To add a log
+  which writes to **stderr only** and redacts credentials (the Web API key
+  travels as a `key` query param). There is no MCP `logging` capability and no
+  `notifications/message` mirroring (removed per SEP-2577 / protocol
+  2026-07-28 — see `src/server.ts`'s comment on `serveStdio`). To add a log
   destination, pass a `sink` to `createLogger` rather than calling `console.*`.
 - Tool failures return `{ isError: true }` results (via `guard()` / `result.ts`),
   never thrown — the agent should get an actionable message.
 - Keep clients fetch+cache only; all raw→agent-facing shaping lives in
   `src/format/` (`storefront.ts` / `web.ts` / `store.ts`, generic helpers in
-  `shared.ts`). Trim responses for token efficiency (cap big lists like a
+  `shared.ts`). Every exported summarizer builds its return value via its
+  co-located schema's `schema.parse({...})` (schema-first: the schema is the
+  single source of truth, so the shaper and its `outputSchema` can't drift
+  apart) — `.parse()` calls and schema imports belong only in `format/`, never
+  in `clients/`. Trim responses for token efficiency (cap big lists like a
   player's library, a game's achievements, or a friend list).
+- Use `describe()`/`test()` nesting in `src/__tests__/` whenever 2+ tests share
+  a subject; a flat list of `test()` calls is fine for single-subject files.
 - Write tool `description`s and per-field `.describe()` text for the calling
   model: explain when to use a tool and what each parameter means. Check new
   or edited descriptions against [docs/tool-descriptions.md](docs/tool-descriptions.md)

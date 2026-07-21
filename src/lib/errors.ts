@@ -51,9 +51,14 @@ export function classifyStatus(status: number): { code: ApiErrorCode; retryable:
 
 /** Strip anything that looks like a credential before logging. The Steam Web
  *  API key travels as a `key` query param (e.g. logged request URLs), so it is
- *  redacted alongside the OAuth-style token params. */
+ *  redacted alongside the OAuth-style token params and the `apikey`/`api_key`
+ *  spellings other upstreams use — `\b` alone doesn't stop `key` from matching
+ *  mid-word (no boundary between word characters), hence the explicit variants. */
 export function redact(input: string): string {
   return input
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer ***")
-    .replace(/\b(access_token|refresh_token|client_secret|client_id|key)=([^&\s"]+)/gi, "$1=***");
+    .replace(
+      /\b(access_token|refresh_token|client_secret|client_id|api_key|apikey|key)=([^&\s"]+)/gi,
+      "$1=***",
+    );
 }

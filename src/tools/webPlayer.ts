@@ -4,11 +4,36 @@
 // be public). Split out of a single tools/web.ts once it grew past ~550 lines —
 // see tools/webStore.ts for the keyless-capable half.
 import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
 import { errorResult, type ToolResult } from "../lib/result.js";
 import { READ_ONLY, appid, reply } from "./common.js";
 import { steamid, steamIdTool } from "./webShared.js";
+import { notFoundReason, withNotFound } from "../format/shared.schemas.js";
+import { recommendedGamesFound } from "../format/store.schemas.js";
+import {
+  comparePlayersFound,
+  findFriendsWhoOwnFound,
+  friendListFound,
+  getGameAchievementsOutput,
+  getOwnedGamesOutput,
+  getPlayerBansOutput,
+  getPlayerSummaryOutput,
+  getRecentlyPlayedOutput,
+  playerAchievementsFound,
+  vanityFound,
+} from "../format/web.schemas.js";
+
+// Each of these tools has a found:false shape thrown by the CLIENT layer
+// (clients/web.ts, clients/storeService.ts) before the matching format/*.ts
+// summarizer ever runs, sharing the generic `notFoundReason` fragment — the
+// union with the summarizer's own found:true shape is assembled here.
+const comparePlayersOutput = withNotFound(notFoundReason, comparePlayersFound);
+const findFriendsWhoOwnOutput = withNotFound(notFoundReason, findFriendsWhoOwnFound);
+const getFriendListOutput = withNotFound(notFoundReason, friendListFound);
+const getPlayerAchievementsOutput = withNotFound(notFoundReason, playerAchievementsFound);
+const getRecommendedGamesOutput = withNotFound(notFoundReason, recommendedGamesFound);
+const resolveVanityUrlOutput = withNotFound(notFoundReason, vanityFound);
 
 export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): void {
   // Gate every tool in this file on the key; one clear message instead of a
@@ -34,14 +59,15 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "global unlock % (rarity). Requires STEAM_API_KEY (the achievement schema needs a key). " +
         "For just the rarity by internal id without a key, use get_global_achievements; for a few " +
         "named highlights, see get_game's achievements_highlighted. Get the appid from search_games.",
-      inputSchema: {
+      inputSchema: z.object({
         appid,
         language: z
           .string()
           .min(2)
           .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
           .optional(),
-      },
+      }),
+      outputSchema: getGameAchievementsOutput,
       annotations: READ_ONLY,
     },
     ({ appid: id, language }) => requireKey(() => web.getGameAchievements(id, language)),
@@ -53,15 +79,17 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       title: "Resolve vanity URL to SteamID",
       description:
         "Convert a Steam custom (vanity) profile name — the part after /id/ in a profile URL — into " +
-        "the 17-digit SteamID64 that the player tools need. Requires STEAM_API_KEY.",
-      inputSchema: {
+        "the 17-digit SteamID64 that the player tools need. Requires STEAM_API_KEY. Returns " +
+        "found:false if the name doesn't resolve to a profile.",
+      inputSchema: z.object({
         vanity: z
           .string()
           .min(1)
           .describe(
             "Vanity name, e.g. 'gabelogannewell' from steamcommunity.com/id/gabelogannewell.",
           ),
-      },
+      }),
+      outputSchema: resolveVanityUrlOutput,
       annotations: READ_ONLY,
     },
     ({ vanity }) => requireKey(() => web.resolveVanityUrl(vanity)),
@@ -74,10 +102,11 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       description:
         "List a player's Steam friends by SteamID64: name, online state, current game and how " +
         "long they've been friends, most-recently-added first. Requires STEAM_API_KEY and the " +
-        "friends list to be public. For 'which of my friends own game X', use find_friends_who_own " +
-        "instead — it checks each friend's full library, not just this list. Get the SteamID64 from " +
-        "resolve_vanity_url.",
-      inputSchema: { steamid },
+        "friends list to be public — otherwise it returns found:false. For 'which of my friends own " +
+        "game X', use find_friends_who_own instead — it checks each friend's full library, not just " +
+        "this list. Get the SteamID64 from resolve_vanity_url.",
+      inputSchema: z.object({ steamid }),
+      outputSchema: getFriendListOutput,
       annotations: READ_ONLY,
     },
     steamIdTool(web, requireKey, (sid) => web.getFriendList(sid)),
@@ -93,17 +122,19 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "each friend's FULL library, unlike get_friend_list which caps at the top 50 games by " +
         "playtime — so a friend's rarely-played or unplayed copy is never missed (its playtime_hours " +
         "may still be low or 0). For the PLAYER'S OWN ownership instead of a friend's, use " +
-        "get_owned_games's check_appids. Requires STEAM_API_KEY and the player's friends list " +
-        "to be public; friends with a private library are listed separately in private_friends " +
-        "(can't be checked) rather than silently counted as non-owners. Get appids from search_games.",
-      inputSchema: {
+        "get_owned_games's check_appids. Requires STEAM_API_KEY and the player's OWN friends list " +
+        "to be public — otherwise the whole call returns found:false. A friend's individually private " +
+        "library is a different, per-friend case: that friend is listed in private_friends (can't be " +
+        "checked) rather than silently counted as a non-owner. Get appids from search_games.",
+      inputSchema: z.object({
         appids: z
           .array(z.number().int().positive())
           .min(1)
           .max(10)
           .describe("Steam appids to check (1-10)."),
         steamid,
-      },
+      }),
+      outputSchema: findFriendsWhoOwnOutput,
       annotations: READ_ONLY,
     },
     ({ appids, steamid: id }) =>
@@ -118,8 +149,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "Find games two players both own, with each one's playtime — 'what can my friend and I both " +
         "play', 'do we have anything in common'. Checks each player's FULL library, unlike " +
         "get_owned_games which caps at the top 50 by playtime. Requires STEAM_API_KEY and both " +
-        "profiles' game-details to be public. Omit steamid to compare against yourself (STEAM_ID).",
-      inputSchema: {
+        "profiles' game-details to be public — otherwise it returns found:false. Omit steamid to " +
+        "compare against yourself (STEAM_ID).",
+      inputSchema: z.object({
         steamid,
         other_steamid: z
           .string()
@@ -128,7 +160,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
             "A SteamID64 is 17 digits. Use resolve_vanity_url to convert a custom profile name.",
           )
           .describe("The other player's 17-digit SteamID64 to compare against."),
-      },
+      }),
+      outputSchema: comparePlayersOutput,
       annotations: READ_ONLY,
     },
     ({ steamid: id, other_steamid }) =>
@@ -143,7 +176,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "Get a player's public profile by SteamID64: display name, online state, country, account " +
         "age, Steam level, and the game they're currently in. Requires STEAM_API_KEY and a public " +
         "profile. For VAC/game/trade ban status instead, use get_player_bans.",
-      inputSchema: { steamid },
+      inputSchema: z.object({ steamid }),
+      outputSchema: getPlayerSummaryOutput,
       annotations: READ_ONLY,
     },
     steamIdTool(web, requireKey, (sid) => web.getPlayerSummary(sid)),
@@ -157,7 +191,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "Check a player's VAC, game, community and economy (trade) ban status by SteamID64 — 'is this " +
         "player banned', useful before trading or adding a friend. Ban status is always public — this " +
         "works even when the rest of the profile is private. Requires STEAM_API_KEY.",
-      inputSchema: { steamid },
+      inputSchema: z.object({ steamid }),
+      outputSchema: getPlayerBansOutput,
       annotations: READ_ONLY,
     },
     steamIdTool(web, requireKey, (sid) => web.getPlayerBans(sid)),
@@ -175,7 +210,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "library, with each result's own playtime_hours (null if not owned). For checking a FRIEND's " +
         "ownership instead of the player's own, use find_friends_who_own. Requires STEAM_API_KEY and " +
         "a public profile + game-details visibility. Get the SteamID64 from resolve_vanity_url.",
-      inputSchema: {
+      inputSchema: z.object({
         steamid,
         check_appids: z
           .array(z.number().int().positive())
@@ -186,7 +221,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
               "playtime cap on `games`. Adds an `owns` field: [{appid, owned, playtime_hours}].",
           )
           .optional(),
-      },
+      }),
+      outputSchema: getOwnedGamesOutput,
       annotations: READ_ONLY,
     },
     ({ steamid: id, check_appids }) =>
@@ -201,7 +237,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "List the games a player has played in the last two weeks, with recent and total playtime. " +
         "For all-time top games by playtime instead (capped to the top 50), use get_owned_games. " +
         "Requires STEAM_API_KEY and a public profile.",
-      inputSchema: { steamid },
+      inputSchema: z.object({ steamid }),
+      outputSchema: getRecentlyPlayedOutput,
       annotations: READ_ONLY,
     },
     steamIdTool(web, requireKey, (sid) => web.getRecentlyPlayed(sid)),
@@ -228,8 +265,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "instead. Note: candidates are scored from a large but fixed-size catalog scan, so a heavy " +
         "exclude_tags/min_discount combination can return fewer than `count` — there's no larger scan " +
         "to fall back to. Requires STEAM_API_KEY and a public profile with game-details visible " +
-        "(same requirement as get_owned_games).",
-      inputSchema: {
+        "(same requirement as get_owned_games) — otherwise it returns found:false.",
+      inputSchema: z.object({
         steamid,
         count: z
           .number()
@@ -255,7 +292,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
             "Minimum discount %, e.g. 30 for '30%+ off'. Omit to include full-price games too.",
           )
           .optional(),
-      },
+      }),
+      outputSchema: getRecommendedGamesOutput,
       annotations: READ_ONLY,
     },
     ({ steamid: id, count, exclude_tags, min_discount }) =>
@@ -277,8 +315,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "unlock dates) by SteamID64 + appid. For the game's full achievement list (names, " +
         "descriptions, global rarity) independent of any player, use get_game_achievements instead; " +
         "for just the rarity without a key, use get_global_achievements. Requires STEAM_API_KEY and " +
-        "a public profile.",
-      inputSchema: {
+        "a public profile — otherwise it returns found:false (also returned if the game has no " +
+        "achievements at all).",
+      inputSchema: z.object({
         steamid,
         appid,
         language: z
@@ -286,7 +325,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
           .min(2)
           .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
           .optional(),
-      },
+      }),
+      outputSchema: getPlayerAchievementsOutput,
       annotations: READ_ONLY,
     },
     ({ steamid: id, appid: app, language }) =>

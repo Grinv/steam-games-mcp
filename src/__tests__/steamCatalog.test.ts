@@ -39,6 +39,22 @@ test("get_current_players works without a key and returns the count", async (t) 
   assert.equal(s.player_count, 12345);
 });
 
+test("get_current_players errors on an unknown appid instead of reporting a silent null count", async (t) => {
+  // Regression: Steam answers 200 with `{result:42}` (no player_count) for an
+  // invalid/unknown appid — verified live — which used to pass through as
+  // player_count:null, indistinguishable from a genuine (nonexistent) zero.
+  const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+    url.includes("GetNumberOfCurrentPlayers")
+      ? jsonResponse({ response: { result: 42 } })
+      : jsonResponse({}),
+  );
+  const res = await client.callTool({
+    name: "get_current_players",
+    arguments: { appid: 999999999 },
+  });
+  assertToolError(res, /no matching resource|not found/i);
+});
+
 describe("get_wishlist", () => {
   test("get_wishlist sorts by priority (no key) and reports private as not-found", async (t) => {
     const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
@@ -277,6 +293,30 @@ describe("get_wishlist", () => {
     // triggered the detailed (store-card) path instead of being dropped.
     assert.equal(s.items[0]!.name, "Portal 2");
   });
+
+  test("get_wishlist: min_review alone also switches to detailed mode", async (t) => {
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353", min_review: 0 },
+    });
+    const s = res.structuredContent as { items: { appid: number; name?: string }[] };
+    assert.equal(s.items[0]!.name, "Portal 2");
+  });
+
+  test("get_wishlist: explicit on_sale_only:false does NOT force detailed mode (light list stays light)", async (t) => {
+    // Regression per clients/web.ts#getWishlist's own comment: onSaleOnly is
+    // checked by truthiness so `false` means "don't require a discount", not
+    // an opt-in to the detailed card view — distinct from every other filter
+    // field, which triggers detailed just by being present (even at 0/undefined-ish).
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353", on_sale_only: false },
+    });
+    const s = res.structuredContent as { items: { appid: number; name?: string }[] };
+    assert.equal(s.items[0]!.name, undefined);
+  });
 });
 
 describe("get_items", () => {
@@ -432,6 +472,34 @@ describe("discover_games", () => {
     const res = await client.callTool({
       name: "discover_games",
       arguments: { released_after: "2020-01-01" },
+    });
+    const s = res.structuredContent as { deals: unknown[] };
+    assert.equal(s.deals.length, 0);
+  });
+
+  test("discover_games released_within_days computes a rolling cutoff (not just released_after)", async (t) => {
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    // Portal 2's fixture release date is 2011 — well outside any recent window.
+    const recent = await client.callTool({
+      name: "discover_games",
+      arguments: { released_within_days: 365 },
+    });
+    assert.equal((recent.structuredContent as { deals: unknown[] }).deals.length, 0);
+    // A window wide enough to cover 2011 must still include it.
+    const wide = await client.callTool({
+      name: "discover_games",
+      arguments: { released_within_days: 365 * 20 },
+    });
+    assert.ok((wide.structuredContent as { deals: { appid: number }[] }).deals.length >= 1);
+  });
+
+  test("discover_games: an explicit released_after wins over released_within_days when both are given", async (t) => {
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    const res = await client.callTool({
+      name: "discover_games",
+      // released_after (2020) would exclude Portal 2 (2011); released_within_days
+      // (huge window) would include it — the explicit date must win.
+      arguments: { released_after: "2020-01-01", released_within_days: 365 * 20 },
     });
     const s = res.structuredContent as { deals: unknown[] };
     assert.equal(s.deals.length, 0);

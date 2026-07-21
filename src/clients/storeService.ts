@@ -12,6 +12,7 @@
 // rate limiter and one cache, not one each.
 import { ApiError } from "../lib/errors.js";
 import type { TtlCache } from "../lib/cache.js";
+import { notFound } from "../format/shared.js";
 import {
   computeFavoriteTagWeights,
   summarizeDiscover,
@@ -158,10 +159,7 @@ export class StoreServiceClient {
     } = {},
   ): Promise<Record<string, unknown>> {
     if (ownedGames.length === 0) {
-      return {
-        found: false,
-        reason: "This player's library has no games to base recommendations on.",
-      };
+      return notFound("This player's library has no games to base recommendations on.");
     }
     const l = opts.language ?? this.#l;
     const cc = opts.country ?? this.#country;
@@ -195,10 +193,7 @@ export class StoreServiceClient {
       tagMap,
     );
     if (tagWeights.size === 0) {
-      return {
-        found: false,
-        reason: "Not enough played games with resolvable tags to build recommendations.",
-      };
+      return notFound("Not enough played games with resolvable tags to build recommendations.");
     }
     const basedOnTags = [...tagWeights.entries()]
       .sort((a, b) => b[1] - a[1])

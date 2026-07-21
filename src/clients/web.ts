@@ -8,6 +8,7 @@ import { HttpClient } from "../lib/http.js";
 import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
 import { ApiError } from "../lib/errors.js";
+import { notFound } from "../format/shared.js";
 import {
   summarizeComparePlayers,
   summarizeCurrentPlayers,
@@ -218,7 +219,7 @@ export class SteamWebClient {
       include_played_free_games: true,
     });
     if (res.response?.games === undefined && res.response?.game_count === undefined) {
-      return { found: false, reason: PRIVATE_PROFILE_REASON };
+      return notFound(PRIVATE_PROFILE_REASON);
     }
     const games = (res.response?.games ?? [])
       .filter((g): g is { appid: number; playtime_forever?: number } => typeof g.appid === "number")
@@ -260,7 +261,7 @@ export class SteamWebClient {
       // Steam answers 403 for a private profile, 400 for an app with no stats /
       // not owned. Turn both into a clear, actionable reason.
       if (e instanceof ApiError && (e.code === "forbidden" || e.code === "unauthorized")) {
-        return { found: false, reason: PRIVATE_PROFILE_REASON };
+        return notFound(PRIVATE_PROFILE_REASON);
       }
       if (e instanceof ApiError && (e.code === "bad_request" || e.code === "not_found")) {
         return this.#explainNoPlayerAchievements(appid, l);
@@ -278,7 +279,7 @@ export class SteamWebClient {
     apiError?: string,
   ): Promise<Record<string, unknown>> {
     if (apiError && /not public|private/i.test(apiError)) {
-      return { found: false, reason: PRIVATE_PROFILE_REASON };
+      return notFound(PRIVATE_PROFILE_REASON);
     }
     try {
       const schema = await this.#get<GameSchemaResponse>("ISteamUserStats/GetSchemaForGame/v2/", {
@@ -286,14 +287,13 @@ export class SteamWebClient {
         l,
       });
       const has = (schema.game?.availableGameStats?.achievements?.length ?? 0) > 0;
-      return {
-        found: false,
-        reason: has
+      return notFound(
+        has
           ? "This game has achievements, but the player's data is hidden (private game-details, or they don't own it)."
           : "This game has no achievements.",
-      };
+      );
     } catch {
-      return { found: false, reason: apiError || "Achievements unavailable." };
+      return notFound(apiError || "Achievements unavailable.");
     }
   }
 
@@ -341,7 +341,7 @@ export class SteamWebClient {
   // via GetPlayerSummaries.
   async getFriendList(steamid: string): Promise<Record<string, unknown>> {
     const res = await this.#friendsRaw(steamid);
-    if (res === null) return { found: false, reason: PRIVATE_FRIENDS_REASON };
+    if (res === null) return notFound(PRIVATE_FRIENDS_REASON);
     return summarizeFriendList(res, await this.#playerSummaries(friendIdsOf(res)));
   }
 
@@ -353,7 +353,7 @@ export class SteamWebClient {
   // #ownedPlaytimes reports as null.
   async findFriendsWhoOwn(steamid: string, appids: number[]): Promise<Record<string, unknown>> {
     const res = await this.#friendsRaw(steamid);
-    if (res === null) return { found: false, reason: PRIVATE_FRIENDS_REASON };
+    if (res === null) return notFound(PRIVATE_FRIENDS_REASON);
     const ids = friendIdsOf(res);
     if (ids.length === 0) return summarizeFriendsWhoOwn(appids, [], [], {});
     const [players, ownership] = await Promise.all([
@@ -403,11 +403,18 @@ export class SteamWebClient {
   }
 
   // Current concurrent player count for a game. Not cached — it's a live number.
+  // `result` is Steam's own success flag, independent of HTTP status (an
+  // unknown/invalid appid still answers 200): 1 = ok, anything else means the
+  // appid wasn't found — verified live (a bogus appid answers `{result:42}`
+  // with no `player_count` at all, not a genuine zero).
   async getCurrentPlayers(appid: number): Promise<Record<string, unknown>> {
     const res = await this.#get<CurrentPlayersResponse>(
       "ISteamUserStats/GetNumberOfCurrentPlayers/v1/",
       { appid },
     );
+    if (res.response?.result !== 1) {
+      throw new ApiError({ code: "not_found", message: `No Steam app with id ${appid}` });
+    }
     return summarizeCurrentPlayers(res, appid);
   }
 

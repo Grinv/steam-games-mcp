@@ -5,7 +5,7 @@
 // tools/web.ts once it grew past ~550 lines — see tools/webPlayer.ts for the
 // key-required half.
 import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
 import type { StoreServiceClient } from "../clients/storeService.js";
 import {
@@ -21,6 +21,25 @@ import {
   steamOs,
 } from "./common.js";
 import { steamid, steamIdTool } from "./webShared.js";
+import { wishlistNotFound, withNotFound } from "../format/shared.schemas.js";
+import {
+  discoverGamesOutput,
+  getItemsOutput,
+  wishlistDetailedFound,
+} from "../format/store.schemas.js";
+import {
+  getCurrentPlayersOutput,
+  getFollowedGamesOutput,
+  getGameNewsOutput,
+  getGlobalAchievementsOutput,
+  wishlistLightFound,
+} from "../format/web.schemas.js";
+
+// get_wishlist dispatches to the light summarizer (format/web.ts) or the
+// detailed one (format/store.ts) depending on the given filters — this union
+// is assembled here (not in either format/*.schemas.ts) since this is the one
+// layer that knows about both paths.
+const getWishlistOutput = withNotFound(wishlistNotFound, wishlistLightFound, wishlistDetailedFound);
 
 export function registerStoreWebTools(
   server: McpServer,
@@ -34,10 +53,17 @@ export function registerStoreWebTools(
       description:
         "Get recent news / patch notes for a game by appid (title, date, author, excerpt, link). " +
         "Get the appid from search_games. Works without an API key.",
-      inputSchema: {
+      inputSchema: z.object({
         appid,
-        limit: z.number().int().min(1).max(20).describe("How many news items (1-20).").optional(),
-      },
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(20)
+          .describe("How many news items (1-20). Default 5.")
+          .optional(),
+      }),
+      outputSchema: getGameNewsOutput,
       annotations: READ_ONLY,
     },
     ({ appid: id, limit }) => reply(() => web.getNews(id, limit ?? 5)),
@@ -52,7 +78,8 @@ export function registerStoreWebTools(
         "achievement is across all players. Returns each achievement's internal name and its unlock " +
         "percent (no display names/descriptions — for those, use get_game_achievements). Get the " +
         "appid from search_games. Works without a key.",
-      inputSchema: { appid },
+      inputSchema: z.object({ appid }),
+      outputSchema: getGlobalAchievementsOutput,
       annotations: READ_ONLY,
     },
     ({ appid: id }) => reply(() => web.getGlobalAchievements(id)),
@@ -75,7 +102,7 @@ export function registerStoreWebTools(
         "'Souls-like', most-relevant first); a clickable `store_url` to the game's Steam page; and, " +
         "when on sale, `discount_end` (ISO UTC time the discount expires — for 'how long is this deal " +
         "valid'). Get appids from search_games / get_wishlist / get_owned_games.",
-      inputSchema: {
+      inputSchema: z.object({
         appids: z
           .array(z.number().int().positive())
           .min(1)
@@ -83,7 +110,8 @@ export function registerStoreWebTools(
           .describe("Steam appids (1-100)."),
         country,
         language,
-      },
+      }),
+      outputSchema: getItemsOutput,
       annotations: READ_ONLY,
     },
     ({ appids, country, language }) => reply(() => store.getItems(appids, country, language)),
@@ -111,10 +139,12 @@ export function registerStoreWebTools(
         "No appids needed — unlike get_items, which prices a list you already have. For 'games like " +
         "X' from a SINGLE named title, get its tags via get_items and pass them here; for taste " +
         "inferred from the player's WHOLE library instead, use get_recommended_games (key-gated). " +
-        "Note: the Steam catalog API has no release-date/tag sort or filter, so results are scanned " +
-        "popularity-first and the recency, compat and tag filters are applied over that window — great " +
-        "for popular titles; a niche match may fall outside the top `count` (raise count for stricter filters).",
-      inputSchema: {
+        "Note: only min_discount is filtered server-side — the Steam catalog API has no release-date, " +
+        "compat, platform, review or tag sort/filter, so results are scanned popularity-first and " +
+        "recency/compat/platform/review/tag filters are all applied afterward over that same window — " +
+        "great for popular titles; a niche match may fall outside the top `count` (raise count for " +
+        "stricter filters).",
+      inputSchema: z.object({
         released_after: z
           .string()
           .regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date, e.g. 2026-03-01.")
@@ -173,7 +203,8 @@ export function registerStoreWebTools(
         start: z.number().int().min(0).describe("Pagination offset into the catalog.").optional(),
         country,
         language,
-      },
+      }),
+      outputSchema: discoverGamesOutput,
       annotations: READ_ONLY,
     },
     ({
@@ -226,8 +257,10 @@ export function registerStoreWebTools(
       title: "Get current player count",
       description:
         "Get how many people are playing a game right now (live concurrent player count) by appid. " +
-        "Get the appid from search_games. Works without a key.",
-      inputSchema: { appid },
+        "Get the appid from search_games. Works without a key. Errors clearly if the appid is unknown/invalid " +
+        "rather than returning a null count.",
+      inputSchema: z.object({ appid }),
+      outputSchema: getCurrentPlayersOutput,
       annotations: READ_ONLY,
     },
     ({ appid: id }) => reply(() => web.getCurrentPlayers(id)),
@@ -244,7 +277,8 @@ export function registerStoreWebTools(
         "public — otherwise it returns found:false. Returns appids + store_url only (no price/name); " +
         "pass the appids to get_items for price, review % and compat. Convert a vanity name with " +
         "resolve_vanity_url first.",
-      inputSchema: { steamid },
+      inputSchema: z.object({ steamid }),
+      outputSchema: getFollowedGamesOutput,
       annotations: READ_ONLY,
     },
     steamIdTool(web, reply, (sid) => web.getFollowedGames(sid)),
@@ -263,8 +297,9 @@ export function registerStoreWebTools(
         "['Metroidvania']), platform (NATIVE windows/mac/linux build), steam_deck / steam_os / " +
         "steam_machine / steam_frame (Proton compatibility — distinct from a native build), min_review and " +
         "min_discount / on_sale_only, or country / language (the light appid list carries no price, " +
-        "so setting either implies include_details too) — these are applied before the output cap, " +
-        "so a deeply-discounted niche match past the display cap is never hidden by it (e.g. 'top " +
+        "so setting either implies include_details too) — these are applied before the output cap " +
+        "(the detailed card list returns at most 60 items), so a deeply-discounted niche match past " +
+        "the display cap is never hidden by it (e.g. 'top " +
         "metroidvanias on my wishlist with a good discount and reviews' → tags:['Metroidvania'] + " +
         "min_discount + min_review). Results ranked by discount when a discount filter is set, else " +
         "by wishlist priority; `matched` reports the pre-cap count. Steam itself only attaches store " +
@@ -272,7 +307,7 @@ export function registerStoreWebTools(
         "reports how many of `total` got checked, and `note` explains when some were skipped (their " +
         "filter/price data isn't available at all, not that they don't match). Convert a vanity name " +
         "with resolve_vanity_url first.",
-      inputSchema: {
+      inputSchema: z.object({
         steamid,
         include_details: z
           .boolean()
@@ -326,7 +361,8 @@ export function registerStoreWebTools(
           "Store language; overrides STEAM_LANGUAGE. Only meaningful for store cards, so setting it " +
             "implies include_details — the light appid list carries no price.",
         ),
-      },
+      }),
+      outputSchema: getWishlistOutput,
       annotations: READ_ONLY,
     },
     ({

@@ -4,8 +4,24 @@
 // (see AGENTS.md); the official Web API player formatters live in ./web.ts.
 // All three services return the same `StoreItem` shape, so one card builder
 // (baseCard/storeCard) and one set of tag/compat/platform helpers serve them all.
+//
+// Every exported summarizer builds its return value via a matching `.strict()`
+// zod schema's `.parse({...})` (see store.schemas.ts) instead of a bare object
+// literal — the schema is the single source of truth for the shape (see
+// storefront.ts's header comment for the full rationale).
 
+import { z } from "zod";
 import { isoDateTime, isoDay, storeUrl } from "./shared.js";
+import { wishlistNotFound } from "./shared.schemas.js";
+import {
+  baseCardSchema,
+  compatBadgeSchema,
+  discoverGamesOutput,
+  getItemsOutput,
+  recommendedGamesFound,
+  storeCardSchema,
+  wishlistDetailedFound,
+} from "./store.schemas.js";
 
 // ---- shared StoreItem shape -------------------------------------------------
 
@@ -53,6 +69,11 @@ export interface StoreItem {
 export interface StoreItemsResponse {
   response?: { store_items?: StoreItem[] };
 }
+
+// baseCard()/storeCard() need a real appid to build a card (it's a required,
+// non-nullable field on baseCardSchema) — every call site below narrows to
+// this before calling either, since a StoreItem's own appid is optional.
+type StoreItemWithAppid = StoreItem & { appid: number };
 
 // ---- tag dictionary (IStoreService/GetTagList) ------------------------------
 
@@ -127,13 +148,13 @@ function matchesAnyTag(
 
 // Valve's compatibility enum, shared by all four platforms.*_compat_category
 // fields (Steam Deck, SteamOS, Steam Machine, Steam Frame) — same badges, same review process.
-const COMPAT_CATEGORY: Record<number, string> = {
+const COMPAT_CATEGORY: Record<number, z.infer<typeof compatBadgeSchema>> = {
   0: "unknown",
   1: "unsupported",
   2: "playable",
   3: "verified",
 };
-function compat(cat?: number): string {
+function compat(cat?: number): z.infer<typeof compatBadgeSchema> {
   return COMPAT_CATEGORY[cat ?? 0] ?? "unknown";
 }
 
@@ -198,8 +219,13 @@ function priceFields(bp: StoreItem["best_purchase_option"]): {
 // ---- store cards ------------------------------------------------------------
 
 // Fields common to every store card, independent of how price is shaped. Callers
-// append their own price block (flat for discover, nested for get_items).
-function baseCard(it: StoreItem, tagMap?: TagMap): Record<string, unknown> {
+// append their own price block (flat for discover, nested for get_items). Not
+// `.parse()`d here — the exported summarizer that embeds a card already
+// validates the whole result once (get_items/discover_games/get_wishlist can
+// return up to hundreds of cards per call, so re-validating each one twice on
+// top of that would be pure overhead). The `z.infer` return type still gets
+// this checked at the TS level.
+function baseCard(it: StoreItemWithAppid, tagMap?: TagMap): z.infer<typeof baseCardSchema> {
   const rev = it.reviews?.summary_filtered;
   return {
     appid: it.appid,
@@ -221,7 +247,7 @@ function baseCard(it: StoreItem, tagMap?: TagMap): Record<string, unknown> {
 
 // Compact card with a FLAT price (shared by discover_games and the wishlist
 // detailed view). get_items uses a nested price block instead (see summarizeItems).
-function storeCard(it: StoreItem, tagMap?: TagMap): Record<string, unknown> {
+function storeCard(it: StoreItemWithAppid, tagMap?: TagMap): z.infer<typeof storeCardSchema> {
   const { final, ...rest } = priceFields(it.best_purchase_option);
   return {
     ...baseCard(it, tagMap),
@@ -318,20 +344,23 @@ export interface StoreQueryResponse {
 export function summarizeDiscover(
   r: StoreQueryResponse,
   opts: StoreFilters,
-): Record<string, unknown> {
+): z.infer<typeof discoverGamesOutput> {
   // Filters run over the returned page — Steam's Query API silently ignores review,
   // Deck/compat, native-platform, tag and release-date filters, so they only narrow
   // the popularity-first scan window.
   const keep = storeItemFilter(opts);
   const rows = (r.response?.store_items ?? [])
-    .filter((it) => it.visible !== false && typeof it.appid === "number" && keep(it))
+    .filter(
+      (it): it is StoreItemWithAppid =>
+        it.visible !== false && typeof it.appid === "number" && keep(it),
+    )
     .map((it) => storeCard(it, opts.tagMap))
     .sort((a, b) => (b.discount_pct as number) - (a.discount_pct as number));
-  return {
+  return discoverGamesOutput.parse({
     total_matching: r.response?.metadata?.total_matching_records ?? null,
     returned: rows.length,
     deals: rows,
-  };
+  });
 }
 
 // ---- IStoreBrowseService/GetItems (keyless batch store data) ----------------
@@ -342,15 +371,21 @@ export function summarizeItems(
   r: StoreItemsResponse,
   appids: number[],
   tagMap?: TagMap,
-): Record<string, unknown> {
-  const byId = new Map<number, StoreItem>();
-  for (const it of r.response?.store_items ?? [])
-    if (typeof it.appid === "number") byId.set(it.appid, it);
-  return {
+): z.infer<typeof getItemsOutput> {
+  const byId = new Map<number, StoreItemWithAppid>();
+  for (const it of r.response?.store_items ?? []) {
+    // Rebuild with an explicit `appid` so TS sees the narrowed type on the
+    // object itself, not just on this one property access.
+    if (typeof it.appid === "number") byId.set(it.appid, { ...it, appid: it.appid });
+  }
+  return getItemsOutput.parse({
     count: appids.length,
     items: appids.map((appid) => {
       const it = byId.get(appid);
-      if (!it || (!it.name && !it.best_purchase_option && !it.reviews)) {
+      // is_free is checked alongside name/best_purchase_option/reviews so a
+      // free game with a sparse payload (e.g. delisted/beta F2P titles) isn't
+      // misreported as unavailable — its is_free fallback below still applies.
+      if (!it || (!it.name && !it.best_purchase_option && !it.reviews && !it.is_free)) {
         return { appid, available: false };
       }
       const bp = it.best_purchase_option;
@@ -361,7 +396,7 @@ export function summarizeItems(
         coming_soon: it.release?.is_coming_soon ?? false,
       };
     }),
-  };
+  });
 }
 
 // ---- IWishlistService/GetWishlistSortedFiltered (enriched wishlist) ----------
@@ -379,27 +414,32 @@ export function summarizeWishlistDetailed(
   r: WishlistDetailedResponse,
   tagMap?: TagMap,
   opts: StoreFilters = {},
-): Record<string, unknown> {
+): z.infer<typeof wishlistNotFound> | z.infer<typeof wishlistDetailedFound> {
   const items = r.response?.items ?? [];
   if (items.length === 0) {
-    return {
+    return wishlistNotFound.parse({
       found: false,
       reason: "Empty wishlist, or the profile/wishlist is private.",
       total: 0,
       items: [],
-    };
+    });
   }
   // Steam only attaches a store_item card to the first ~100 entries of a
   // wishlist, however many count/start params this call sends (verified live —
   // it doesn't budge) — so on a >100-item wishlist, filters below only ever see
   // that enriched prefix, NOT the whole wishlist as the tool description used to
   // (wrongly) promise. Entries past it carry no price/reviews/tags to filter on.
-  const enriched = items.filter((i) => i.store_item);
+  const enriched = items.filter(
+    (i): i is typeof i & { store_item: StoreItem } => i.store_item !== undefined,
+  );
   const keep = storeItemFilter({ ...opts, tagMap });
   const cards: Record<string, unknown>[] = enriched
-    .filter((i) => typeof i.appid === "number" && keep(i.store_item!))
+    .filter(
+      (i): i is typeof i & { store_item: StoreItemWithAppid } =>
+        typeof i.store_item.appid === "number" && keep(i.store_item),
+    )
     .map((i) => ({
-      ...storeCard(i.store_item!, tagMap),
+      ...storeCard(i.store_item, tagMap),
       priority: i.priority ?? null,
       added: isoDay(i.date_added),
     }));
@@ -410,7 +450,7 @@ export function summarizeWishlistDetailed(
       ? (b.discount_pct as number) - (a.discount_pct as number)
       : ((a.priority as number | null) ?? 1e9) - ((b.priority as number | null) ?? 1e9),
   );
-  return {
+  return wishlistDetailedFound.parse({
     found: true,
     total: items.length,
     enriched: enriched.length,
@@ -423,7 +463,7 @@ export function summarizeWishlistDetailed(
     matched: cards.length,
     returned: Math.min(cards.length, WISHLIST_DETAIL_MAX),
     items: cards.slice(0, WISHLIST_DETAIL_MAX),
-  };
+  });
 }
 
 // ---- personalized recommendations (derived from the player's own library) --
@@ -463,11 +503,11 @@ export function summarizeRecommendations(
   max: number,
   basedOnTags: string[],
   excludeTags: string[] = [],
-): Record<string, unknown> {
+): z.infer<typeof recommendedGamesFound> {
   const excludeLower = excludeTags.map((t) => t.toLowerCase());
   const scored = candidates
     .filter(
-      (it) =>
+      (it): it is StoreItemWithAppid =>
         it.visible !== false &&
         typeof it.appid === "number" &&
         !ownedAppids.has(it.appid) &&
@@ -487,7 +527,7 @@ export function summarizeRecommendations(
     .filter((x) => x.matchScore > 0)
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, max);
-  return {
+  return recommendedGamesFound.parse({
     found: true,
     based_on_tags: basedOnTags,
     count: scored.length,
@@ -496,5 +536,5 @@ export function summarizeRecommendations(
       matched_tags: matchedTags,
       match_score: Math.round(matchScore * 10) / 10,
     })),
-  };
+  });
 }

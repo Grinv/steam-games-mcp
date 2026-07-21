@@ -40,7 +40,7 @@ describe("prompts", () => {
     assert.doesNotMatch(text, /discover_games/);
   });
 
-  test("is_it_worth_buying requires the game argument", async (t) => {
+  test("is_it_worth_buying weaves the game name into the message", async (t) => {
     const { client, close } = await connectServer(ENV);
     t.after(close);
     const res = await client.getPrompt({
@@ -50,6 +50,18 @@ describe("prompts", () => {
     const text = (res.messages[0]!.content as { text: string }).text;
     assert.match(text, /Hollow Knight/);
     assert.match(text, /get_review_histogram/);
+  });
+
+  test("is_it_worth_buying asks for the game instead of failing when it's omitted", async (t) => {
+    // game is optional at the schema level (not every MCP client elicits a
+    // missing required prompt argument — e.g. Claude Code just fails the
+    // call), so an omitted game must degrade to asking, not erroring.
+    const { client, close } = await connectServer(ENV);
+    t.after(close);
+    const res = await client.getPrompt({ name: "is_it_worth_buying", arguments: {} });
+    const text = (res.messages[0]!.content as { text: string }).text;
+    assert.match(text, /which game/i);
+    assert.doesNotMatch(text, /get_game_reviews/);
   });
 
   test("deals_digest defaults min_discount/min_review when omitted", async (t) => {

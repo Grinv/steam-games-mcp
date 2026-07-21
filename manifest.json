@@ -90,6 +90,27 @@
       "description": "Games two players both own, with each one's playtime (key)."
     }
   ],
+  "prompts_generated": false,
+  "prompts": [
+    {
+      "name": "what_should_i_play",
+      "description": "Recommend games from the Steam catalog based on a player's library and taste, excluding what they already own.",
+      "arguments": ["steamid", "budget", "tags"],
+      "text": "Recommend what I should play next."
+    },
+    {
+      "name": "is_it_worth_buying",
+      "description": "Gather price, reviews (lifetime + recent trend) and Steam Deck compatibility for a buying verdict. game is optional — if omitted, asks which game instead of failing.",
+      "arguments": ["game"],
+      "text": "Should I buy \"{{game}}\"?"
+    },
+    {
+      "name": "deals_digest",
+      "description": "A curated list of well-reviewed discounted games from Steam's catalog.",
+      "arguments": ["min_discount", "min_review", "tags"],
+      "text": "Give me today's best Steam deals."
+    }
+  ],
   "user_config": {
     "steam_api_key": {
       "type": "string",
