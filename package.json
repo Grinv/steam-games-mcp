@@ -1,6 +1,6 @@
 {
   "name": "steam-games-mcp",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "mcpName": "io.github.Grinv/steam-games-mcp",
   "description": "Enables LLMs to search and evaluate Steam games — prices, discounts, reviews and Steam Deck compatibility with no API key, plus a player's library, achievements and friends via the official Steam Web API.",
   "type": "module",
