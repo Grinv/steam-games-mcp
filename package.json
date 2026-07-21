@@ -49,15 +49,15 @@
     "inspector": "npm run build && npx @modelcontextprotocol/inspector node dist/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0-beta.4",
+    "@modelcontextprotocol/server": "2.0.0-beta.5",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "2.1.2",
-    "@modelcontextprotocol/client": "2.0.0-beta.4",
-    "@modelcontextprotocol/codemod": "2.0.0-beta.4",
-    "@modelcontextprotocol/core": "2.0.0-beta.4",
     "@eslint/js": "10.0.1",
+    "@modelcontextprotocol/client": "2.0.0-beta.5",
+    "@modelcontextprotocol/codemod": "2.0.0-beta.5",
+    "@modelcontextprotocol/core": "2.0.0-beta.5",
     "@types/node": "^26.1.1",
     "esbuild": "0.28.1",
     "eslint": "10.7.0",
