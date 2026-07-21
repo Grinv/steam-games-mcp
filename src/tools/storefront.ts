@@ -3,11 +3,20 @@
 // a tool and the meaning of every parameter. Handlers wrap calls in guard() so
 // failures become actionable tool errors.
 import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { StorefrontClient } from "../clients/storefront.js";
 import { errorResult, jsonResult } from "../lib/result.js";
 import { guard } from "./guard.js";
 import { READ_ONLY, appid, country, language, reply } from "./common.js";
+import {
+  getFeaturedOutput,
+  getGameOutput,
+  getGameReviewsOutput,
+  getPricesOutput,
+  getReviewHistogramOutput,
+  getSpecialsOutput,
+  searchGamesOutput,
+} from "../format/storefront.schemas.js";
 
 export function registerStorefrontTools(server: McpServer, store: StorefrontClient): void {
   server.registerTool(
@@ -18,11 +27,12 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "Search the Steam store by title — term can be partial or approximate, not an exact match; " +
         "returns matches with their appid (needed by the other game tools), price, Metacritic score " +
         "and platforms. No API key required.",
-      inputSchema: {
+      inputSchema: z.object({
         term: z.string().min(1).describe("Game title to search for."),
         country,
         language,
-      },
+      }),
+      outputSchema: searchGamesOutput,
       annotations: READ_ONLY,
     },
     ({ term, country: cc, language: l }) => reply(() => store.searchGames(term, cc, l)),
@@ -37,7 +47,7 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "release date, developers/publishers, Metacritic, age rating, DLC and PC requirements. " +
         "Identify the game by appid (from search_games) OR by name — a title is resolved to the " +
         "closest store match. No API key required.",
-      inputSchema: {
+      inputSchema: z.object({
         appid: appid.describe("Steam appid (from search_games). Provide appid OR name.").optional(),
         name: z
           .string()
@@ -49,7 +59,8 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
           .optional(),
         country,
         language,
-      },
+      }),
+      outputSchema: getGameOutput,
       annotations: READ_ONLY,
     },
     ({ appid: id, name, country: cc, language: l }) =>
@@ -72,14 +83,14 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       description:
         "Get the review summary (score label, positive/negative counts, %) and a few recent " +
         "reviews for a game by appid. Get the appid from search_games. No API key required.",
-      inputSchema: {
+      inputSchema: z.object({
         appid,
         limit: z
           .number()
           .int()
           .min(1)
           .max(20)
-          .describe("How many recent reviews (1-20).")
+          .describe("How many recent reviews (1-20). Default 5.")
           .optional(),
         review_language: z
           .string()
@@ -89,7 +100,8 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
           .enum(["all", "positive", "negative"])
           .describe("Only positive or negative reviews. Default 'all'.")
           .optional(),
-      },
+      }),
+      outputSchema: getGameReviewsOutput,
       annotations: READ_ONLY,
     },
     ({ appid: id, limit, review_language, type }) =>
@@ -104,7 +116,8 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "Get how a game's reviews trend over time by appid: a long-term (monthly) history and the " +
         "recent per-day breakdown, each with positive/negative counts and positive %. Good for " +
         "'are reviews improving / did an update hurt reception'. Get the appid from search_games. No key.",
-      inputSchema: { appid },
+      inputSchema: z.object({ appid }),
+      outputSchema: getReviewHistogramOutput,
       annotations: READ_ONLY,
     },
     ({ appid: id }) => reply(() => store.getReviewHistogram(id)),
@@ -121,14 +134,15 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "come back in the same order as the given appids, one per id (unavailable ones marked " +
         "available:false, never dropped). Each row has the final/initial price and discount_percent " +
         "(or is_free). No API key required. Get appids from search_games or get_wishlist.",
-      inputSchema: {
+      inputSchema: z.object({
         appids: z
           .array(z.number().int().positive())
           .min(1)
           .max(500)
           .describe("Steam appids to price (1-500)."),
         country,
-      },
+      }),
+      outputSchema: getPricesOutput,
       annotations: READ_ONLY,
     },
     ({ appids, country: cc }) => reply(() => store.getPrices(appids, cc)),
@@ -142,7 +156,8 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "List games currently on special (discounted) on the Steam store front page, with the " +
         "discount % and original/final price. For ALL catalog discounts (not just the front page), " +
         "use discover_games with min_discount. No API key required.",
-      inputSchema: { country, language },
+      inputSchema: z.object({ country, language }),
+      outputSchema: getSpecialsOutput,
       annotations: READ_ONLY,
     },
     ({ country: cc, language: l }) => reply(() => store.getSpecials(cc, l)),
@@ -157,7 +172,8 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "soon (each a list of games with appid and price), all in one call — for a general 'what's " +
         "on the store front page' overview. For just current discounts use get_specials (lighter), " +
         "or discover_games for catalog-wide deals with filters. No API key required.",
-      inputSchema: { country, language },
+      inputSchema: z.object({ country, language }),
+      outputSchema: getFeaturedOutput,
       annotations: READ_ONLY,
     },
     ({ country: cc, language: l }) => reply(() => store.getFeatured(cc, l)),

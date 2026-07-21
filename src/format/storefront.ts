@@ -1,8 +1,30 @@
 // Trims verbose Steam Storefront payloads (store.steampowered.com/api/*) down to
 // the fields an agent needs. Clients fetch + cache; all raw→agent-facing shaping
 // lives here. Companion to ./web.ts (official Web API) and ./shared.ts (helpers).
+//
+// Every exported summarizer below builds its return value via a matching
+// `.strict()` zod schema's `.parse({...})` (see storefront.schemas.ts) instead
+// of a bare object literal — the schema is the single source of truth for the
+// shape, so a missing/extra field throws immediately when the summarizer runs
+// (any test, or a real call) instead of silently drifting from the
+// `outputSchema` advertised to MCP clients.
 
+import { z } from "zod";
 import { hours, isoDay, money, names, storeUrl, stripHtml } from "./shared.js";
+import {
+  detailPriceSchema,
+  featuredItemSchema,
+  getFeaturedOutput,
+  getGameOutput,
+  getGameReviewsOutput,
+  getPricesOutput,
+  getReviewHistogramOutput,
+  getSpecialsOutput,
+  priceFieldsSchema,
+  rollupSchema,
+  searchGamesOutput,
+  searchPriceSchema,
+} from "./storefront.schemas.js";
 
 // ---- Storefront: appdetails -------------------------------------------------
 
@@ -47,7 +69,11 @@ export interface StoreApp {
 }
 
 // The formatted price fields shared by detailApp's price() and summarizePrices.
-function formattedPrice(p: PriceOverview): Record<string, unknown> {
+// Not `.parse()`d here — the exported summarizer that embeds this already
+// validates the whole object once; parsing again here would just re-check the
+// same fields a second time for no benefit. The `z.infer` return type still
+// gets this checked at the TS level.
+function formattedPrice(p: PriceOverview): z.infer<typeof priceFieldsSchema> {
   return {
     currency: p.currency ?? null,
     final: p.final_formatted ?? null,
@@ -60,7 +86,7 @@ function formattedPrice(p: PriceOverview): Record<string, unknown> {
 function price(
   p: PriceOverview | undefined,
   isFree: boolean | undefined,
-): Record<string, unknown> | null {
+): z.infer<typeof detailPriceSchema> {
   if (isFree) return { is_free: true };
   if (!p) return null;
   return { is_free: false, ...formattedPrice(p) };
@@ -73,9 +99,9 @@ function platforms(p: StoreApp["platforms"]): string[] {
     .map(([os]) => os);
 }
 
-export function detailApp(a: StoreApp): Record<string, unknown> {
+export function detailApp(a: StoreApp): z.infer<typeof getGameOutput> {
   const reqs = Array.isArray(a.pc_requirements) ? undefined : a.pc_requirements;
-  return {
+  return getGameOutput.parse({
     appid: a.steam_appid,
     name: a.name,
     type: a.type ?? null,
@@ -101,7 +127,7 @@ export function detailApp(a: StoreApp): Record<string, unknown> {
       .filter((n): n is string => Boolean(n)),
     supported_languages: stripHtml(a.supported_languages),
     dlc: a.dlc ?? [],
-    demos: (a.demos ?? []).map((d) => d.appid).filter(Boolean),
+    demos: (a.demos ?? []).map((d) => d.appid).filter((id): id is number => typeof id === "number"),
     // Content descriptor ids flag mature themes (violence/nudity/etc.); notes
     // is Valve's free-text. Empty ids → no mature descriptors.
     content_descriptors: {
@@ -118,7 +144,7 @@ export function detailApp(a: StoreApp): Record<string, unknown> {
     website: a.website || null,
     header_image: a.header_image || null,
     store_url: storeUrl(a.steam_appid),
-  };
+  });
 }
 
 // ---- Storefront: storesearch ------------------------------------------------
@@ -138,7 +164,9 @@ export interface SearchResponse {
 }
 
 // storesearch prices are raw cents (initial/final); derive a discount + labels.
-function searchPrice(p: SearchItem["price"]): Record<string, unknown> | null {
+// Not `.parse()`d — see formattedPrice()'s comment; summarizeSearch validates
+// the whole result once.
+function searchPrice(p: SearchItem["price"]): z.infer<typeof searchPriceSchema> {
   if (!p || typeof p.final !== "number") return null;
   const discount =
     p.initial && p.final && p.initial > p.final ? Math.round((1 - p.final / p.initial) * 100) : 0;
@@ -150,8 +178,8 @@ function searchPrice(p: SearchItem["price"]): Record<string, unknown> | null {
   };
 }
 
-export function summarizeSearch(r: SearchResponse): Record<string, unknown> {
-  return {
+export function summarizeSearch(r: SearchResponse): z.infer<typeof searchGamesOutput> {
+  return searchGamesOutput.parse({
     total: r.total ?? r.items?.length ?? 0,
     results: (r.items ?? []).map((i) => ({
       appid: i.id,
@@ -162,7 +190,7 @@ export function summarizeSearch(r: SearchResponse): Record<string, unknown> {
       platforms: platforms(i.platforms),
       store_url: storeUrl(i.id),
     })),
-  };
+  });
 }
 
 // ---- Storefront: batch prices (appdetails?filters=price_overview) -----------
@@ -179,16 +207,16 @@ export type PriceDetailsResponse = Record<
 export function summarizePrices(
   merged: PriceDetailsResponse,
   appids: number[],
-): Record<string, unknown> {
+): z.infer<typeof getPricesOutput> {
   const prices = appids.map((id) => {
     const entry = merged[String(id)];
     const data = entry?.data;
     const po = data && !Array.isArray(data) ? data.price_overview : undefined;
-    if (!entry?.success) return { appid: id, available: false };
-    if (!po) return { appid: id, available: true, is_free: true };
-    return { appid: id, available: true, is_free: false, ...formattedPrice(po) };
+    if (!entry?.success) return { appid: id, available: false as const };
+    if (!po) return { appid: id, available: true as const, is_free: true as const };
+    return { appid: id, available: true as const, is_free: false as const, ...formattedPrice(po) };
   });
-  return { count: prices.length, prices };
+  return getPricesOutput.parse({ count: prices.length, prices });
 }
 
 // ---- Storefront: appreviews -------------------------------------------------
@@ -212,9 +240,12 @@ export interface ReviewsResponse {
   }[];
 }
 
-export function summarizeReviews(r: ReviewsResponse, max = 5): Record<string, unknown> {
+export function summarizeReviews(
+  r: ReviewsResponse,
+  max = 5,
+): z.infer<typeof getGameReviewsOutput> {
   const q = r.query_summary ?? {};
-  return {
+  return getGameReviewsOutput.parse({
     summary: q.review_score_desc ?? null,
     total_reviews: q.total_reviews ?? null,
     total_positive: q.total_positive ?? null,
@@ -229,7 +260,7 @@ export function summarizeReviews(r: ReviewsResponse, max = 5): Record<string, un
       author_playtime_hours: hours(x.author?.playtime_forever),
       text: x.review ? (x.review.length > 600 ? x.review.slice(0, 600) + "…" : x.review) : null,
     })),
-  };
+  });
 }
 
 // ---- Storefront: featuredcategories -----------------------------------------
@@ -250,7 +281,9 @@ export interface FeaturedResponse {
   coming_soon?: { items?: FeaturedItem[] };
 }
 
-function featuredItems(items: FeaturedItem[] | undefined): Record<string, unknown>[] {
+// Not `.parse()`d per item — see formattedPrice()'s comment; the enclosing
+// summarizeFeatured()/summarizeSpecials() validates the whole result once.
+function featuredItems(items: FeaturedItem[] | undefined): z.infer<typeof featuredItemSchema>[] {
   return (items ?? []).map((i) => ({
     appid: i.id,
     name: i.name,
@@ -262,17 +295,17 @@ function featuredItems(items: FeaturedItem[] | undefined): Record<string, unknow
   }));
 }
 
-export function summarizeFeatured(r: FeaturedResponse): Record<string, unknown> {
-  return {
+export function summarizeFeatured(r: FeaturedResponse): z.infer<typeof getFeaturedOutput> {
+  return getFeaturedOutput.parse({
     specials: featuredItems(r.specials?.items),
     top_sellers: featuredItems(r.top_sellers?.items),
     new_releases: featuredItems(r.new_releases?.items),
     coming_soon: featuredItems(r.coming_soon?.items),
-  };
+  });
 }
 
-export function summarizeSpecials(r: FeaturedResponse): Record<string, unknown> {
-  return { specials: featuredItems(r.specials?.items) };
+export function summarizeSpecials(r: FeaturedResponse): z.infer<typeof getSpecialsOutput> {
+  return getSpecialsOutput.parse({ specials: featuredItems(r.specials?.items) });
 }
 
 // ---- Storefront: review histogram -------------------------------------------
@@ -287,7 +320,9 @@ export interface ReviewHistogramResponse {
   results?: { rollup_type?: string; rollups?: Rollup[]; recent?: Rollup[] };
 }
 
-function rollup(x: Rollup): Record<string, unknown> {
+// Not `.parse()`d per entry — see formattedPrice()'s comment;
+// summarizeReviewHistogram validates the whole result once.
+function rollup(x: Rollup): z.infer<typeof rollupSchema> {
   const up = x.recommendations_up ?? 0;
   const down = x.recommendations_down ?? 0;
   const total = up + down;
@@ -301,11 +336,13 @@ function rollup(x: Rollup): Record<string, unknown> {
 
 // `rollups` is the long-term trend (monthly here); `recent` is per-day for the
 // last ~30 days. Cap both so the response stays bounded.
-export function summarizeReviewHistogram(r: ReviewHistogramResponse): Record<string, unknown> {
+export function summarizeReviewHistogram(
+  r: ReviewHistogramResponse,
+): z.infer<typeof getReviewHistogramOutput> {
   const res = r.results ?? {};
-  return {
+  return getReviewHistogramOutput.parse({
     rollup_type: res.rollup_type ?? null,
     history: (res.rollups ?? []).slice(-24).map(rollup),
     recent: (res.recent ?? []).slice(-30).map(rollup),
-  };
+  });
 }

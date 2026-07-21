@@ -57,11 +57,11 @@ export interface Config {
 const UNSUBSTITUTED_PLACEHOLDER = /^\$\{[^}]*\}$/;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  // Drop empty strings and unsubstituted ${...} placeholders so defaults apply
-  // and optional fields (key, STEAM_ID) stay genuinely unset.
+  // Drop empty/whitespace-only strings and unsubstituted ${...} placeholders so
+  // defaults apply and optional fields (key, STEAM_ID) stay genuinely unset.
   const cleaned = Object.fromEntries(
     Object.entries(env).filter(
-      ([, v]) => v !== undefined && v !== "" && !UNSUBSTITUTED_PLACEHOLDER.test(v),
+      ([, v]) => v !== undefined && v.trim() !== "" && !UNSUBSTITUTED_PLACEHOLDER.test(v),
     ),
   );
   const parsed = EnvSchema.parse(cleaned);

@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { classifyStatus, redact } from "../lib/errors.js";
 
@@ -16,14 +16,25 @@ test("classifyStatus maps HTTP codes to error codes and retryability", () => {
   assert.equal(classifyStatus(503).retryable, true);
 });
 
-test("redact removes bearer tokens and credential params", () => {
-  assert.equal(redact("Authorization: Bearer abc.def-123=="), "Authorization: Bearer ***");
-  assert.match(redact("grant&refresh_token=SECRET&x=1"), /refresh_token=\*\*\*/);
-  assert.ok(!redact("client_secret=zzz999").includes("zzz999"));
-  assert.ok(!redact("access_token=TOK").includes("TOK"));
-  // The Steam Web API key rides as a `key` query param in logged URLs.
-  const url = redact("https://api.steampowered.com/x?key=DEADBEEFKEY&steamid=1");
-  assert.ok(!url.includes("DEADBEEFKEY"));
-  assert.match(url, /key=\*\*\*/);
-  assert.match(url, /steamid=1/); // other params survive
+describe("redact", () => {
+  test("removes bearer tokens and credential params", () => {
+    assert.equal(redact("Authorization: Bearer abc.def-123=="), "Authorization: Bearer ***");
+    assert.match(redact("grant&refresh_token=SECRET&x=1"), /refresh_token=\*\*\*/);
+    assert.ok(!redact("client_secret=zzz999").includes("zzz999"));
+    assert.ok(!redact("access_token=TOK").includes("TOK"));
+    // The Steam Web API key rides as a `key` query param in logged URLs.
+    const url = redact("https://api.steampowered.com/x?key=DEADBEEFKEY&steamid=1");
+    assert.ok(!url.includes("DEADBEEFKEY"));
+    assert.match(url, /key=\*\*\*/);
+    assert.match(url, /steamid=1/); // other params survive
+  });
+
+  test("catches apikey/api_key spellings, not just the bare `key` param", () => {
+    // Regression: a plain `\bkey=` alone doesn't match `apikey=`/`api_key=` —
+    // no word boundary sits between the preceding word characters and `key`.
+    assert.ok(!redact("https://example.test/x?apikey=SECRET1").includes("SECRET1"));
+    assert.match(redact("apikey=SECRET1"), /apikey=\*\*\*/);
+    assert.ok(!redact("https://example.test/x?api_key=SECRET2").includes("SECRET2"));
+    assert.match(redact("api_key=SECRET2"), /api_key=\*\*\*/);
+  });
 });

@@ -6,6 +6,31 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-21
+
+### Added
+
+- Advertise an `outputSchema` for every tool alongside its existing `structuredContent`, so a client can see the exact shape of a tool's result ahead of a call.
+- Autocomplete the `game` argument of the `is_it_worth_buying` prompt against the Steam store catalog, in clients that support live prompt-argument completion.
+
+### Changed
+
+- Migrate to the MCP TypeScript SDK v2 (`@modelcontextprotocol/{server,client,core}`, beta) and adopt the 2026-07-28 protocol revision's `serveStdio` era negotiation.
+
+### Fixed
+
+- Fix `get_items`/`discover_games`/`get_wishlist` misreporting a sparse-payload free game (e.g. a delisted or beta free-to-play title) as `available:false`, discarding its `is_free` status.
+- Fix `get_current_players` returning a misleading `player_count:null` for an unknown/invalid appid instead of an actionable not-found error.
+- Fix log redaction (`redact()`) missing the `apikey`/`api_key` credential-parameter spellings, only catching the bare `key` param.
+- Fix a whitespace-only `STEAM_API_KEY`/`STEAM_ID` env value not being treated as unset, unlike an empty string.
+- Fix `is_it_worth_buying`'s `game` argument failing the prompt call in MCP clients (e.g. Claude Code) that don't ask the user for a missing required prompt argument — it's optional now, and the prompt asks which game itself when omitted.
+- Fix `get_game`'s `demos` list dropping a real appid of `0`, mistaken for a missing appid by a falsy-value filter.
+- Fix a startup race where a `SIGINT`/`SIGTERM` arriving between `serveStdio()` starting and the signal handlers being registered would kill the process immediately instead of shutting down gracefully — handlers are now armed first.
+
+### Removed
+
+- Remove the MCP `logging` capability and `notifications/message` push, deprecated as of protocol 2026-07-28 (SEP-2577) — logs are stderr-only now, so clients that displayed them (e.g. the MCP Inspector's logging panel) no longer will; `logging/setLevel` is no longer supported.
+
 ## [0.9.0] - 2026-07-18
 
 ### Added

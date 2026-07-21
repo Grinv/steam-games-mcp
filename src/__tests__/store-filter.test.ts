@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { storeItemFilter, type StoreItem } from "../format/store.js";
 
@@ -14,55 +14,61 @@ test("no filters pass everything (even a bare item)", () => {
   assert.ok(keep(item()));
 });
 
-test("compat filter: 'verified' keeps only category 3", () => {
-  const keep = storeItemFilter({ steamDeck: "verified" });
-  assert.ok(keep(withDeck(3)));
-  assert.ok(!keep(withDeck(2)));
-  assert.ok(!keep(withDeck(1)));
-  assert.ok(!keep(item({ platforms: {} }))); // unknown (0)
-});
+describe("compat filters", () => {
+  test("'verified' keeps only category 3", () => {
+    const keep = storeItemFilter({ steamDeck: "verified" });
+    assert.ok(keep(withDeck(3)));
+    assert.ok(!keep(withDeck(2)));
+    assert.ok(!keep(withDeck(1)));
+    assert.ok(!keep(item({ platforms: {} }))); // unknown (0)
+  });
 
-test("compat filter: 'playable' keeps Playable or Verified (2 and 3)", () => {
-  const keep = storeItemFilter({ steamDeck: "playable" });
-  assert.ok(keep(withDeck(3)));
-  assert.ok(keep(withDeck(2)));
-  assert.ok(!keep(withDeck(1)));
-});
+  test("'playable' keeps Playable or Verified (2 and 3)", () => {
+    const keep = storeItemFilter({ steamDeck: "playable" });
+    assert.ok(keep(withDeck(3)));
+    assert.ok(keep(withDeck(2)));
+    assert.ok(!keep(withDeck(1)));
+  });
 
-test("each compat filter reads its OWN category field", () => {
-  assert.ok(
-    storeItemFilter({ steamOs: "playable" })(item({ platforms: { steam_os_compat_category: 2 } })),
-  );
-  assert.ok(
-    !storeItemFilter({ steamOs: "verified" })(item({ platforms: { steam_os_compat_category: 2 } })),
-  );
-  assert.ok(
-    storeItemFilter({ steamFrame: "verified" })(
-      item({ platforms: { steam_frame_compat_category: 3 } }),
-    ),
-  );
-  assert.ok(
-    storeItemFilter({ steamMachine: "playable" })(
-      item({ platforms: { steam_machine_compat_category: 2 } }),
-    ),
-  );
-  assert.ok(
-    !storeItemFilter({ steamMachine: "verified" })(
-      item({ platforms: { steam_machine_compat_category: 2 } }),
-    ),
-  );
-  // A Deck filter must NOT be satisfied by a SteamOS rating.
-  assert.ok(
-    !storeItemFilter({ steamDeck: "verified" })(
-      item({ platforms: { steam_os_compat_category: 3 } }),
-    ),
-  );
-  // A SteamOS filter must NOT be satisfied by a Steam Machine rating (they're distinct).
-  assert.ok(
-    !storeItemFilter({ steamOs: "verified" })(
-      item({ platforms: { steam_machine_compat_category: 3 } }),
-    ),
-  );
+  test("each compat filter reads its OWN category field", () => {
+    assert.ok(
+      storeItemFilter({ steamOs: "playable" })(
+        item({ platforms: { steam_os_compat_category: 2 } }),
+      ),
+    );
+    assert.ok(
+      !storeItemFilter({ steamOs: "verified" })(
+        item({ platforms: { steam_os_compat_category: 2 } }),
+      ),
+    );
+    assert.ok(
+      storeItemFilter({ steamFrame: "verified" })(
+        item({ platforms: { steam_frame_compat_category: 3 } }),
+      ),
+    );
+    assert.ok(
+      storeItemFilter({ steamMachine: "playable" })(
+        item({ platforms: { steam_machine_compat_category: 2 } }),
+      ),
+    );
+    assert.ok(
+      !storeItemFilter({ steamMachine: "verified" })(
+        item({ platforms: { steam_machine_compat_category: 2 } }),
+      ),
+    );
+    // A Deck filter must NOT be satisfied by a SteamOS rating.
+    assert.ok(
+      !storeItemFilter({ steamDeck: "verified" })(
+        item({ platforms: { steam_os_compat_category: 3 } }),
+      ),
+    );
+    // A SteamOS filter must NOT be satisfied by a Steam Machine rating (they're distinct).
+    assert.ok(
+      !storeItemFilter({ steamOs: "verified" })(
+        item({ platforms: { steam_machine_compat_category: 3 } }),
+      ),
+    );
+  });
 });
 
 test("native-platform filter maps linux→steamos_linux and matches the right flag", () => {
@@ -155,4 +161,26 @@ test("multiple filters combine with AND — flipping any one dimension excludes 
   assert.ok(!keep({ ...good, reviews: { summary_filtered: { percent_positive: 70 } } })); // review fails
   assert.ok(!keep({ ...good, platforms: { windows: true } })); // native platform fails
   assert.ok(!keep({ ...good, tags: [{ tagid: 99, weight: 500 }] })); // tag fails
+});
+
+test("a full-stack combo (compat + minReviews + releasedAfter) still ANDs correctly", () => {
+  // The other combo test above never includes a compat filter or minReviews/
+  // releasedAfter alongside the rest — this is the shape discover_games
+  // actually sends when several dimensions are set at once.
+  const keep = storeItemFilter({
+    steamDeck: "verified",
+    minReviews: 100,
+    releasedAfter: 1_600_000_000,
+  });
+  const good = item({
+    platforms: { steam_deck_compat_category: 3 },
+    reviews: { summary_filtered: { review_count: 150 } },
+    release: { steam_release_date: 1_650_000_000 },
+  });
+  assert.ok(keep(good));
+  assert.ok(!keep({ ...good, platforms: { steam_deck_compat_category: 2 } })); // compat fails
+  assert.ok(
+    !keep({ ...good, reviews: { summary_filtered: { review_count: 50 } } }), // minReviews fails
+  );
+  assert.ok(!keep({ ...good, release: { steam_release_date: 1_500_000_000 } })); // releasedAfter fails
 });

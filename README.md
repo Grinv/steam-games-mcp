@@ -170,11 +170,11 @@ default to you, so "my wishlist / library" works without passing an ID each time
 Guided one-shot prompts that orchestrate several tools for a common question —
 use these when your client exposes MCP prompts, instead of describing the steps yourself:
 
-| Prompt               | Args                                                | What it does                                                               |
-| -------------------- | --------------------------------------------------- | -------------------------------------------------------------------------- |
-| `what_should_i_play` | `steamid`, `budget`, `tags` (all optional)          | Recommends catalog games from your library/taste, excluding what you own   |
-| `is_it_worth_buying` | `game` (title or appid)                             | Price, review trend and Steam Deck compatibility → a buy/wait/skip verdict |
-| `deals_digest`       | `min_discount`, `min_review`, `tags` (all optional) | A curated list of well-reviewed discounted games                           |
+| Prompt               | Args                                                               | What it does                                                               |
+| -------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `what_should_i_play` | `steamid`, `budget`, `tags` (all optional)                         | Recommends catalog games from your library/taste, excluding what you own   |
+| `is_it_worth_buying` | `game` (title or appid, optional — autocompletes; asks if omitted) | Price, review trend and Steam Deck compatibility → a buy/wait/skip verdict |
+| `deals_digest`       | `min_discount`, `min_review`, `tags` (all optional)                | A curated list of well-reviewed discounted games                           |
 
 ## Develop
 

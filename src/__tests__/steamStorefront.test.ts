@@ -6,7 +6,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { setupServer, jsonResponse, assertToolError } from "./helpers.js";
-import { ENV, router } from "./steamFixtures.js";
+import { APP, ENV, router } from "./steamFixtures.js";
 
 test("the server advertises store and player tools", async (t) => {
   const { client } = await setupServer(t, ENV, router);
@@ -81,6 +81,42 @@ describe("get_game", () => {
     });
     const res = await client.callTool({ name: "get_game", arguments: { appid: 999 } });
     assert.equal(res.isError, true);
+  });
+
+  test("get_game returns a not-found error for success:true with no data (region-restricted/delisted)", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("/api/appdetails")) return jsonResponse({ "999": { success: true } });
+      return jsonResponse({});
+    });
+    const res = await client.callTool({ name: "get_game", arguments: { appid: 999 } });
+    assertToolError(res, /no matching resource|404/i);
+  });
+
+  test("get_game returns a not-found error when the appid key is absent from the response entirely", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("/api/appdetails") ? jsonResponse({}) : jsonResponse({}),
+    );
+    const res = await client.callTool({ name: "get_game", arguments: { appid: 999 } });
+    assertToolError(res, /no matching resource|404/i);
+  });
+
+  test("get_game caches: a second call for the same appid never re-hits the upstream", async (t) => {
+    // Wiring check for clients/storefront.ts#getGame's wrapStaleOnError cache
+    // (the stale-on-error fallback mechanism itself is unit-tested directly in
+    // cache.test.ts). If the upstream were called again here, it would 503 and
+    // this test would fail — proving the second call was served from cache.
+    let calls = 0;
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (!url.includes("/api/appdetails")) return jsonResponse({});
+      calls++;
+      if (calls === 1) return jsonResponse({ "620": { success: true, data: APP } });
+      return jsonResponse({}, { status: 503 });
+    });
+    const first = await client.callTool({ name: "get_game", arguments: { appid: 620 } });
+    assert.equal(first.isError, undefined);
+    const second = await client.callTool({ name: "get_game", arguments: { appid: 620 } });
+    assert.equal(second.isError, undefined);
+    assert.equal(calls, 1);
   });
 
   test("get_game resolves a title to an appid when given name instead of appid", async (t) => {
@@ -209,6 +245,50 @@ describe("get_prices", () => {
     const priceCalls = mock.calls.filter((c) => c.url.includes("/api/appdetails"));
     assert.equal(priceCalls.length, 2);
   });
+
+  test("get_prices chunks exactly on the 100-appid boundary (100 → 1 call, 101 → 2)", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, (url) => {
+      const ids = new URL(url).searchParams.get("appids")?.split(",") ?? [];
+      const body: Record<string, unknown> = {};
+      for (const id of ids) body[id] = { success: true, data: [] };
+      return jsonResponse(body);
+    });
+    await client.callTool({
+      name: "get_prices",
+      arguments: { appids: Array.from({ length: 100 }, (_, i) => i + 1) },
+    });
+    assert.equal(mock.calls.filter((c) => c.url.includes("/api/appdetails")).length, 1);
+
+    mock.calls.length = 0;
+    await client.callTool({
+      name: "get_prices",
+      arguments: { appids: Array.from({ length: 101 }, (_, i) => i + 1) },
+    });
+    assert.equal(mock.calls.filter((c) => c.url.includes("/api/appdetails")).length, 2);
+  });
+
+  test("get_prices reports unavailable when an appid's key is entirely absent from the response", async (t) => {
+    // Distinct from an explicit {success:false} entry — Steam can just omit
+    // the key altogether for some appids in a batch response.
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("/api/appdetails") ? jsonResponse({}) : jsonResponse({}),
+    );
+    const res = await client.callTool({ name: "get_prices", arguments: { appids: [999] } });
+    const s = res.structuredContent as { prices: { appid: number; available: boolean }[] };
+    assert.equal(s.prices[0]!.available, false);
+  });
+
+  test("get_prices rejects appids outside the 1-500 bound before calling the upstream", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    const tooMany = await client.callTool({
+      name: "get_prices",
+      arguments: { appids: Array.from({ length: 501 }, (_, i) => i + 1) },
+    });
+    assert.equal(tooMany.isError, true);
+    const empty = await client.callTool({ name: "get_prices", arguments: { appids: [] } });
+    assert.equal(empty.isError, true);
+    assert.equal(mock.calls.filter((c) => c.url.includes("/api/appdetails")).length, 0);
+  });
 });
 
 test("get_review_histogram returns history and recent with positive %", async (t) => {
@@ -223,6 +303,61 @@ test("get_review_histogram returns history and recent with positive %", async (t
   assert.equal(s.history[0]!.positive_pct, 100); // 754 up / 1 down → 100%
   assert.equal(s.recent[0]!.up, 66);
   assert.equal(s.recent[0]!.positive_pct, 97); // 66 / 68
+});
+
+describe("zod input boundaries are rejected before reaching the client", () => {
+  test("get_game_reviews' limit rejects 0 and 21, accepts 1 and 20", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    for (const bad of [0, 21]) {
+      const res = await client.callTool({
+        name: "get_game_reviews",
+        arguments: { appid: 620, limit: bad },
+      });
+      assert.equal(res.isError, true, `limit ${bad} should be rejected`);
+    }
+    assert.equal(mock.calls.filter((c) => c.url.includes("/appreviews/")).length, 0);
+    for (const ok of [1, 20]) {
+      const res = await client.callTool({
+        name: "get_game_reviews",
+        arguments: { appid: 620, limit: ok },
+      });
+      assert.equal(res.isError, undefined, `limit ${ok} should be accepted`);
+    }
+  });
+
+  test("appid rejects 0 and negative values", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    for (const bad of [0, -1]) {
+      const res = await client.callTool({
+        name: "get_review_histogram",
+        arguments: { appid: bad },
+      });
+      assert.equal(res.isError, true, `appid ${bad} should be rejected`);
+    }
+    assert.equal(mock.calls.filter((c) => c.url.includes("/appreviewhistogram/")).length, 0);
+  });
+});
+
+test("get_game (by name) skips a non-numeric top search result and resolves the next one", async (t) => {
+  // resolveAppId's `res.items?.find((i) => typeof i.id === "number")` — a
+  // bundle/sub can rank above the real app and carries no numeric id.
+  const { client } = await setupServer(t, ENV, (url) => {
+    if (url.includes("/api/storesearch")) {
+      return jsonResponse({
+        total: 2,
+        items: [
+          { type: "bundle", name: "Portal Bundle" }, // no numeric id
+          { type: "app", name: "Portal 2", id: 620 },
+        ],
+      });
+    }
+    if (url.includes("/api/appdetails"))
+      return jsonResponse({ "620": { success: true, data: APP } });
+    return jsonResponse({});
+  });
+  const res = await client.callTool({ name: "get_game", arguments: { name: "portal" } });
+  const s = res.structuredContent as { appid: number };
+  assert.equal(s.appid, 620);
 });
 
 // The pieces of upstream-failure handling (classifyStatus, messageFor,

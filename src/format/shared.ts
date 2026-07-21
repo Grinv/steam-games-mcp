@@ -1,5 +1,16 @@
 // Generic field helpers shared by the storefront and web formatters. Pure,
 // dependency-free transforms used to keep tool responses token-efficient.
+import { notFoundReason } from "./shared.schemas.js";
+import type { z } from "zod";
+
+// The client layer (clients/web.ts, clients/storeService.ts) short-circuits to
+// found:false before a summarizer ever runs (a private profile/friends list,
+// an empty owned-library, an unresolvable tag dictionary, ...) — routing that
+// through this helper keeps the actual shaping (the `.parse()` call) inside
+// format/, per AGENTS.md's "all raw→agent-facing shaping lives in src/format/".
+export function notFound(reason: string): z.infer<typeof notFoundReason> {
+  return notFoundReason.parse({ found: false, reason });
+}
 
 export function names(list: { description?: string; name?: string }[] | undefined): string[] {
   return (list ?? []).map((x) => x.description ?? x.name).filter((n): n is string => Boolean(n));

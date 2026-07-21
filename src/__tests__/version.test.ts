@@ -14,6 +14,7 @@ const manifest = readJson("manifest.json") as {
   version: string;
   user_config: Record<string, unknown>;
   tools: { name: string }[];
+  prompts: { name: string }[];
 };
 const server = readJson("server.json") as {
   name: string;
@@ -47,6 +48,18 @@ test("manifest.json's tools list matches every tool the server actually register
   try {
     const registered = new Set((await client.listTools()).tools.map((t) => t.name));
     const declared = new Set(manifest.tools.map((t) => t.name));
+    assert.deepEqual(declared, registered);
+  } finally {
+    await close();
+  }
+});
+
+// Same drift risk as the tools list above, for manifest.json's `prompts` array.
+test("manifest.json's prompts list matches every prompt the server actually registers", async () => {
+  const { client, close } = await connectServer({});
+  try {
+    const registered = new Set((await client.listPrompts()).prompts.map((p) => p.name));
+    const declared = new Set(manifest.prompts.map((p) => p.name));
     assert.deepEqual(declared, registered);
   } finally {
     await close();

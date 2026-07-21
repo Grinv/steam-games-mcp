@@ -1,9 +1,10 @@
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { McpServer } from "@modelcontextprotocol/server";
+
 // Server construction and stdio startup. Kept separate from the bin entry
 // (index.ts) so tests can import buildServer without triggering startup.
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig, type Config } from "./config.js";
-import { createLogger, type Logger, type LogLevel, type LogSink } from "./lib/logger.js";
+import { createLogger, type Logger } from "./lib/logger.js";
 import { StorefrontClient } from "./clients/storefront.js";
 import { SteamWebClient } from "./clients/web.js";
 import { registerStorefrontTools } from "./tools/storefront.js";
@@ -32,76 +33,39 @@ export function buildServer(config: Config, logger: Logger): McpServer {
 
   const server = new McpServer(
     { name: "steam-games-mcp", version: VERSION },
-    // Declare the logging capability so the SDK registers `logging/setLevel`
-    // and lets us push `notifications/message` to the client (see start()).
-    { capabilities: { logging: {} }, instructions: INSTRUCTIONS },
+    { instructions: INSTRUCTIONS },
   );
 
   registerStorefrontTools(server, store);
   registerStoreWebTools(server, web, web.store);
   registerPlayerWebTools(server, web);
-  registerPrompts(server);
+  registerPrompts(server, store);
   return server;
 }
 
-// Internal levels → MCP (syslog-style) levels for notifications/message.
-const MCP_LOG_LEVELS = {
-  debug: "debug",
-  info: "info",
-  warn: "warning",
-  error: "error",
-} as const satisfies Record<Exclude<LogLevel, "silent">, string>;
-
-/** A {@link LogSink} that mirrors each log line onto the MCP client as a
- *  `notifications/message`. Best-effort: sends are dropped silently when there
- *  is no transport yet, when the client filtered the level via `logging/setLevel`,
- *  or after disconnect — logging must never break the server. */
-export function mcpLoggingSink(server: McpServer): LogSink {
-  return (level, message) => {
-    void server.server
-      .sendLoggingMessage({
-        level: MCP_LOG_LEVELS[level],
-        logger: "steam-games-mcp",
-        data: message,
-      })
-      .catch(() => {});
-  };
-}
-
-/** Mirror logs to the client, but ONLY after the initialize handshake completes.
- *  Sending a `notifications/message` before `initialized` violates the MCP
- *  lifecycle, and strict clients (e.g. Claude Desktop) drop the connection — so
- *  `ref.sink` stays unset (stderr-only) until then. Pass the same holder the
- *  logger reads from. */
-export function activateClientLoggingOnInitialize(
-  server: McpServer,
-  ref: { sink?: LogSink },
-): void {
-  const priorOnInitialized = server.server.oninitialized;
-  server.server.oninitialized = () => {
-    priorOnInitialized?.();
-    ref.sink = mcpLoggingSink(server);
-  };
-}
-
-/** Load config, build the server, and serve over stdio until terminated. */
+/** Load config and serve over stdio until terminated. `serveStdio` owns the
+ *  per-connection protocol-era negotiation (SEP-2577 / 2026-07-28): it may call
+ *  the factory more than once while probing a connection's era, so the factory
+ *  must stay side-effect-safe to call repeatedly (buildServer() always returns a
+ *  fresh, independent instance).
+ *
+ *  Logging is stderr-only: no `logging` capability, no `notifications/message`
+ *  push. Both are deprecated as of protocol 2026-07-28 (SEP-2577) in favor of
+ *  stderr/OpenTelemetry for stdio servers — which is exactly what lib/logger.ts
+ *  already does, so there's no client-push flow to carry forward. */
 export async function start(): Promise<void> {
   const config = loadConfig();
+  const logger = createLogger(config.logLevel);
 
-  // Forward-ref via a holder: the logger is needed to build the server, but the
-  // sink needs the server, so we fill it in once the server exists — and only
-  // once the client has initialized (see activateClientLoggingOnInitialize).
-  const ref: { sink?: LogSink } = {};
-  const logger = createLogger(config.logLevel, (level, message) => ref.sink?.(level, message));
-  const server = buildServer(config, logger);
-  activateClientLoggingOnInitialize(server, ref);
-
-  await server.connect(new StdioServerTransport());
-  logger.info(`steam-games-mcp ${VERSION} ready`);
-
+  // Arm signal/error handlers BEFORE calling serveStdio(): under CPU
+  // contention the process can be descheduled between two synchronous
+  // statements, and a SIGINT/SIGTERM arriving in that gap would hit Node's
+  // default disposition (killed immediately, no graceful close) instead of
+  // this handler if it were registered any later.
+  const stdio: { handle?: ReturnType<typeof serveStdio> } = {};
   const shutdown = (signal: string): void => {
     logger.info(`received ${signal}, shutting down`);
-    void server.close().finally(() => process.exit(0));
+    void (stdio.handle?.close() ?? Promise.resolve()).finally(() => process.exit(0));
   };
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
@@ -110,4 +74,7 @@ export async function start(): Promise<void> {
     logger.error("uncaught exception", err);
     process.exit(1);
   });
+
+  stdio.handle = serveStdio(() => buildServer(config, logger));
+  logger.info(`steam-games-mcp ${VERSION} ready`);
 }
