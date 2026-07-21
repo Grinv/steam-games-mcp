@@ -6,6 +6,24 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-07-21
+
+### Fixed
+
+- Fix `get_specials`/`get_featured` listing the same game twice within a section.
+- Fix `get_game`/`get_current_players` hiding the invalid appid behind a generic "not found" message.
+- Fix `get_current_players` treating Steam's 404 response for an unknown appid as a transport error instead of a clean not-found.
+- Fix `get_owned_games`'s `check_appids` reporting a private profile's games as `owned:false` instead of unknown.
+
+### Changed
+
+- Clarify `discover_games`'s `total_matching`, `get_wishlist`'s count fields, `get_recommended_games`'s `match_score`, and `get_review_histogram`'s `rollup_type` — each was easy to misread.
+- Correct `discover_games`'s claim that only `min_discount` filters server-side.
+- Correct `get_player_summary`/`get_recently_played`/`get_player_achievements`'s stated privacy requirements.
+- Document `get_recommended_games`'s empty-library case and `get_friend_list`'s 100-friend cap.
+- Cross-reference `get_game_reviews`/`get_review_histogram` and disclose `get_game_reviews`'s review-text truncation.
+- Fix the `what_should_i_play` prompt instructing a non-existent `discover_games` budget filter.
+
 ## [0.10.0] - 2026-07-21
 
 ### Added
