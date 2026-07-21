@@ -52,6 +52,22 @@ describe("get_owned_games", () => {
     assert.match(s.reason, /private/i);
   });
 
+  test("get_owned_games: check_appids on a private profile reports unknown, not a false owned:false", async (t) => {
+    // Regression: ownership is genuinely unknown when the profile is private —
+    // the old behavior claimed owned:false for every checked appid, which
+    // misrepresents "can't check" as "doesn't own it".
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetOwnedGames") ? jsonResponse({ response: {} }) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "76561197960287930", check_appids: [620] },
+    });
+    const s = res.structuredContent as { found: boolean; owns?: unknown };
+    assert.equal(s.found, false);
+    assert.equal(s.owns, undefined);
+  });
+
   test("get_owned_games: check_appids reliably reports ownership even outside the top-50 cap", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetOwnedGames")

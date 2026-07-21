@@ -80,7 +80,10 @@ describe("get_game", () => {
       return jsonResponse({});
     });
     const res = await client.callTool({ name: "get_game", arguments: { appid: 999 } });
-    assert.equal(res.isError, true);
+    // Regression: the not_found ApiError's own message (which names the
+    // appid) used to be discarded for a generic "No matching resource was
+    // found (404)." — asserting isError alone let that slip through silently.
+    assertToolError(res, /no steam app with id 999/i);
   });
 
   test("get_game returns a not-found error for success:true with no data (region-restricted/delisted)", async (t) => {
@@ -151,12 +154,39 @@ test("get_game_reviews summarizes score and percentage", async (t) => {
   assert.equal(s.positive_pct, 90);
 });
 
-test("get_specials lists discounted games with formatted prices", async (t) => {
+test("get_game_reviews: filtering by type nulls the summary (Steam's own appreviews only computes it for 'all')", async (t) => {
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("/appreviews/")
+      ? jsonResponse({
+          success: 1,
+          query_summary: { num_reviews: 1 },
+          reviews: [{ review: "meh", voted_up: false, votes_up: 0, author: {} }],
+        })
+      : jsonResponse({}),
+  );
+  const res = await client.callTool({
+    name: "get_game_reviews",
+    arguments: { appid: 620, type: "negative" },
+  });
+  const s = res.structuredContent as {
+    summary: string | null;
+    total_reviews: number | null;
+    positive_pct: number | null;
+  };
+  assert.equal(s.summary, null);
+  assert.equal(s.total_reviews, null);
+  assert.equal(s.positive_pct, null);
+});
+
+test("get_specials lists discounted games with formatted prices, deduping repeated appids", async (t) => {
   const { client } = await setupServer(t, ENV, router);
   const res = await client.callTool({ name: "get_specials", arguments: {} });
   const s = res.structuredContent as {
     specials: { final_price: string; discount_percent: number }[];
   };
+  // The FEATURED fixture lists appid 620 twice — Steam's own upstream does
+  // this — proving the duplicate collapses to a single entry.
+  assert.equal(s.specials.length, 1);
   assert.equal(s.specials[0]!.discount_percent, 80);
   assert.equal(s.specials[0]!.final_price, "1.99 USD");
 });
@@ -170,6 +200,7 @@ test("get_featured returns all four store sections, defaulting missing ones to e
     new_releases: unknown[];
     coming_soon: unknown[];
   };
+  assert.equal(s.specials.length, 1);
   assert.equal(s.specials[0]!.appid, 620);
   assert.equal(s.specials[0]!.discount_percent, 80);
   assert.deepEqual(s.top_sellers, []);

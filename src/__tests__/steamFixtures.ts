@@ -66,6 +66,17 @@ export const FEATURED = {
         final_price: 199,
         currency: "USD",
       },
+      // Steam's own featuredcategories endpoint repeats appids within a
+      // section (confirmed live) — this duplicate proves we dedupe it.
+      {
+        id: 620,
+        name: "Portal 2",
+        discounted: true,
+        discount_percent: 80,
+        original_price: 999,
+        final_price: 199,
+        currency: "USD",
+      },
     ],
   },
   top_sellers: { items: [] },

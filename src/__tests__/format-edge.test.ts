@@ -183,16 +183,13 @@ describe("summarizeOwnedGames", () => {
     ]);
   });
 
-  test("checkAppids on a private profile reports every appid as not owned", () => {
+  test("checkAppids on a private profile omits owns — unknown, not falsely reported as not owned", () => {
     const s = summarizeOwnedGames({ response: {} }, { checkAppids: [620, 730] }) as {
       found: boolean;
-      owns: { appid: number; owned: boolean }[];
+      owns?: { appid: number; owned: boolean }[];
     };
     assert.equal(s.found, false);
-    assert.deepEqual(s.owns, [
-      { appid: 620, owned: false },
-      { appid: 730, owned: false },
-    ]);
+    assert.equal(s.owns, undefined);
   });
 });
 

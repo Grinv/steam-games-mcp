@@ -120,12 +120,15 @@ export function summarizeOwnedGames(
   opts: { max?: number; checkAppids?: number[] } = {},
 ): z.infer<typeof getOwnedGamesOutput> {
   if (isPrivate(r)) {
-    const base = { found: false, reason: PRIVATE_REASON, game_count: null, games: [] };
-    return getOwnedGamesOutput.parse(
-      opts.checkAppids
-        ? { ...base, owns: opts.checkAppids.map((appid) => ({ appid, owned: false })) }
-        : base,
-    );
+    // No `owns` here even if checkAppids was given: a private profile means
+    // ownership is genuinely unknown, not false — reporting owned:false would
+    // misrepresent "can't check" as "doesn't own it".
+    return getOwnedGamesOutput.parse({
+      found: false,
+      reason: PRIVATE_REASON,
+      game_count: null,
+      games: [],
+    });
   }
   const all = r.response?.games ?? [];
   const games = all.slice().sort((a, b) => (b.playtime_forever ?? 0) - (a.playtime_forever ?? 0));

@@ -403,15 +403,24 @@ export class SteamWebClient {
   }
 
   // Current concurrent player count for a game. Not cached — it's a live number.
-  // `result` is Steam's own success flag, independent of HTTP status (an
-  // unknown/invalid appid still answers 200): 1 = ok, anything else means the
-  // appid wasn't found — verified live (a bogus appid answers `{result:42}`
-  // with no `player_count` at all, not a genuine zero).
+  // `result` is Steam's own success flag: 1 = ok, anything else means the appid
+  // wasn't found. Verified live: a bogus/unknown appid answers HTTP 404 (not
+  // 200) with `{result:42}` and no `player_count` — the 404 is caught below so
+  // the generic "not found" from the HTTP layer doesn't shadow this appid-
+  // specific message; a plain 200 with a bad `result` is still handled directly.
   async getCurrentPlayers(appid: number): Promise<Record<string, unknown>> {
-    const res = await this.#get<CurrentPlayersResponse>(
-      "ISteamUserStats/GetNumberOfCurrentPlayers/v1/",
-      { appid },
-    );
+    let res: CurrentPlayersResponse;
+    try {
+      res = await this.#get<CurrentPlayersResponse>(
+        "ISteamUserStats/GetNumberOfCurrentPlayers/v1/",
+        { appid },
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "not_found") {
+        throw new ApiError({ code: "not_found", message: `No Steam app with id ${appid}` });
+      }
+      throw err;
+    }
     if (res.response?.result !== 1) {
       throw new ApiError({ code: "not_found", message: `No Steam app with id ${appid}` });
     }

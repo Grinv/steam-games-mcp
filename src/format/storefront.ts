@@ -283,16 +283,29 @@ export interface FeaturedResponse {
 
 // Not `.parse()`d per item — see formattedPrice()'s comment; the enclosing
 // summarizeFeatured()/summarizeSpecials() validates the whole result once.
+//
+// Steam's featuredcategories endpoint itself repeats the same appid within a
+// section (confirmed live against store.steampowered.com/api/featuredcategories),
+// so dedupe here rather than passing upstream's repeats through to the agent.
 function featuredItems(items: FeaturedItem[] | undefined): z.infer<typeof featuredItemSchema>[] {
-  return (items ?? []).map((i) => ({
-    appid: i.id,
-    name: i.name,
-    discounted: i.discounted ?? false,
-    discount_percent: i.discount_percent ?? 0,
-    original_price: money(i.original_price, i.currency),
-    final_price: money(i.final_price, i.currency),
-    store_url: storeUrl(i.id),
-  }));
+  const seen = new Set<number>();
+  const out: z.infer<typeof featuredItemSchema>[] = [];
+  for (const i of items ?? []) {
+    if (i.id !== undefined) {
+      if (seen.has(i.id)) continue;
+      seen.add(i.id);
+    }
+    out.push({
+      appid: i.id,
+      name: i.name,
+      discounted: i.discounted ?? false,
+      discount_percent: i.discount_percent ?? 0,
+      original_price: money(i.original_price, i.currency),
+      final_price: money(i.final_price, i.currency),
+      store_url: storeUrl(i.id),
+    });
+  }
+  return out;
 }
 
 export function summarizeFeatured(r: FeaturedResponse): z.infer<typeof getFeaturedOutput> {

@@ -42,7 +42,11 @@ function messageFor(err: ApiError): string {
     case "forbidden":
       return "The upstream service denied access (403). The credentials may lack permission.";
     case "not_found":
-      return "No matching resource was found (404).";
+      // Domain code throws `not_found` with a specific, agent-facing message
+      // (e.g. "No Steam app with id 123") — folding it in here, the same way
+      // `bad_request` below does, instead of discarding it for a generic
+      // string that was silently swallowing that detail on every not-found.
+      return `No matching resource was found (404): ${err.message}`;
     case "not_modified":
       return "The content has not changed since the last request (304).";
     case "rate_limited":

@@ -40,9 +40,24 @@ test("get_current_players works without a key and returns the count", async (t) 
 });
 
 test("get_current_players errors on an unknown appid instead of reporting a silent null count", async (t) => {
-  // Regression: Steam answers 200 with `{result:42}` (no player_count) for an
-  // invalid/unknown appid — verified live — which used to pass through as
-  // player_count:null, indistinguishable from a genuine (nonexistent) zero.
+  // Regression: Steam answers HTTP 404 with `{result:42}` (no player_count) for
+  // an invalid/unknown appid — verified live — which used to either surface as
+  // the generic HTTP-layer "not found" (losing the appid) or, if ever answered
+  // as a 200, pass through as player_count:null indistinguishable from a
+  // genuine (nonexistent) zero.
+  const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+    url.includes("GetNumberOfCurrentPlayers")
+      ? jsonResponse({ response: { result: 42 } }, { status: 404 })
+      : jsonResponse({}),
+  );
+  const res = await client.callTool({
+    name: "get_current_players",
+    arguments: { appid: 999999999 },
+  });
+  assertToolError(res, /no steam app with id 999999999/i);
+});
+
+test("get_current_players errors on a 200 response with a non-1 result too", async (t) => {
   const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
     url.includes("GetNumberOfCurrentPlayers")
       ? jsonResponse({ response: { result: 42 } })
@@ -52,7 +67,7 @@ test("get_current_players errors on an unknown appid instead of reporting a sile
     name: "get_current_players",
     arguments: { appid: 999999999 },
   });
-  assertToolError(res, /no matching resource|not found/i);
+  assertToolError(res, /no steam app with id 999999999/i);
 });
 
 describe("get_wishlist", () => {
