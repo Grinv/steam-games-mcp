@@ -25,7 +25,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fix a whitespace-only `STEAM_API_KEY`/`STEAM_ID` env value not being treated as unset, unlike an empty string ([33878f5](https://github.com/Grinv/steam-games-mcp/commit/33878f5)).
 - Fix `is_it_worth_buying`'s `game` argument failing the prompt call in MCP clients (e.g. Claude Code) that don't ask the user for a missing required prompt argument — it's optional now, and the prompt asks which game itself when omitted ([33878f5](https://github.com/Grinv/steam-games-mcp/commit/33878f5)).
 - Fix `get_game`'s `demos` list dropping a real appid of `0`, mistaken for a missing appid by a falsy-value filter ([33878f5](https://github.com/Grinv/steam-games-mcp/commit/33878f5)).
-- Fix a startup race where a `SIGINT`/`SIGTERM` arriving between `serveStdio()` starting and the signal handlers being registered would kill the process immediately instead of shutting down gracefully — handlers are now armed first ([33878f5](https://github.com/Grinv/steam-games-mcp/commit/33878f5)).
 
 ### Removed
 

@@ -57,15 +57,12 @@ export async function start(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
 
-  // Arm signal/error handlers BEFORE calling serveStdio(): under CPU
-  // contention the process can be descheduled between two synchronous
-  // statements, and a SIGINT/SIGTERM arriving in that gap would hit Node's
-  // default disposition (killed immediately, no graceful close) instead of
-  // this handler if it were registered any later.
-  const stdio: { handle?: ReturnType<typeof serveStdio> } = {};
+  const handle = serveStdio(() => buildServer(config, logger));
+  logger.info(`steam-games-mcp ${VERSION} ready`);
+
   const shutdown = (signal: string): void => {
     logger.info(`received ${signal}, shutting down`);
-    void (stdio.handle?.close() ?? Promise.resolve()).finally(() => process.exit(0));
+    void handle.close().finally(() => process.exit(0));
   };
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
@@ -74,7 +71,4 @@ export async function start(): Promise<void> {
     logger.error("uncaught exception", err);
     process.exit(1);
   });
-
-  stdio.handle = serveStdio(() => buildServer(config, logger));
-  logger.info(`steam-games-mcp ${VERSION} ready`);
 }
