@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { Client } from "@modelcontextprotocol/client";
 import { textOf } from "./helpers.js";
+import { VERSION } from "../version.js";
 
 // The unit suite exercises the code via an in-memory transport against src (see
 // helpers.ts's connectServer()) — that only ever drives a bare McpServer, never
@@ -68,6 +69,45 @@ describe("e2e (real built bundle over stdio)", () => {
       assert.equal(res.isError, true);
       const text = textOf(res);
       assert.match(text, /needs a Steam Web API key/i);
+    } finally {
+      await client.close();
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  test("negotiates the modern (2026-07-28) era over real stdio (versionNegotiation: 'auto')", async (t) => {
+    // The default test above connects with the SDK's default versionNegotiation
+    // ('legacy'), so it never sends `server/discover` and never exercises the
+    // modern-era path serveStdio implements (see server.ts's comment: the
+    // factory may run once for a disposable probe sibling and again for the
+    // real connection). Opting into 'auto' here is the only place that path —
+    // and the serverInfo it stamps into response _meta — gets covered.
+    if (!existsSync(distPath)) {
+      t.skip("dist/index.js not built — run `npm run build` first (CI builds before tests)");
+      return;
+    }
+
+    const sandbox = makeSandbox();
+    const client = new Client(
+      { name: "e2e-modern", version: "0" },
+      { versionNegotiation: { mode: "auto" } },
+    );
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [join(sandbox, "index.js")],
+      env: envWithoutCredentials(),
+    });
+
+    try {
+      await client.connect(transport);
+
+      const { tools } = await client.listTools();
+      assert.equal(tools.length, 25, "every tool should register under the modern era too");
+      assert.deepEqual(client.getServerVersion(), { name: "steam-games-mcp", version: VERSION });
+
+      const res = await client.callTool({ name: "get_owned_games", arguments: {} });
+      assert.equal(res.isError, true);
+      assert.match(textOf(res), /needs a Steam Web API key/i);
     } finally {
       await client.close();
       rmSync(sandbox, { recursive: true, force: true });
