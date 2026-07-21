@@ -83,6 +83,16 @@ describe("e2e (real built bundle over stdio)", () => {
       return;
     }
 
+    // Windows has no POSIX signals: process.kill(pid, "SIGTERM") force-terminates the
+    // child directly instead of delivering anything its `process.on("SIGTERM", ...)`
+    // handler could catch, so this test would pass there without ever exercising
+    // server.ts's shutdown()/handle.close() path — a false-positive pass, not real
+    // coverage. Skip rather than claim graceful-shutdown coverage this platform can't give.
+    if (process.platform === "win32") {
+      t.skip("SIGTERM isn't delivered to a signal handler on Windows — see comment above");
+      return;
+    }
+
     const sandbox = makeSandbox();
     const client = new Client({ name: "e2e-shutdown", version: "0" });
     const transport = new StdioClientTransport({
