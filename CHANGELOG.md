@@ -9,6 +9,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - Fix `find_friends_who_own` failing entirely when just one friend's own library lookup hit a transient error (rate-limited/network/5xx) — that friend now lands in a new `unavailable_friends` list (with a reason) instead of sinking every other friend's results.
+- Fix every tool's 403 error message unconditionally blaming "the credentials," even on keyless tools (e.g. `search_games`) that send none at all — an upstream security block (e.g. on an injection-shaped search term) was being misreported as a credentials problem.
 
 ## [0.10.2] - 2026-07-22
 

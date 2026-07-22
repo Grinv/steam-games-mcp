@@ -35,3 +35,14 @@ test("apiErrorToResult produces an actionable message per error code", () => {
     assert.match(r.content[0]!.text, re);
   }
 });
+
+test("forbidden (403) message doesn't blame credentials unconditionally", () => {
+  // Many tools (search_games, get_game, discover_games, ...) call the
+  // keyless Storefront/Web API with no credentials attached at all — a 403
+  // there is an upstream security block (e.g. an injection-shaped search
+  // term), not a credentials problem, so the message must not assert it is.
+  const r = apiErrorToResult(new ApiError({ code: "forbidden", message: "detail" }));
+  const text = r.content[0]!.text;
+  assert.match(text, /without any credentials|no credentials/i);
+  assert.doesNotMatch(text, /^The upstream service denied access \(403\)\. The credentials/);
+});

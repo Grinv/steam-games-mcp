@@ -40,7 +40,13 @@ function messageFor(err: ApiError): string {
         "check the configured API key / token."
       );
     case "forbidden":
-      return "The upstream service denied access (403). The credentials may lack permission.";
+      return (
+        "The upstream service denied access (403). This can be a genuine credentials/permission " +
+        "issue, but many of this server's tools call it without any credentials at all — a 403 " +
+        "there is more likely an unrelated upstream security block (e.g. a request that resembles " +
+        "an injection attempt). Try different input first, and only suspect the configured API key " +
+        "if this tool actually requires one."
+      );
     case "not_found":
       // Domain code throws `not_found` with a specific, agent-facing message
       // (e.g. "No Steam app with id 123") — folding it in here, the same way
