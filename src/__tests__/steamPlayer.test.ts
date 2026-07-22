@@ -590,6 +590,55 @@ describe("get_friend_list", () => {
     });
     assertToolError(res, /5xx|retry later/i);
   });
+
+  test("a GetPlayerSummaries chunk failure (150-friend list, 2 chunks) doesn't sink the whole call", async (t) => {
+    // #playerSummaries chunks at 100 ids/call. Build a 150-friend list so the
+    // enrichment call spans two chunks, and fail only the second one — the
+    // first 100 friends' names must still come through, not a hard error.
+    const manyFriends = Array.from({ length: 150 }, (_, i) => ({
+      steamid: `765611979602${String(87930 + i).padStart(5, "0")}`,
+      relationship: "friend",
+      friend_since: 1600000000 + i,
+    }));
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetFriendList"))
+        return jsonResponse({ friendslist: { friends: manyFriends } });
+      if (url.includes("GetPlayerSummaries")) {
+        // The 101st friend (index 100) only appears in the second chunk's
+        // steamids list — use it to distinguish which chunk this call is.
+        if (url.includes(manyFriends[100]!.steamid)) return jsonResponse({}, { status: 500 });
+        return jsonResponse({
+          response: {
+            players: manyFriends
+              .filter((f) => url.includes(f.steamid))
+              .map((f) => ({ steamid: f.steamid, personaname: `Friend ${f.steamid}` })),
+          },
+        });
+      }
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "get_friend_list",
+      arguments: { steamid: "76561197960287930" },
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as {
+      found: boolean;
+      total: number;
+      returned: number;
+      friends: { steamid: string; name: string | null }[];
+    };
+    assert.equal(s.found, true);
+    assert.equal(s.total, 150);
+    // get_friend_list's own 100-most-recent cap keeps friends 50-149 (by
+    // friend_since desc) — friend 60 (chunk 1, succeeded) and friend 120
+    // (chunk 2, failed) are both within that window, on opposite sides of
+    // the #playerSummaries chunk boundary (chunks split at raw index 100).
+    assert.equal(s.returned, 100);
+    const byId = new Map(s.friends.map((f) => [f.steamid, f.name]));
+    assert.equal(byId.get(manyFriends[60]!.steamid), `Friend ${manyFriends[60]!.steamid}`);
+    assert.equal(byId.get(manyFriends[120]!.steamid), null);
+  });
 });
 
 describe("find_friends_who_own", () => {
@@ -667,6 +716,10 @@ describe("find_friends_who_own", () => {
     assert.equal(s.unavailable_friends.length, 1);
     assert.equal(s.unavailable_friends[0]!.steamid, "76561197960287931");
     assert.match(s.unavailable_friends[0]!.reason, /5xx|500|retry later/i);
+    // The raw upstream error body must never reach this field verbatim — it's
+    // sanitized the same way a top-level tool failure's message is (messageFor()),
+    // not embedded as-is (which could otherwise leak raw HTML/error-page text).
+    assert.doesNotMatch(s.unavailable_friends[0]!.reason, /server exploded/);
   });
 
   test("find_friends_who_own reports found:false for a private friends list (403)", async (t) => {

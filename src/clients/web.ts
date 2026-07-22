@@ -8,6 +8,7 @@ import { HttpClient } from "../lib/http.js";
 import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
 import { ApiError } from "../lib/errors.js";
+import { messageFor } from "../lib/result.js";
 import { notFound } from "../format/shared.js";
 import {
   summarizeComparePlayers,
@@ -88,6 +89,7 @@ export class SteamWebClient {
       timeoutMs: config.httpTimeoutMs,
       retries: config.httpRetries,
       beforeRequest: () => limiter.acquire(),
+      hasCredentials: this.configured,
     });
     this.#cache = new TtlCache(config.cacheTtlMs);
     // Shares this #http/#cache (one rate limiter, one cache) rather than owning
@@ -322,18 +324,27 @@ export class SteamWebClient {
   // Batch GetPlayerSummaries for an arbitrary id list, chunked to its
   // 100-steamid-per-call limit. Shared by getFriendList and findFriendsWhoOwn,
   // both of which enrich a bare steamid list with names/state/avatar.
+  //
+  // Promise.allSettled, not Promise.all: a friend list of any real size can
+  // span 2+ chunks, and one chunk's transient failure (rate-limited/network/
+  // 5xx) must not blank out every other chunk's names — a caller's nameOf()
+  // helper already degrades a missing entry to `name: null`, the same
+  // fallback it uses for a steamid Steam simply has no data for.
   async #playerSummaries(ids: string[]): Promise<PlayerSummariesResponse> {
     if (ids.length === 0) return {};
     const chunks: string[][] = [];
     for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
-    const responses = await Promise.all(
+    const settled = await Promise.allSettled(
       chunks.map((chunk) =>
         this.#get<PlayerSummariesResponse>("ISteamUser/GetPlayerSummaries/v2/", {
           steamids: chunk.join(","),
         }),
       ),
     );
-    return { response: { players: responses.flatMap((r) => r.response?.players ?? []) } };
+    const players = settled.flatMap((r) =>
+      r.status === "fulfilled" ? (r.value.response?.players ?? []) : [],
+    );
+    return { response: { players } };
   }
 
   // Fetch the raw friend list, translating a private friends list into `null`
@@ -389,7 +400,15 @@ export class SteamWebClient {
     const ownership = settled.map((r) =>
       r.status === "fulfilled"
         ? r.value
-        : { error: r.reason instanceof Error ? r.reason.message : String(r.reason) },
+        : // messageFor(), not the raw rejection message: an ApiError's own
+          // `.message` can carry up to 500 raw characters of an upstream error
+          // body (e.g. an HTML error page, per lib/http.ts's toHttpError) —
+          // that must never reach this schema-validated, agent-facing field
+          // unsanitized, the same way a top-level tool failure never does.
+          {
+            error:
+              r.reason instanceof ApiError ? messageFor(r.reason) : "An unexpected error occurred.",
+          },
     );
     return summarizeFriendsWhoOwn(appids, ids, ownership, players);
   }

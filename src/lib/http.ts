@@ -25,6 +25,10 @@ export interface HttpClientOptions {
   retries?: number;
   /** Called before each request; lets callers throttle (rate limiting). */
   beforeRequest?: () => Promise<void> | void;
+  /** Whether this client ever sends a credential (API key/token) — fixed per
+   *  client instance, not per request. Attached to any resulting ApiError so
+   *  a 401/403 message can be precise instead of guessing. */
+  hasCredentials?: boolean;
 }
 
 const MAX_BACKOFF_MS = 8000;
@@ -101,7 +105,7 @@ export class HttpClient {
       options.signal?.removeEventListener("abort", onAbort);
     }
 
-    if (!res.ok) throw await toHttpError(res);
+    if (!res.ok) throw await toHttpError(res, this.#opts.hasCredentials);
 
     if (res.status === 204) return undefined as T;
     const text = await res.text();
@@ -128,7 +132,7 @@ export class HttpClient {
   }
 }
 
-async function toHttpError(res: Response): Promise<ApiError> {
+async function toHttpError(res: Response, hasCredentials?: boolean): Promise<ApiError> {
   const { code, retryable } = classifyStatus(res.status);
   let raw = "";
   try {
@@ -143,6 +147,7 @@ async function toHttpError(res: Response): Promise<ApiError> {
     code,
     status: res.status,
     retryable,
+    hadCredentials: hasCredentials,
     message: `HTTP ${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`,
     ...(retryAfter === undefined ? {} : { cause: { retryAfterMs: retryAfter } }),
   });

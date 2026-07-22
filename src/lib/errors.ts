@@ -20,12 +20,18 @@ export interface ApiErrorOptions {
   status?: number;
   retryable?: boolean;
   cause?: unknown;
+  /** Whether the request that failed carried a credential (API key/token).
+   *  Set by the client, not guessed from the error itself — lets a 401/403
+   *  message be precise instead of hedging between "bad credentials" and
+   *  "this endpoint never sends any" (see lib/result.ts's messageFor). */
+  hadCredentials?: boolean;
 }
 
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
   readonly status: number | undefined;
   readonly retryable: boolean;
+  readonly hadCredentials: boolean | undefined;
 
   constructor(opts: ApiErrorOptions) {
     super(opts.message, opts.cause === undefined ? undefined : { cause: opts.cause });
@@ -33,6 +39,7 @@ export class ApiError extends Error {
     this.code = opts.code;
     this.status = opts.status;
     this.retryable = opts.retryable ?? false;
+    this.hadCredentials = opts.hadCredentials;
   }
 }
 

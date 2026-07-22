@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ApiError, type ApiErrorCode } from "../lib/errors.js";
-import { apiErrorToResult, errorResult, jsonResult } from "../lib/result.js";
+import { apiErrorToResult, errorResult, jsonResult, messageFor } from "../lib/result.js";
 
 test("jsonResult carries both text and structuredContent", () => {
   const r = jsonResult({ a: 1 });
@@ -36,7 +36,7 @@ test("apiErrorToResult produces an actionable message per error code", () => {
   }
 });
 
-test("forbidden (403) message doesn't blame credentials unconditionally", () => {
+test("forbidden (403) message doesn't blame credentials unconditionally when hadCredentials is unknown", () => {
   // Many tools (search_games, get_game, discover_games, ...) call the
   // keyless Storefront/Web API with no credentials attached at all — a 403
   // there is an upstream security block (e.g. an injection-shaped search
@@ -45,4 +45,27 @@ test("forbidden (403) message doesn't blame credentials unconditionally", () => 
   const text = r.content[0]!.text;
   assert.match(text, /without any credentials|no credentials/i);
   assert.doesNotMatch(text, /^The upstream service denied access \(403\)\. The credentials/);
+});
+
+test("messageFor gives a precise, non-hedged message once hadCredentials is known", () => {
+  // hadCredentials: false — e.g. a keyless Storefront call — must say plainly
+  // this isn't a credentials problem, not hedge.
+  const keyless403 = messageFor(
+    new ApiError({ code: "forbidden", message: "d", hadCredentials: false }),
+  );
+  assert.match(keyless403, /isn't a credentials problem/i);
+  assert.doesNotMatch(keyless403, /can be a genuine credentials/i);
+
+  const keyless401 = messageFor(
+    new ApiError({ code: "unauthorized", message: "d", hadCredentials: false }),
+  );
+  assert.match(keyless401, /isn't a credentials problem/i);
+
+  // hadCredentials: true — a key-gated call actually failed with a key
+  // attached — must say the key is the likely cause, not hedge either way.
+  const keyed403 = messageFor(
+    new ApiError({ code: "forbidden", message: "d", hadCredentials: true }),
+  );
+  assert.match(keyed403, /credentials are likely invalid|expired|lack permission/i);
+  assert.doesNotMatch(keyed403, /can be a genuine credentials/i);
 });

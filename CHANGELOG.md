@@ -8,8 +8,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Fix `find_friends_who_own` failing entirely when just one friend's own library lookup hit a transient error (rate-limited/network/5xx) — that friend now lands in a new `unavailable_friends` list (with a reason) instead of sinking every other friend's results.
-- Fix every tool's 403 error message blaming "the credentials," even on keyless tools (e.g. `search_games`) that send none at all.
+- Fix `find_friends_who_own` failing entirely when just one friend's own library lookup hit a transient error (rate-limited/network/5xx) — that friend now lands in a new `unavailable_friends` list (with a sanitized reason) instead of sinking every other friend's results.
+- Fix `get_friend_list`/`find_friends_who_own` failing entirely when just one `GetPlayerSummaries` chunk (friend lists over 100) hit a transient error — the other chunks' names still come through.
+- Fix every tool's 401/403 error message blaming (or hedging about) "the credentials" even once the client already knows none were sent for that request — the message is now precise instead of guessing.
 - Fix `get_game_achievements`, `get_global_achievements` and `get_player_achievements` returning a huge achievement list (e.g. PAYDAY 2's 1,328) uncapped, blowing past the response size limit — each is now capped at 200 like their sibling tools.
 
 ## [0.10.2] - 2026-07-22

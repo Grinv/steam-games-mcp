@@ -43,6 +43,7 @@ export class StorefrontClient {
       timeoutMs: config.httpTimeoutMs,
       retries: config.httpRetries,
       beforeRequest: () => limiter.acquire(),
+      hasCredentials: false,
     });
     this.#cache = new TtlCache(config.cacheTtlMs);
   }
