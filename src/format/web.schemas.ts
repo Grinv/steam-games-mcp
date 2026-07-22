@@ -104,6 +104,7 @@ export const playerAchievementsFound = z
     total: z.number(),
     unlocked: z.number(),
     completion_pct: z.number().nullable(),
+    returned: z.number(),
     achievements: z.array(
       z
         .object({
@@ -119,6 +120,7 @@ export const playerAchievementsFound = z
 export const getGlobalAchievementsOutput = z
   .object({
     count: z.number(),
+    returned: z.number(),
     achievements: z.array(
       z.object({ name: z.string().optional(), percent: z.number().nullable() }).strict(),
     ),
@@ -129,6 +131,7 @@ export const getGameAchievementsOutput = z
   .object({
     game: z.string().nullable(),
     total: z.number(),
+    returned: z.number(),
     achievements: z.array(
       z
         .object({

@@ -9,8 +9,11 @@ import {
 import {
   summarizePlayer,
   summarizeGlobalAchievements,
+  summarizeGameSchema,
+  summarizePlayerAchievements,
   summarizeOwnedGames,
   summarizeNews,
+  ACHIEVEMENTS_MAX,
 } from "../format/web.js";
 
 // Steam frequently omits optional fields; these exercise the sparse-payload
@@ -215,5 +218,100 @@ describe("summarizeGlobalAchievements", () => {
     }) as { count: number; achievements: { percent: number }[] };
     assert.equal(s.count, 1);
     assert.equal(s.achievements[0]!.percent, 74.2);
+  });
+
+  test("a 1000+-achievement game (e.g. PAYDAY 2) is capped at 200, not returned in full", () => {
+    const achievements = Array.from({ length: 1328 }, (_, i) => ({ name: `a${i}`, percent: 50 }));
+    const s = summarizeGlobalAchievements({ achievementpercentages: { achievements } }) as {
+      count: number;
+      returned: number;
+      achievements: unknown[];
+    };
+    assert.equal(s.count, 1328); // true total, unaffected by the cap
+    assert.equal(s.returned, ACHIEVEMENTS_MAX);
+    assert.equal(s.achievements.length, ACHIEVEMENTS_MAX);
+  });
+
+  test("a common-sized list (e.g. 130 achievements) is returned in full, well under the cap", () => {
+    const achievements = Array.from({ length: 130 }, (_, i) => ({ name: `a${i}`, percent: 50 }));
+    const s = summarizeGlobalAchievements({ achievementpercentages: { achievements } }) as {
+      count: number;
+      returned: number;
+      achievements: unknown[];
+    };
+    assert.equal(s.count, 130);
+    assert.equal(s.returned, 130);
+    assert.equal(s.achievements.length, 130);
+  });
+});
+
+describe("summarizeGameSchema", () => {
+  test("a 1000+-achievement game is capped at 200 in definition order, total stays the true count", () => {
+    const achievements = Array.from({ length: 1328 }, (_, i) => ({
+      name: `a${i}`,
+      displayName: `Achievement ${i}`,
+      description: "",
+      hidden: 0,
+    }));
+    const s = summarizeGameSchema(
+      { game: { gameName: "PAYDAY 2", availableGameStats: { achievements } } },
+      { achievementpercentages: { achievements: [] } },
+    ) as { total: number; returned: number; achievements: { name: string }[] };
+    assert.equal(s.total, 1328);
+    assert.equal(s.returned, ACHIEVEMENTS_MAX);
+    assert.equal(s.achievements.length, ACHIEVEMENTS_MAX);
+    assert.equal(s.achievements[0]!.name, "Achievement 0"); // definition order preserved
+  });
+
+  test("a common-sized list (e.g. 130 achievements) is returned in full, well under the cap", () => {
+    const achievements = Array.from({ length: 130 }, (_, i) => ({
+      name: `a${i}`,
+      displayName: `Achievement ${i}`,
+    }));
+    const s = summarizeGameSchema(
+      { game: { gameName: "Some Game", availableGameStats: { achievements } } },
+      { achievementpercentages: { achievements: [] } },
+    ) as { total: number; returned: number; achievements: unknown[] };
+    assert.equal(s.total, 130);
+    assert.equal(s.returned, 130);
+    assert.equal(s.achievements.length, 130);
+  });
+});
+
+describe("summarizePlayerAchievements", () => {
+  test("a 1000+-achievement game is capped at 200, unlocked-first, but unlocked/completion_pct stay exact", () => {
+    const achievements = Array.from({ length: 1328 }, (_, i) => ({
+      apiname: `a${i}`,
+      achieved: i < 30 ? 1 : 0, // 30 unlocked, scattered at the front of the raw list
+    }));
+    const s = summarizePlayerAchievements({
+      playerstats: { success: true, gameName: "PAYDAY 2", achievements },
+    }) as {
+      total: number;
+      unlocked: number;
+      completion_pct: number | null;
+      returned: number;
+      achievements: { achieved: boolean }[];
+    };
+    assert.equal(s.total, 1328); // true total, unaffected by the cap
+    assert.equal(s.unlocked, 30); // true unlocked count, unaffected by the cap
+    assert.equal(s.completion_pct, Math.round((30 / 1328) * 100));
+    assert.equal(s.returned, ACHIEVEMENTS_MAX);
+    assert.equal(s.achievements.length, ACHIEVEMENTS_MAX);
+    assert.ok(s.achievements.slice(0, 30).every((a) => a.achieved)); // unlocked sorted first
+  });
+
+  test("a common-sized list (e.g. 130 achievements) is returned in full, well under the cap", () => {
+    const achievements = Array.from({ length: 130 }, (_, i) => ({
+      apiname: `a${i}`,
+      achieved: i < 50 ? 1 : 0,
+    }));
+    const s = summarizePlayerAchievements({
+      playerstats: { success: true, gameName: "Some Game", achievements },
+    }) as { total: number; unlocked: number; returned: number; achievements: unknown[] };
+    assert.equal(s.total, 130);
+    assert.equal(s.unlocked, 50);
+    assert.equal(s.returned, 130);
+    assert.equal(s.achievements.length, 130);
   });
 });

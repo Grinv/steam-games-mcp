@@ -22,6 +22,7 @@ import {
 } from "./common.js";
 import { steamid, steamIdTool } from "./webShared.js";
 import { wishlistNotFound, withNotFound } from "../format/shared.schemas.js";
+import { ACHIEVEMENTS_MAX } from "../format/web.js";
 import {
   discoverGamesOutput,
   getItemsOutput,
@@ -76,8 +77,10 @@ export function registerStoreWebTools(
       description:
         "Get the global unlock percentage of each achievement in a game by appid — how rare each " +
         "achievement is across all players. Returns each achievement's internal name and its unlock " +
-        "percent (no display names/descriptions — for those, use get_game_achievements). Get the " +
-        "appid from search_games. Works without a key.",
+        "percent (no display names/descriptions — for those, use get_game_achievements), most-common " +
+        `first, capped at the first ${ACHIEVEMENTS_MAX} (check ` +
+        "`returned` vs `count` — most games have far fewer). " +
+        "Get the appid from search_games. Works without a key.",
       inputSchema: z.object({ appid }),
       outputSchema: getGlobalAchievementsOutput,
       annotations: READ_ONLY,

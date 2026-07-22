@@ -11,6 +11,7 @@ import { READ_ONLY, appid, reply } from "./common.js";
 import { steamid, steamIdTool } from "./webShared.js";
 import { notFoundReason, withNotFound } from "../format/shared.schemas.js";
 import { recommendedGamesFound } from "../format/store.schemas.js";
+import { ACHIEVEMENTS_MAX } from "../format/web.js";
 import {
   comparePlayersFound,
   findFriendsWhoOwnFound,
@@ -55,10 +56,12 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
     {
       title: "Get a game's full achievement list",
       description:
-        "List ALL achievements of a game by appid with their names, descriptions, hidden flag and " +
-        "global unlock % (rarity). Requires STEAM_API_KEY (the achievement schema needs a key). " +
-        "For just the rarity by internal id without a key, use get_global_achievements; for a few " +
-        "named highlights, see get_game's achievements_highlighted. Get the appid from search_games.",
+        "List a game's achievements by appid with their names, descriptions, hidden flag and " +
+        `global unlock % (rarity), in the game's own definition order (capped at the first ${ACHIEVEMENTS_MAX}; ` +
+        "check `returned` vs `total` — most games have far fewer). Requires STEAM_API_KEY (the " +
+        "achievement schema needs a key). For just the rarity by internal id without a key, use " +
+        "get_global_achievements; for a few named highlights, see get_game's achievements_highlighted. " +
+        "Get the appid from search_games.",
       inputSchema: z.object({
         appid,
         language: z
@@ -320,11 +323,14 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       title: "Get a player's achievements",
       description:
         "Get a player's achievement progress for one game (unlocked count, % complete, per-achievement " +
-        "unlock dates) by SteamID64 + appid. For the game's full achievement list (names, " +
-        "descriptions, global rarity) independent of any player, use get_game_achievements instead; " +
-        "for just the rarity without a key, use get_global_achievements. Requires STEAM_API_KEY and " +
-        "a public profile with game-details visibility — otherwise it returns found:false (also " +
-        "returned if the game has no achievements at all).",
+        "unlock dates) by SteamID64 + appid — `unlocked`/`completion_pct` always reflect the full " +
+        "list, but the per-achievement `achievements` array is capped at " +
+        `${ACHIEVEMENTS_MAX}, unlocked first (check ` +
+        "`returned` vs `total` — most games have far fewer). For the game's full achievement list " +
+        "(names, descriptions, global rarity) independent of any player, use get_game_achievements " +
+        "instead; for just the rarity without a key, use get_global_achievements. Requires " +
+        "STEAM_API_KEY and a public profile with game-details visibility — otherwise it returns " +
+        "found:false (also returned if the game has no achievements at all).",
       inputSchema: z.object({
         steamid,
         appid,

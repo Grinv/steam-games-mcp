@@ -238,8 +238,16 @@ export interface PlayerAchievementsResponse {
   };
 }
 
+// Shared cap for all three achievement-list tools (get_player_achievements,
+// get_global_achievements, get_game_achievements) — a handful of long-running
+// live-service games (e.g. PAYDAY 2's 1,328) ship achievement counts an order
+// of magnitude past the common case (~120-130), and an uncapped list from one
+// of those blows past the response size limit entirely.
+export const ACHIEVEMENTS_MAX = 200;
+
 export function summarizePlayerAchievements(
   r: PlayerAchievementsResponse,
+  max = ACHIEVEMENTS_MAX,
 ): z.infer<typeof notFoundReason> | z.infer<typeof playerAchievementsFound> {
   const ps = r.playerstats;
   if (!ps?.success) {
@@ -247,13 +255,23 @@ export function summarizePlayerAchievements(
   }
   const all = ps.achievements ?? [];
   const unlocked = all.filter((a) => a.achieved === 1);
+  // Some games (e.g. long-running live-service titles) ship 1000+ achievements
+  // — unbounded, the full list can blow past the response token cap. `total`/
+  // `unlocked`/`completion_pct` above already reflect the true full list;
+  // only the array itself is capped, unlocked-first (more likely of interest
+  // than an arbitrary slice of Steam's own achievement-definition order).
+  const included = all
+    .slice()
+    .sort((a, b) => (b.achieved ?? 0) - (a.achieved ?? 0))
+    .slice(0, max);
   return playerAchievementsFound.parse({
     found: true,
     game: ps.gameName ?? null,
     total: all.length,
     unlocked: unlocked.length,
     completion_pct: all.length ? Math.round((unlocked.length / all.length) * 100) : null,
-    achievements: all.map((a) => ({
+    returned: included.length,
+    achievements: included.map((a) => ({
       name: a.name || a.apiname,
       achieved: a.achieved === 1,
       unlocked_at: a.achieved === 1 ? isoDay(a.unlocktime) : null,
@@ -269,11 +287,17 @@ export interface GlobalAchievementsResponse {
 
 export function summarizeGlobalAchievements(
   r: GlobalAchievementsResponse,
+  max = ACHIEVEMENTS_MAX,
 ): z.infer<typeof getGlobalAchievementsOutput> {
+  // Steam already returns these sorted most-common-first; some games (e.g.
+  // long-running live-service titles) ship 1000+ achievements, so the full
+  // list is capped the same way summarizeOwnedGames/summarizeFriendList cap
+  // theirs — `count` still reports the true total.
   const a = r.achievementpercentages?.achievements ?? [];
   return getGlobalAchievementsOutput.parse({
     count: a.length,
-    achievements: a.map((x) => ({
+    returned: Math.min(a.length, max),
+    achievements: a.slice(0, max).map((x) => ({
       name: x.name,
       percent: typeof x.percent === "string" ? Number(x.percent) : (x.percent ?? null),
     })),
@@ -302,6 +326,7 @@ export interface GameSchemaResponse {
 export function summarizeGameSchema(
   schema: GameSchemaResponse,
   global: GlobalAchievementsResponse,
+  max = ACHIEVEMENTS_MAX,
 ): z.infer<typeof getGameAchievementsOutput> {
   const pct = new Map<string, number>();
   for (const x of global.achievementpercentages?.achievements ?? []) {
@@ -310,10 +335,17 @@ export function summarizeGameSchema(
     }
   }
   const list = schema.game?.availableGameStats?.achievements ?? [];
+  // Some games (e.g. long-running live-service titles) ship 1000+
+  // achievements — unbounded, the full list can blow past the response token
+  // cap. Capped in the game's own definition order (unlike
+  // summarizeGlobalAchievements, which is rarity-sorted); `total` still
+  // reports the true full count.
+  const included = list.slice(0, max);
   return getGameAchievementsOutput.parse({
     game: schema.game?.gameName ?? null,
     total: list.length,
-    achievements: list.map((a) => {
+    returned: included.length,
+    achievements: included.map((a) => {
       const p = a.name != null ? pct.get(a.name) : undefined;
       return {
         api_name: a.name,

@@ -140,7 +140,7 @@ Key: **–** no credentials · **K** Steam Web API key.
 | `get_current_players`     | –   | Live concurrent player count                                                                                         |
 | `get_wishlist`            | –   | A player's wishlist — appids, or full cards + on-sale filter with `include_details` (public profiles)                |
 | `get_followed_games`      | –   | A player's followed games (Steam's "follow" feature, separate from the wishlist) — appids (public profiles)          |
-| `get_game_achievements`   | K   | Full achievement list (names, descriptions) + rarity                                                                 |
+| `get_game_achievements`   | K   | Achievement list (names, descriptions) + rarity — top 200                                                            |
 | `resolve_vanity_url`      | K   | Custom profile name → SteamID64                                                                                      |
 | `get_player_summary`      | K   | Player public profile (incl. Steam level)                                                                            |
 | `get_player_bans`         | K   | VAC/game/community/economy ban status (works even on private profiles)                                               |
