@@ -137,7 +137,13 @@ build/test/lint plus hammering the live MCP tools with edge cases,
 cross-checked against source — follow
 [skills/live-audit/SKILL.md](skills/live-audit/SKILL.md). It covers the
 keyless-vs-key-gated tool split, SteamID64/appid edge cases, and known bug
-classes found in past passes worth checking don't recur.
+classes found in past passes worth checking don't recur. For a diff that
+touches error-handling or partial-failure resilience specifically (a new
+`Promise.allSettled`/try-catch), also run `/code-review` (or an equivalent
+static-reasoning pass) over it — live-testing structurally can't trigger one
+specific sub-request's failure on cue, so bugs in that exact path (an
+unsanitized error message, an outer `Promise.all` quietly defeating the fix)
+need the code read, not called.
 
 ## Before opening a PR
 

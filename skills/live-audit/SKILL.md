@@ -207,6 +207,18 @@ live call confirming the actual response shape it depends on.
 
 ## 4. Source-level code review
 
+**This step is not optional polish on top of live testing — some bug classes
+are only reachable here.** Live-calling the real Steam API can't reliably
+make one specific sub-request in a batch fail on cue, so partial-failure
+resilience (`Promise.allSettled`/try-catch added to stop one item's failure
+from sinking a batch) and where a caught error's message actually ends up
+require reading the control flow, not another live call. Concretely: a
+`/code-review` pass over the same diff caught two bugs in this exact category
+that a thorough live pass had missed — a per-friend error message leaking
+raw upstream content past the sanitizer, and a "fixed" resilience path still
+wrapped in an outer `Promise.all` that silently defeated it. Don't skip this
+step or treat live-testing's silence on a code path as evidence it's fine.
+
 Sweep every file under `src/tools/`, `src/format/`, `src/clients/`, and
 `src/lib/` (lighter pass on the last group unless something specific points
 there) for:
@@ -240,6 +252,24 @@ there) for:
   confirm the logger (`src/lib/logger.ts`) still redacts it in whatever log
   line covers the newest client call, and that nothing writes to stdout
   (reserved for the MCP protocol channel).
+- **A `Promise.allSettled`/try-catch newly added so one item's failure doesn't
+  sink an entire batch call (e.g. `find_friends_who_own`'s per-friend
+  ownership lookup)** — this bug class needs a source-level trace, not a live
+  call, because you can't reliably make one specific sub-request fail on cue
+  against the real API. Check two things: (1) does the rejection's raw
+  `.message` reach agent-facing output unsanitized (route it through
+  `messageFor()`/an equivalent sanitizer the same way a top-level tool
+  failure does — never embed `r.reason.message` directly, since an
+  `ApiError.message` can carry up to 500 raw characters of an upstream error
+  body per `lib/http.ts`'s `toHttpError`, e.g. an HTML error page); (2) is
+  that `Promise.allSettled` call itself still wrapped in an _outer_
+  `Promise.all` alongside another call that can reject (e.g. a sibling
+  batch/chunk-fetch helper like `#playerSummaries`) — if so, the outer
+  `Promise.all` silently defeats the entire fix the moment that other call
+  fails. Grep every sibling function in the same file doing similar
+  batching/chunking for the identical un-fixed bug — a resilience fix applied
+  to one `Promise.all` site often has an identical, still-broken twin call
+  one function away that was never touched.
 
 ## 5. Docs/metadata consistency
 
