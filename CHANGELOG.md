@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-07-23
+
 ### Fixed
 
 - Fix `find_friends_who_own` failing entirely when just one friend's own library lookup hit a transient error (rate-limited/network/5xx) — that friend now lands in a new `unavailable_friends` list (with a sanitized reason) instead of sinking every other friend's results.
