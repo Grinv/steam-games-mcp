@@ -73,6 +73,11 @@ src/
   __tests__/      # node:test (*.test.ts) + helpers.ts
 scripts/          # build-tests.mjs, run-tests.mjs, sync-version.mjs (generic),
                   #   check-api.mjs (domain)
+skills/           # reusable agent workflows for this repo (e.g. live-audit/) —
+                  #   plain Markdown, not tied to any one tool's orchestration
+                  #   features. Same skill name/layout as this project's
+                  #   sibling MCP servers (tmdb-mcp, mal-mcp, anilist-mcp-server)
+                  #   — sync improvements both ways rather than letting them drift
 ```
 
 ## Commands
@@ -124,6 +129,15 @@ npm run inspector      # run under the MCP Inspector
 - **CodeQL** (`.github/workflows/codeql.yml`) scans `javascript-typescript` on
   push/PR to main plus a weekly cron — no local equivalent command; findings
   surface under the repo's **Security → Code scanning** tab.
+
+## Testing the live/published server
+
+For a full audit of the currently published (or just-fixed) package —
+build/test/lint plus hammering the live MCP tools with edge cases,
+cross-checked against source — follow
+[skills/live-audit/SKILL.md](skills/live-audit/SKILL.md). It covers the
+keyless-vs-key-gated tool split, SteamID64/appid edge cases, and known bug
+classes found in past passes worth checking don't recur.
 
 ## Before opening a PR
 
