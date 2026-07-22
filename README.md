@@ -136,7 +136,7 @@ Key: **–** no credentials · **K** Steam Web API key.
 | `get_specials`            | –   | Steam front-page discounts                                                                                           |
 | `get_featured`            | –   | Featured sections (top sellers, new releases, …)                                                                     |
 | `get_game_news`           | –   | Recent news / patch notes                                                                                            |
-| `get_global_achievements` | –   | Global achievement unlock rates (rarity)                                                                             |
+| `get_global_achievements` | –   | Global achievement unlock rates (rarity) — top 200                                                                   |
 | `get_current_players`     | –   | Live concurrent player count                                                                                         |
 | `get_wishlist`            | –   | A player's wishlist — appids, or full cards + on-sale filter with `include_details` (public profiles)                |
 | `get_followed_games`      | –   | A player's followed games (Steam's "follow" feature, separate from the wishlist) — appids (public profiles)          |
@@ -147,7 +147,7 @@ Key: **–** no credentials · **K** Steam Web API key.
 | `get_owned_games`         | K   | A player's games + playtime (top 50 by playtime; `check_appids` reliably checks specific appids past that cap)       |
 | `get_recently_played`     | K   | Games played in the last two weeks                                                                                   |
 | `get_recommended_games`   | K   | Personalized picks from playtime-weighted tags + review quality, excluding owned games                               |
-| `get_player_achievements` | K   | A player's achievement progress in a game                                                                            |
+| `get_player_achievements` | K   | A player's achievement progress in a game — achievement list capped at top 200, unlocked first                       |
 | `get_friend_list`         | K   | A player's friends — name, online state, current game (public friends list)                                          |
 | `find_friends_who_own`    | K   | Which friends own given appid(s) + their playtime — checks each friend's FULL library, not just top 50               |
 | `compare_players`         | K   | Games two players both own, with each one's playtime — checks each player's FULL library, not just top 50            |

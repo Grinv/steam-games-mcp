@@ -10,7 +10,7 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
-import { hours, isoDay, storeUrl, stripHtml } from "./shared.js";
+import { capList, hours, isoDay, storeUrl, stripHtml } from "./shared.js";
 import { notFoundReason, wishlistNotFound } from "./shared.schemas.js";
 import {
   comparePlayersFound,
@@ -257,20 +257,22 @@ export function summarizePlayerAchievements(
   const unlocked = all.filter((a) => a.achieved === 1);
   // Some games (e.g. long-running live-service titles) ship 1000+ achievements
   // — unbounded, the full list can blow past the response token cap. `total`/
-  // `unlocked`/`completion_pct` above already reflect the true full list;
-  // only the array itself is capped, unlocked-first (more likely of interest
-  // than an arbitrary slice of Steam's own achievement-definition order).
-  const included = all
-    .slice()
-    .sort((a, b) => (b.achieved ?? 0) - (a.achieved ?? 0))
-    .slice(0, max);
+  // `unlocked`/`completion_pct` above already reflect the true full list; only
+  // the array itself is capped, unlocked-first (more likely of interest than
+  // an arbitrary slice of Steam's own achievement-definition order) — reusing
+  // the `unlocked` filter already computed above, rather than an O(n log n)
+  // sort over a binary achieved/not-achieved split.
+  const { included, returned } = capList(
+    [...unlocked, ...all.filter((a) => a.achieved !== 1)],
+    max,
+  );
   return playerAchievementsFound.parse({
     found: true,
     game: ps.gameName ?? null,
     total: all.length,
     unlocked: unlocked.length,
     completion_pct: all.length ? Math.round((unlocked.length / all.length) * 100) : null,
-    returned: included.length,
+    returned,
     achievements: included.map((a) => ({
       name: a.name || a.apiname,
       achieved: a.achieved === 1,
@@ -294,10 +296,11 @@ export function summarizeGlobalAchievements(
   // list is capped the same way summarizeOwnedGames/summarizeFriendList cap
   // theirs — `count` still reports the true total.
   const a = r.achievementpercentages?.achievements ?? [];
+  const { included, returned } = capList(a, max);
   return getGlobalAchievementsOutput.parse({
     count: a.length,
-    returned: Math.min(a.length, max),
-    achievements: a.slice(0, max).map((x) => ({
+    returned,
+    achievements: included.map((x) => ({
       name: x.name,
       percent: typeof x.percent === "string" ? Number(x.percent) : (x.percent ?? null),
     })),
@@ -340,11 +343,11 @@ export function summarizeGameSchema(
   // cap. Capped in the game's own definition order (unlike
   // summarizeGlobalAchievements, which is rarity-sorted); `total` still
   // reports the true full count.
-  const included = list.slice(0, max);
+  const { included, returned } = capList(list, max);
   return getGameAchievementsOutput.parse({
     game: schema.game?.gameName ?? null,
     total: list.length,
-    returned: included.length,
+    returned,
     achievements: included.map((a) => {
       const p = a.name != null ? pct.get(a.name) : undefined;
       return {

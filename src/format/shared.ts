@@ -55,3 +55,12 @@ export function isoDateTime(ts: number | undefined): string | null {
 export function storeUrl(appid: number | undefined): string | null {
   return typeof appid === "number" ? `https://store.steampowered.com/app/${appid}` : null;
 }
+
+// Cap a list to `max` items, reporting how many are included alongside the
+// true total (`items.length` — callers keep that for their own `total`/`count`
+// field). One shared shape for every collection-returning summarizer that
+// trims a big list for token efficiency, instead of each hand-rolling its own
+// slice + `Math.min`/`.length` bookkeeping.
+export function capList<T>(items: T[], max: number): { included: T[]; returned: number } {
+  return { included: items.slice(0, max), returned: Math.min(items.length, max) };
+}
