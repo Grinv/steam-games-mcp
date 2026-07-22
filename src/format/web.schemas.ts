@@ -257,5 +257,8 @@ export const findFriendsWhoOwnFound = z
         .strict(),
     ),
     private_friends: z.array(friendNameEntry),
+    // A friend whose own GetOwnedGames call failed (rate-limited/network/
+    // timeout/5xx) rather than came back private — see summarizeFriendsWhoOwn.
+    unavailable_friends: z.array(friendNameEntry.extend({ reason: z.string() })),
   })
   .strict();

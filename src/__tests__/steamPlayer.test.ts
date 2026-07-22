@@ -628,6 +628,47 @@ describe("find_friends_who_own", () => {
     assert.equal(s.private_friends[0]!.steamid, "76561197960287931");
   });
 
+  // Promise.allSettled coverage: one friend's own GetOwnedGames genuinely
+  // failing (rate-limited/network/5xx, not the empty-response "private"
+  // shape) must not sink everyone else's results.
+  test("one friend's GetOwnedGames failure doesn't sink the whole call — that friend lands in unavailable_friends", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetFriendList")) return jsonResponse(FRIENDLIST);
+      if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
+      if (url.includes("GetOwnedGames")) {
+        // 76561197960287931's own library lookup genuinely fails; the other
+        // friend's still succeeds.
+        if (url.includes("steamid=76561197960287931")) {
+          return jsonResponse({ error: "server exploded" }, { status: 500 });
+        }
+        return jsonResponse(OWNED);
+      }
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [620], steamid: "76561197960287930" },
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as {
+      total_friends: number;
+      matches: { appid: number; owners: { steamid: string; playtime_hours: number | null }[] }[];
+      private_friends: { steamid: string }[];
+      unavailable_friends: { steamid: string; reason: string }[];
+    };
+    assert.equal(s.total_friends, 2);
+    // The healthy friend's ownership still comes through untouched.
+    const m620 = s.matches.find((m) => m.appid === 620)!;
+    assert.equal(m620.owners.length, 1);
+    assert.equal(m620.owners[0]!.steamid, "76561197960287930");
+    assert.equal(m620.owners[0]!.playtime_hours, 10);
+    // The failing friend is unavailable, NOT counted as private.
+    assert.equal(s.private_friends.length, 0);
+    assert.equal(s.unavailable_friends.length, 1);
+    assert.equal(s.unavailable_friends[0]!.steamid, "76561197960287931");
+    assert.match(s.unavailable_friends[0]!.reason, /5xx|500|retry later/i);
+  });
+
   test("find_friends_who_own reports found:false for a private friends list (403)", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetFriendList") ? jsonResponse({}, { status: 403 }) : jsonResponse({}),

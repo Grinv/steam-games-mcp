@@ -126,7 +126,10 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "get_owned_games's check_appids. Requires STEAM_API_KEY and the player's OWN friends list " +
         "to be public — otherwise the whole call returns found:false. A friend's individually private " +
         "library is a different, per-friend case: that friend is listed in private_friends (can't be " +
-        "checked) rather than silently counted as a non-owner. Get appids from search_games.",
+        "checked) rather than silently counted as a non-owner. Likewise, a friend whose own library " +
+        "lookup failed (e.g. rate-limited) lands in unavailable_friends with a reason instead of " +
+        "failing the whole call — every other friend's result still comes through. Get appids from " +
+        "search_games.",
       inputSchema: z.object({
         appids: z
           .array(z.number().int().positive())

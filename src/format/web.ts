@@ -525,13 +525,18 @@ export function summarizeFriendList(
 
 // ---- Web API: find friends who own a game (key required) -------------------
 
-// Per appid, which friends own it, plus the friends whose library couldn't be
-// checked at all (private) — kept separate from "doesn't own" so an agent never
-// reports a private library as a confirmed non-owner.
+// Per appid, which friends own it, plus two reasons a friend can be missing
+// from that count instead of a confirmed non-owner: private_friends (their
+// library is private — #ownedPlaytimes' own null) and unavailable_friends
+// (their individual GetOwnedGames call failed — rate-limited/network/
+// timeout/5xx, from findFriendsWhoOwn's Promise.allSettled over all friends).
+// Both are kept separate from "doesn't own" so an agent never reports either
+// case as a confirmed non-owner, and separate from each other since only one
+// of them (unavailable) is worth a retry.
 export function summarizeFriendsWhoOwn(
   appids: number[],
   friendIds: string[],
-  ownership: (Map<number, number> | null)[],
+  ownership: (Map<number, number> | null | { error: string })[],
   players: PlayerSummariesResponse,
 ): z.infer<typeof findFriendsWhoOwnFound> {
   const byId = new Map<string, PlayerSummary>();
@@ -542,10 +547,21 @@ export function summarizeFriendsWhoOwn(
     appids.map((a) => [a, []]),
   );
   const privateFriends: ReturnType<typeof nameOf>[] = [];
+  const unavailableFriends: (ReturnType<typeof nameOf> & { reason: string })[] = [];
   friendIds.forEach((steamid, i) => {
     const playtimes = ownership[i];
-    if (!playtimes) {
+    if (playtimes === null) {
       privateFriends.push(nameOf(steamid));
+      return;
+    }
+    if (!(playtimes instanceof Map)) {
+      // ownership is always the same length as friendIds (one entry per id,
+      // via Promise.allSettled over that same list) — `undefined` here would
+      // mean that invariant broke, not a real per-friend failure.
+      unavailableFriends.push({
+        ...nameOf(steamid),
+        reason: playtimes?.error ?? "no data returned",
+      });
       return;
     }
     for (const appid of appids) {
@@ -559,5 +575,6 @@ export function summarizeFriendsWhoOwn(
     total_friends: friendIds.length,
     matches: appids.map((appid) => ({ appid, owners: owners.get(appid) ?? [] })),
     private_friends: privateFriends,
+    unavailable_friends: unavailableFriends,
   });
 }

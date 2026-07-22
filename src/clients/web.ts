@@ -377,10 +377,20 @@ export class SteamWebClient {
     if (res === null) return notFound(PRIVATE_FRIENDS_REASON);
     const ids = friendIdsOf(res);
     if (ids.length === 0) return summarizeFriendsWhoOwn(appids, [], [], {});
-    const [players, ownership] = await Promise.all([
+    // Promise.allSettled, not Promise.all: #ownedPlaytimes only returns null
+    // for a private profile (see below) — a genuine transient failure
+    // (rate-limited/network/timeout/5xx) on ONE friend's own GetOwnedGames
+    // call still throws, and with a friend list of any size that's not a rare
+    // case. One friend's bad luck must not sink everyone else's results.
+    const [players, settled] = await Promise.all([
       this.#playerSummaries(ids),
-      Promise.all(ids.map((id) => this.#ownedPlaytimes(id, appids))),
+      Promise.allSettled(ids.map((id) => this.#ownedPlaytimes(id, appids))),
     ]);
+    const ownership = settled.map((r) =>
+      r.status === "fulfilled"
+        ? r.value
+        : { error: r.reason instanceof Error ? r.reason.message : String(r.reason) },
+    );
     return summarizeFriendsWhoOwn(appids, ids, ownership, players);
   }
 
