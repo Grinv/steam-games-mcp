@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { HttpClient } from "../lib/http.js";
 import { ApiError } from "../lib/errors.js";
-import { silentLogger, jsonResponse, mockFetch, installFetch } from "./helpers.js";
+import { silentLogger, jsonResponse, htmlResponse, mockFetch, installFetch } from "./helpers.js";
 import { USER_AGENT } from "../version.js";
 
 function client(extra: { retries?: number; timeoutMs?: number } = {}): HttpClient {
@@ -23,6 +23,28 @@ test("getJson parses the body and sends a User-Agent + query params", async (t) 
   assert.ok(!call.url.includes("skip")); // undefined dropped
   const headers = call.init?.headers as Record<string, string>;
   assert.equal(headers["User-Agent"], USER_AGENT);
+});
+
+// messageFor() (lib/result.ts) relies on unsafeDetail to decide whether it's
+// safe to echo err.message verbatim to the agent.
+test("toHttpError flags an unstructured raw body as unsafeDetail", async (t) => {
+  const mock = mockFetch(() =>
+    htmlResponse("<html><body><h1>Bad Gateway</h1>edge error page</body></html>", { status: 400 }),
+  );
+  installFetch(t, mock);
+  await assert.rejects(
+    () => client().getJson("thing"),
+    (err: unknown) => err instanceof ApiError && err.unsafeDetail === true,
+  );
+});
+
+test("toHttpError does not flag a structured JSON error as unsafeDetail", async (t) => {
+  const mock = mockFetch(() => jsonResponse({ message: "bad appid" }, { status: 400 }));
+  installFetch(t, mock);
+  await assert.rejects(
+    () => client().getJson("thing"),
+    (err: unknown) => err instanceof ApiError && err.unsafeDetail === false,
+  );
 });
 
 describe("retry/backoff behavior", () => {

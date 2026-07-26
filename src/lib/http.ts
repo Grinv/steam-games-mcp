@@ -141,7 +141,8 @@ async function toHttpError(res: Response, hasCredentials?: boolean): Promise<Api
     /* ignore body read errors */
   }
   // Prefer a structured `message`/`error` field; fall back to the raw body.
-  const detail = parseErrorMessage(raw) ?? raw.slice(0, 500);
+  const structured = parseErrorMessage(raw);
+  const detail = structured ?? raw.slice(0, 500);
   const retryAfter = parseRetryAfter(res.headers.get("retry-after"));
   return new ApiError({
     code,
@@ -149,6 +150,7 @@ async function toHttpError(res: Response, hasCredentials?: boolean): Promise<Api
     retryable,
     hadCredentials: hasCredentials,
     message: `HTTP ${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`,
+    unsafeDetail: structured === undefined && raw.length > 0,
     ...(retryAfter === undefined ? {} : { cause: { retryAfterMs: retryAfter } }),
   });
 }

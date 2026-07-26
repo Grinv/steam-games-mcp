@@ -38,6 +38,27 @@ test("get_global_achievements parses percentages as numbers", async (t) => {
   assert.equal(s.achievements[0]!.percent, 74.2);
 });
 
+test("get_global_achievements degrades to a clean empty result for a schema-less appid (e.g. a DLC/soundtrack), not a misleading credentials error", async (t) => {
+  // Regression: Steam answers 403 for GetGlobalAchievementPercentagesForApp on
+  // an appid with no achievement schema — verified live. This endpoint is
+  // keyless by design (docs/architecture.md), so that 403 can never genuinely
+  // be a credentials problem even though a key happens to be attached.
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("GetGlobalAchievementPercentagesForApp")
+      ? jsonResponse({}, { status: 403 })
+      : router(url),
+  );
+  const res = await client.callTool({
+    name: "get_global_achievements",
+    arguments: { appid: 1206340 },
+  });
+  assert.equal(res.isError, undefined);
+  const s = res.structuredContent as { count: number; returned: number; achievements: unknown[] };
+  assert.equal(s.count, 0);
+  assert.equal(s.returned, 0);
+  assert.deepEqual(s.achievements, []);
+});
+
 test("get_current_players works without a key and returns the count", async (t) => {
   const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
   const res = await client.callTool({ name: "get_current_players", arguments: { appid: 730 } });

@@ -32,6 +32,13 @@ export function apiErrorToResult(err: ApiError): ToolResult {
   return errorResult(messageFor(err));
 }
 
+// `err.message` is safe to embed verbatim unless toHttpError flagged it as
+// carrying raw, untrusted upstream body text (see ApiError.unsafeDetail) —
+// in that case fall back to a detail-free sentence instead of echoing it.
+function detailOf(err: ApiError): string {
+  return err.unsafeDetail ? "." : `: ${err.message}`;
+}
+
 /** Translate an upstream ApiError into a friendly, actionable message. Exported
  *  (not just used via apiErrorToResult) so callers that embed an upstream
  *  failure into a structured sub-field — e.g. find_friends_who_own's
@@ -77,7 +84,7 @@ export function messageFor(err: ApiError): string {
       // (e.g. "No Steam app with id 123") — folding it in here, the same way
       // `bad_request` below does, instead of discarding it for a generic
       // string that was silently swallowing that detail on every not-found.
-      return `No matching resource was found (404): ${err.message}`;
+      return `No matching resource was found (404)${detailOf(err)}`;
     case "not_modified":
       return "The content has not changed since the last request (304).";
     case "rate_limited":
@@ -89,8 +96,8 @@ export function messageFor(err: ApiError): string {
     case "timeout":
       return "The upstream request timed out. Please retry.";
     case "bad_request":
-      return `The request was rejected as invalid: ${err.message}`;
+      return `The request was rejected as invalid${detailOf(err)}`;
     default:
-      return `Unexpected error talking to the upstream service: ${err.message}`;
+      return `Unexpected error talking to the upstream service${detailOf(err)}`;
   }
 }

@@ -923,6 +923,39 @@ describe("get_game_achievements", () => {
     const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
     assert.equal(res.isError, true);
   });
+
+  test("degrades to a clean empty result for a schema-less appid (e.g. a DLC/soundtrack) instead of a misleading credentials error", async (t) => {
+    // Regression: Steam answers 403 on GetSchemaForGame for an appid with no
+    // achievement schema — verified live. GetGlobalAchievementPercentagesForApp
+    // (keyless) rejecting the same way for the same appid is the appid-specific
+    // signal that distinguishes this from a genuinely bad key.
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetSchemaForGame") || url.includes("GetGlobalAchievementPercentagesForApp")
+        ? jsonResponse({}, { status: 403 })
+        : router(url),
+    );
+    const res = await client.callTool({
+      name: "get_game_achievements",
+      arguments: { appid: 1206340 },
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as {
+      game: string | null;
+      total: number;
+      achievements: unknown[];
+    };
+    assert.equal(s.game, null);
+    assert.equal(s.total, 0);
+    assert.deepEqual(s.achievements, []);
+  });
+
+  test("still surfaces a credentials-flavored error when only the schema call 403s and the keyless global-rarity call succeeds (genuinely ambiguous)", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetSchemaForGame") ? jsonResponse({}, { status: 403 }) : router(url),
+    );
+    const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
+    assert.equal(res.isError, true);
+  });
 });
 
 describe("STEAM_ID default / vanity resolution", () => {
@@ -992,6 +1025,35 @@ test("get_player_summary still succeeds (level:null) when GetSteamLevel itself f
   const s = res.structuredContent as { found: boolean; level: number | null };
   assert.equal(s.found, true);
   assert.equal(s.level, null);
+});
+
+test("get_player_summary: a raw HTTP 400 from GetPlayerSummaries reports found:false, not a raw error", async (t) => {
+  // Defensive parity with every other steamid-taking client method (getOwnedGames,
+  // getRecentlyPlayed, getWishlist, getFollowedGames) — none of them are known
+  // to actually 400 live, but if Steam ever does, it must degrade the same way.
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("GetPlayerSummaries") ? jsonResponse({}, { status: 400 }) : router(url),
+  );
+  const res = await client.callTool({
+    name: "get_player_summary",
+    arguments: { steamid: "76561197960287930" },
+  });
+  assert.equal(res.isError, undefined);
+  const s = res.structuredContent as { found: boolean };
+  assert.equal(s.found, false);
+});
+
+test("get_player_bans: a raw HTTP 400 from GetPlayerBans reports found:false, not a raw error", async (t) => {
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("GetPlayerBans") ? jsonResponse({}, { status: 400 }) : router(url),
+  );
+  const res = await client.callTool({
+    name: "get_player_bans",
+    arguments: { steamid: "76561197960287930" },
+  });
+  assert.equal(res.isError, undefined);
+  const s = res.structuredContent as { found: boolean };
+  assert.equal(s.found, false);
 });
 
 test("get_player_bans reports ban status by steamid", async (t) => {

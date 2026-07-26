@@ -7,9 +7,9 @@
 import { HttpClient } from "../lib/http.js";
 import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
-import { ApiError } from "../lib/errors.js";
+import { ApiError, withFallbackOn } from "../lib/errors.js";
 import { messageFor } from "../lib/result.js";
-import { notFound } from "../format/shared.js";
+import { notFound, PRIVATE_PROFILE_REASON } from "../format/shared.js";
 import {
   summarizeComparePlayers,
   summarizeCurrentPlayers,
@@ -46,10 +46,6 @@ import type { Logger } from "../lib/logger.js";
 import type { Config } from "../config.js";
 
 type Query = Record<string, string | number | boolean | undefined>;
-
-const PRIVATE_PROFILE_REASON =
-  "Profile or game-details are private. Ask the owner to set Steam → Privacy → " +
-  "Game details = Public.";
 
 const PRIVATE_FRIENDS_REASON =
   "Profile or friends list is private. Ask the owner to set Steam → Privacy → " +
@@ -148,9 +144,14 @@ export class SteamWebClient {
 
   async getPlayerSummary(steamid: string): Promise<Record<string, unknown>> {
     const [res, level] = await Promise.all([
-      this.#get<PlayerSummariesResponse>("ISteamUser/GetPlayerSummaries/v2/", {
-        steamids: steamid,
-      }),
+      withFallbackOn(
+        "bad_request",
+        () =>
+          this.#get<PlayerSummariesResponse>("ISteamUser/GetPlayerSummaries/v2/", {
+            steamids: steamid,
+          }),
+        {},
+      ),
       this.#steamLevel(steamid),
     ]);
     return summarizePlayer(res, level);
@@ -176,9 +177,11 @@ export class SteamWebClient {
   }
 
   async getPlayerBans(steamid: string): Promise<Record<string, unknown>> {
-    const res = await this.#get<PlayerBansResponse>("ISteamUser/GetPlayerBans/v1/", {
-      steamids: steamid,
-    });
+    const res = await withFallbackOn(
+      "bad_request",
+      () => this.#get<PlayerBansResponse>("ISteamUser/GetPlayerBans/v1/", { steamids: steamid }),
+      {},
+    );
     return summarizePlayerBans(res);
   }
 
@@ -188,16 +191,13 @@ export class SteamWebClient {
   // private/not-found shape get normalized the same way as that usual shape,
   // rather than leaking the raw upstream body to the agent. Shared by
   // getOwnedGames, getRecommendedGames, comparePlayers and #ownedPlaytimes.
-  async #ownedGamesRaw(steamid: string, query: Query): Promise<OwnedGamesResponse> {
-    try {
-      return await this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", {
-        steamid,
-        ...query,
-      });
-    } catch (e) {
-      if (e instanceof ApiError && e.code === "bad_request") return {};
-      throw e;
-    }
+  #ownedGamesRaw(steamid: string, query: Query): Promise<OwnedGamesResponse> {
+    return withFallbackOn(
+      "bad_request",
+      () =>
+        this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", { steamid, ...query }),
+      {},
+    );
   }
 
   async getOwnedGames(steamid: string, checkAppids?: number[]): Promise<Record<string, unknown>> {
@@ -209,15 +209,12 @@ export class SteamWebClient {
   }
 
   async getRecentlyPlayed(steamid: string): Promise<Record<string, unknown>> {
-    try {
-      const res = await this.#get<OwnedGamesResponse>("IPlayerService/GetRecentlyPlayedGames/v1/", {
-        steamid,
-      });
-      return summarizeRecentlyPlayed(res);
-    } catch (e) {
-      if (e instanceof ApiError && e.code === "bad_request") return summarizeRecentlyPlayed({});
-      throw e;
-    }
+    const res = await withFallbackOn(
+      "bad_request",
+      () => this.#get<OwnedGamesResponse>("IPlayerService/GetRecentlyPlayedGames/v1/", { steamid }),
+      {},
+    );
+    return summarizeRecentlyPlayed(res);
   }
 
   // Personalized recommendations derived from the player's own library: tags
@@ -441,11 +438,26 @@ export class SteamWebClient {
 
   async getGlobalAchievements(appid: number): Promise<Record<string, unknown>> {
     return this.#cache.wrapStaleOnError(`global-ach:${appid}`, async () => {
-      const res = await this.#get<GlobalAchievementsResponse>(
-        "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
-        { gameid: appid },
-      );
-      return summarizeGlobalAchievements(res);
+      try {
+        const res = await this.#get<GlobalAchievementsResponse>(
+          "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
+          { gameid: appid },
+        );
+        return summarizeGlobalAchievements(res);
+      } catch (e) {
+        // This endpoint is keyless by design (docs/architecture.md's "Keyless
+        // caveat"), so a 403/400/404 here can never genuinely be a credentials
+        // problem even though a key happens to be attached when configured —
+        // verified live: Steam answers this way for an appid with no
+        // achievement schema (e.g. a DLC/soundtrack), not for an invalid key.
+        if (
+          e instanceof ApiError &&
+          (e.code === "forbidden" || e.code === "bad_request" || e.code === "not_found")
+        ) {
+          return summarizeGlobalAchievements({});
+        }
+        throw e;
+      }
     });
   }
 
@@ -485,15 +497,12 @@ export class SteamWebClient {
 
   // A player's wishlist (needs the wishlist/profile to be public). Keyless.
   async #getWishlistLight(steamid: string): Promise<Record<string, unknown>> {
-    try {
-      const res = await this.#get<WishlistResponse>("IWishlistService/GetWishlist/v1/", {
-        steamid,
-      });
-      return summarizeWishlist(res);
-    } catch (e) {
-      if (e instanceof ApiError && e.code === "bad_request") return summarizeWishlist({});
-      throw e;
-    }
+    const res = await withFallbackOn(
+      "bad_request",
+      () => this.#get<WishlistResponse>("IWishlistService/GetWishlist/v1/", { steamid }),
+      {},
+    );
+    return summarizeWishlist(res);
   }
 
   // A player's followed games (needs the profile to be public). Keyless — a
@@ -507,15 +516,12 @@ export class SteamWebClient {
     return summarizeFollowedGames(list, count);
   }
 
-  async #followedGamesRaw(steamid: string): Promise<FollowedGamesResponse> {
-    try {
-      return await this.#get<FollowedGamesResponse>("IStoreService/GetGamesFollowed/v1/", {
-        steamid,
-      });
-    } catch (e) {
-      if (e instanceof ApiError && e.code === "bad_request") return {};
-      throw e;
-    }
+  #followedGamesRaw(steamid: string): Promise<FollowedGamesResponse> {
+    return withFallbackOn(
+      "bad_request",
+      () => this.#get<FollowedGamesResponse>("IStoreService/GetGamesFollowed/v1/", { steamid }),
+      {},
+    );
   }
 
   // The count is a best-effort cross-check (summarizeFollowedGames falls back to
@@ -565,7 +571,7 @@ export class SteamWebClient {
   async getGameAchievements(appid: number, language?: string): Promise<Record<string, unknown>> {
     const l = language ?? this.#l;
     return this.#cache.wrapStaleOnError(`schema:${appid}:${l}`, async () => {
-      const [schema, global] = await Promise.all([
+      const [schemaResult, globalResult] = await Promise.allSettled([
         this.#get<GameSchemaResponse>("ISteamUserStats/GetSchemaForGame/v2/", {
           appid,
           l,
@@ -575,7 +581,25 @@ export class SteamWebClient {
           { gameid: appid },
         ),
       ]);
-      return summarizeGameSchema(schema, global);
+      if (schemaResult.status === "fulfilled") {
+        const global = globalResult.status === "fulfilled" ? globalResult.value : {};
+        return summarizeGameSchema(schemaResult.value, global);
+      }
+      const err = schemaResult.reason as unknown;
+      // GetGlobalAchievementPercentagesForApp is keyless — if it ALSO rejects
+      // for this same appid, the block is appid-specific (no achievement
+      // schema, e.g. a DLC/soundtrack — verified live), not a credentials
+      // problem specific to the schema call. If the keyless call succeeded,
+      // the schema-only failure is genuinely ambiguous (could be a bad key),
+      // so it's left to throw and surface its own accurate message.
+      if (
+        err instanceof ApiError &&
+        (err.code === "forbidden" || err.code === "bad_request" || err.code === "not_found") &&
+        globalResult.status === "rejected"
+      ) {
+        return summarizeGameSchema({}, {});
+      }
+      throw err;
     });
   }
 }

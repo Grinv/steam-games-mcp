@@ -10,7 +10,7 @@
 // Shares the parent's HttpClient/TtlCache (passed in) rather than owning its
 // own — both clients hit the same api.steampowered.com host and must honor one
 // rate limiter and one cache, not one each.
-import { ApiError } from "../lib/errors.js";
+import { ApiError, withFallbackOn } from "../lib/errors.js";
 import type { TtlCache } from "../lib/cache.js";
 import { notFound } from "../format/shared.js";
 import {
@@ -342,22 +342,20 @@ export class StoreServiceClient {
       steamMachine: opts.steamMachine,
       steamFrame: opts.steamFrame,
     };
-    try {
-      const { res, tagMap } = await this.#fetchWithTags<WishlistDetailedResponse>(
-        "IWishlistService/GetWishlistSortedFiltered/v1/",
-        { input_json: JSON.stringify(input) },
-        l,
-        opts.tags,
-      );
-      return summarizeWishlistDetailed(res, tagMap, filters);
-    } catch (e) {
-      // Some malformed/out-of-range steamids (e.g. accountid 0) make Steam answer
-      // a raw HTTP 400 here instead of its usual empty-wishlist response — treat
-      // it the same way rather than leaking the raw upstream body to the agent.
-      if (e instanceof ApiError && e.code === "bad_request") {
-        return summarizeWishlistDetailed({}, undefined, filters);
-      }
-      throw e;
-    }
+    // Some malformed/out-of-range steamids (e.g. accountid 0) make Steam answer
+    // a raw HTTP 400 here instead of its usual empty-wishlist response — treat
+    // it the same way rather than leaking the raw upstream body to the agent.
+    const { res, tagMap } = await withFallbackOn(
+      "bad_request",
+      () =>
+        this.#fetchWithTags<WishlistDetailedResponse>(
+          "IWishlistService/GetWishlistSortedFiltered/v1/",
+          { input_json: JSON.stringify(input) },
+          l,
+          opts.tags,
+        ),
+      { res: {} as WishlistDetailedResponse, tagMap: undefined },
+    );
+    return summarizeWishlistDetailed(res, tagMap, filters);
   }
 }

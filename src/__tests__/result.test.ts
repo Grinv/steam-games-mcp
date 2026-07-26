@@ -47,6 +47,26 @@ test("forbidden (403) message doesn't blame credentials unconditionally when had
   assert.doesNotMatch(text, /^The upstream service denied access \(403\)\. The credentials/);
 });
 
+test("messageFor never echoes err.message when it's flagged as carrying raw upstream body text", () => {
+  // Regression: not_found/bad_request/default used to interpolate err.message
+  // verbatim, which for an HTTP-derived ApiError can be up to 500 raw chars of
+  // the upstream response body (lib/http.ts's toHttpError) — e.g. an HTML
+  // error page from a CDN/edge. unsafeDetail marks exactly that case.
+  const rawBody = "<html><body><h1>Bad Gateway</h1>some CDN error page</body></html>";
+  const codes: ApiErrorCode[] = ["not_found", "bad_request", "unknown"];
+  for (const code of codes) {
+    const r = messageFor(
+      new ApiError({ code, message: `HTTP 400 Bad Request: ${rawBody}`, unsafeDetail: true }),
+    );
+    assert.doesNotMatch(r, /<html>|CDN error page/i);
+  }
+  // A curated domain message (unsafeDetail unset/false) must still come through.
+  const domainMsg = messageFor(
+    new ApiError({ code: "not_found", message: "No Steam app with id 5" }),
+  );
+  assert.match(domainMsg, /No Steam app with id 5/);
+});
+
 test("messageFor gives a precise, non-hedged message once hadCredentials is known", () => {
   // hadCredentials: false — e.g. a keyless Storefront call — must say plainly
   // this isn't a credentials problem, not hedge.

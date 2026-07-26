@@ -25,6 +25,12 @@ export interface ApiErrorOptions {
    *  message be precise instead of hedging between "bad credentials" and
    *  "this endpoint never sends any" (see lib/result.ts's messageFor). */
   hadCredentials?: boolean;
+  /** True when `message` may embed raw, untrusted upstream response body text
+   *  (e.g. an HTML error page from a CDN/edge) rather than a curated domain
+   *  message or Steam's own structured JSON error field. Set only by
+   *  `lib/http.ts`'s `toHttpError` — `messageFor()` (lib/result.ts) uses this
+   *  to avoid echoing that text verbatim to the agent. */
+  unsafeDetail?: boolean;
 }
 
 export class ApiError extends Error {
@@ -32,6 +38,7 @@ export class ApiError extends Error {
   readonly status: number | undefined;
   readonly retryable: boolean;
   readonly hadCredentials: boolean | undefined;
+  readonly unsafeDetail: boolean;
 
   constructor(opts: ApiErrorOptions) {
     super(opts.message, opts.cause === undefined ? undefined : { cause: opts.cause });
@@ -40,6 +47,26 @@ export class ApiError extends Error {
     this.status = opts.status;
     this.retryable = opts.retryable ?? false;
     this.hadCredentials = opts.hadCredentials;
+    this.unsafeDetail = opts.unsafeDetail ?? false;
+  }
+}
+
+/** Run `fn`; if it rejects with an ApiError of the given `code`, resolve to
+ *  `fallback` instead of propagating. Several Steam endpoints answer a raw
+ *  HTTP error for some malformed/out-of-range input (e.g. a SteamID64 outside
+ *  the valid 64-bit range) instead of their usual "nothing here" response —
+ *  callers normalize that case to the same shape their usual empty response
+ *  gets, rather than leaking the raw upstream error. */
+export async function withFallbackOn<T>(
+  code: ApiErrorCode,
+  fn: () => Promise<T>,
+  fallback: T,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e instanceof ApiError && e.code === code) return fallback;
+    throw e;
   }
 }
 
