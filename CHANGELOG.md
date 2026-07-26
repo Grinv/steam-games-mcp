@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-07-26
+
 ### Fixed
 
 - Fix `get_game_achievements`/`get_global_achievements` reporting a schema-less appid (e.g. a DLC/soundtrack) as an invalid-credentials error instead of a clean empty result. ([b6a6338](https://github.com/Grinv/steam-games-mcp/commit/b6a6338))
