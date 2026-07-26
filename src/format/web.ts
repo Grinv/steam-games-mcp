@@ -10,7 +10,7 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
-import { capList, hours, isoDay, storeUrl, stripHtml } from "./shared.js";
+import { PRIVATE_PROFILE_REASON, capList, hours, isoDay, storeUrl, stripHtml } from "./shared.js";
 import { notFoundReason, wishlistNotFound } from "./shared.schemas.js";
 import {
   comparePlayersFound,
@@ -103,10 +103,6 @@ export interface OwnedGamesResponse {
 
 // Steam returns an empty `response: {}` (no game_count) when the profile or its
 // game-details are private — distinct from a public account with 0 games.
-const PRIVATE_REASON =
-  "Profile or game-details are private. Ask the owner to set Steam → Privacy → " +
-  "Game details = Public, or this data can't be read.";
-
 function isPrivate(r: OwnedGamesResponse): boolean {
   return r.response?.game_count === undefined && r.response?.games === undefined;
 }
@@ -125,7 +121,7 @@ export function summarizeOwnedGames(
     // misrepresent "can't check" as "doesn't own it".
     return getOwnedGamesOutput.parse({
       found: false,
-      reason: PRIVATE_REASON,
+      reason: PRIVATE_PROFILE_REASON,
       game_count: null,
       games: [],
     });
@@ -138,11 +134,12 @@ export function summarizeOwnedGames(
       .filter((g): g is OwnedGame & { appid: number } => typeof g.appid === "number")
       .map((g) => [g.appid, g]),
   );
+  const { included, returned } = capList(games, max);
   return getOwnedGamesOutput.parse({
     found: true,
     game_count: r.response?.game_count ?? games.length,
-    returned: Math.min(games.length, max),
-    games: games.slice(0, max).map((g) => ({
+    returned,
+    games: included.map((g) => ({
       appid: g.appid,
       name: g.name ?? null,
       playtime_hours: hours(g.playtime_forever),
@@ -196,11 +193,12 @@ export function summarizeComparePlayers(
         (y.playtime_hours_b ?? 0) -
         ((x.playtime_hours_a ?? 0) + (x.playtime_hours_b ?? 0)),
     );
+  const { included, returned } = capList(shared, max);
   return comparePlayersFound.parse({
     found: true,
     shared_count: shared.length,
-    returned: Math.min(shared.length, max),
-    games: shared.slice(0, max),
+    returned,
+    games: included,
   });
 }
 
@@ -210,7 +208,7 @@ export function summarizeRecentlyPlayed(
   if (isPrivate(r)) {
     return getRecentlyPlayedOutput.parse({
       found: false,
-      reason: PRIVATE_REASON,
+      reason: PRIVATE_PROFILE_REASON,
       total: 0,
       games: [],
     });
@@ -442,11 +440,12 @@ export function summarizeWishlist(
     });
   }
   const sorted = items.toSorted((a, b) => (a.priority ?? 1e9) - (b.priority ?? 1e9));
+  const { included, returned } = capList(sorted, max);
   return wishlistLightFound.parse({
     found: true,
     total: items.length,
-    returned: Math.min(items.length, max),
-    items: sorted.slice(0, max).map((i) => ({
+    returned,
+    items: included.map((i) => ({
       appid: i.appid,
       store_url: storeUrl(i.appid),
       priority: i.priority ?? null,
@@ -511,11 +510,12 @@ export function summarizeFollowedGames(
       games: [],
     });
   }
+  const { included, returned } = capList(appids, max);
   return getFollowedGamesOutput.parse({
     found: true,
     total: countRes.response?.followed_game_count ?? appids.length,
-    returned: Math.min(appids.length, max),
-    games: appids.slice(0, max).map((appid) => ({ appid, store_url: storeUrl(appid) })),
+    returned,
+    games: included.map((appid) => ({ appid, store_url: storeUrl(appid) })),
   });
 }
 
@@ -540,11 +540,12 @@ export function summarizeFriendList(
   const byId = new Map<string, PlayerSummary>();
   for (const p of players.response?.players ?? []) if (p.steamid) byId.set(p.steamid, p);
   const sorted = friends.toSorted((a, b) => (b.friend_since ?? 0) - (a.friend_since ?? 0));
+  const { included, returned } = capList(sorted, max);
   return friendListFound.parse({
     found: true,
     total: friends.length,
-    returned: Math.min(friends.length, max),
-    friends: sorted.slice(0, max).map((f) => {
+    returned,
+    friends: included.map((f) => {
       const p = f.steamid ? byId.get(f.steamid) : undefined;
       return {
         steamid: f.steamid,
@@ -573,6 +574,7 @@ export function summarizeFriendsWhoOwn(
   friendIds: string[],
   ownership: (Map<number, number> | null | { error: string })[],
   players: PlayerSummariesResponse,
+  max = 100,
 ): z.infer<typeof findFriendsWhoOwnFound> {
   const byId = new Map<string, PlayerSummary>();
   for (const p of players.response?.players ?? []) if (p.steamid) byId.set(p.steamid, p);
@@ -605,11 +607,27 @@ export function summarizeFriendsWhoOwn(
     }
   });
 
+  const cappedPrivate = capList(privateFriends, max);
+  const cappedUnavailable = capList(unavailableFriends, max);
   return findFriendsWhoOwnFound.parse({
     found: true,
     total_friends: friendIds.length,
-    matches: appids.map((appid) => ({ appid, owners: owners.get(appid) ?? [] })),
-    private_friends: privateFriends,
-    unavailable_friends: unavailableFriends,
+    matches: appids.map((appid) => {
+      const forAppid = owners.get(appid) ?? [];
+      const { included, returned } = capList(forAppid, max);
+      return {
+        appid,
+        owners: included,
+        ...(returned < forAppid.length && { owners_total: forAppid.length }),
+      };
+    }),
+    private_friends: cappedPrivate.included,
+    ...(cappedPrivate.returned < privateFriends.length && {
+      private_friends_total: privateFriends.length,
+    }),
+    unavailable_friends: cappedUnavailable.included,
+    ...(cappedUnavailable.returned < unavailableFriends.length && {
+      unavailable_friends_total: unavailableFriends.length,
+    }),
   });
 }

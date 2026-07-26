@@ -12,6 +12,7 @@ import {
   summarizeGameSchema,
   summarizePlayerAchievements,
   summarizeOwnedGames,
+  summarizeFriendsWhoOwn,
   summarizeNews,
   ACHIEVEMENTS_MAX,
 } from "../format/web.js";
@@ -193,6 +194,42 @@ describe("summarizeOwnedGames", () => {
     };
     assert.equal(s.found, false);
     assert.equal(s.owns, undefined);
+  });
+});
+
+describe("summarizeFriendsWhoOwn", () => {
+  test("caps owners/private_friends/unavailable_friends at 100 and reports the true total only when truncated", () => {
+    // Regression: a big public friends list used to grow these arrays
+    // unbounded — a token-budget risk AGENTS.md requires capping against,
+    // same as every sibling collection summarizer.
+    const N = 150;
+    const friendIds = Array.from({ length: N }, (_, i) => `friend${i}`);
+    const ownership = friendIds.map(() => new Map([[620, 100]]));
+    const s = summarizeFriendsWhoOwn([620], friendIds, ownership, {
+      response: { players: [] },
+    }) as {
+      total_friends: number;
+      matches: { appid: number; owners: unknown[]; owners_total?: number }[];
+    };
+    assert.equal(s.total_friends, N); // the true count is never hidden
+    const m = s.matches[0]!;
+    assert.equal(m.owners.length, 100);
+    assert.equal(m.owners_total, N);
+  });
+
+  test("omits the _total fields when nothing was actually truncated", () => {
+    const friendIds = ["a", "b"];
+    const ownership = [new Map([[620, 10]]), null];
+    const s = summarizeFriendsWhoOwn([620], friendIds, ownership, {
+      response: { players: [] },
+    }) as {
+      matches: { owners_total?: number }[];
+      private_friends_total?: number;
+      unavailable_friends_total?: number;
+    };
+    assert.equal(s.matches[0]!.owners_total, undefined);
+    assert.equal(s.private_friends_total, undefined);
+    assert.equal(s.unavailable_friends_total, undefined);
   });
 });
 

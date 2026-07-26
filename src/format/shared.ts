@@ -12,6 +12,14 @@ export function notFound(reason: string): z.infer<typeof notFoundReason> {
   return notFoundReason.parse({ found: false, reason });
 }
 
+// Shared wording for "profile or game-details are private" — used by every
+// summarizer/client that hits this exact Steam condition (a private profile
+// answering with no game_count/games), so the agent sees one consistent
+// explanation regardless of which tool surfaced it.
+export const PRIVATE_PROFILE_REASON =
+  "Profile or game-details are private. Ask the owner to set Steam → Privacy → " +
+  "Game details = Public, or this data can't be read.";
+
 export function names(list: { description?: string; name?: string }[] | undefined): string[] {
   return (list ?? []).map((x) => x.description ?? x.name).filter((n): n is string => Boolean(n));
 }

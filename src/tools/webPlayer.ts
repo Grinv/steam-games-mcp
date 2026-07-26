@@ -131,8 +131,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "library is a different, per-friend case: that friend is listed in private_friends (can't be " +
         "checked) rather than silently counted as a non-owner. Likewise, a friend whose own library " +
         "lookup failed (e.g. rate-limited) lands in unavailable_friends with a reason instead of " +
-        "failing the whole call — every other friend's result still comes through. Get appids from " +
-        "search_games.",
+        "failing the whole call — every other friend's result still comes through. Each of owners, " +
+        "private_friends and unavailable_friends is capped at 100 entries (a sibling _total field " +
+        "appears only when it was actually truncated). Get appids from search_games.",
       inputSchema: z.object({
         appids: z
           .array(z.number().int().positive())
