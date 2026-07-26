@@ -11,7 +11,7 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
-import { isoDateTime, isoDay, storeUrl } from "./shared.js";
+import { capList, isoDateTime, isoDay, storeUrl } from "./shared.js";
 import { wishlistNotFound } from "./shared.schemas.js";
 import {
   baseCardSchema,
@@ -65,6 +65,13 @@ export interface StoreItem {
   // TagMap / GetTagListResponse), so a card carries human-readable tag names.
   tags?: { tagid?: number; weight?: number }[];
   visible?: boolean;
+  // Present (with the base game's appid) on DLC, soundtracks and other
+  // non-standalone items; absent on a base game/app itself — verified live
+  // against IStoreBrowseService/GetItems (e.g. a DLC/soundtrack always carries
+  // this, a base game like Portal 2 never does). Used by isBaseGame() below to
+  // keep catalog-discovery results (discover_games, get_recommended_games) to
+  // actual games, not their DLC/soundtracks.
+  related_items?: { parent_appid?: number };
 }
 export interface StoreItemsResponse {
   response?: { store_items?: StoreItem[] };
@@ -74,6 +81,14 @@ export interface StoreItemsResponse {
 // non-nullable field on baseCardSchema) — every call site below narrows to
 // this before calling either, since a StoreItem's own appid is optional.
 type StoreItemWithAppid = StoreItem & { appid: number };
+
+// Catalog-DISCOVERY results (discover_games, get_recommended_games) should
+// surface actual games, not their DLC/soundtracks/upgrade-kits — an appid the
+// caller already knows about (get_items, get_wishlist) has no such filter,
+// since those legitimately list DLC the player owns/wants.
+function isBaseGame(it: StoreItem): boolean {
+  return it.related_items?.parent_appid === undefined;
+}
 
 // ---- tag dictionary (IStoreService/GetTagList) ------------------------------
 
@@ -352,7 +367,7 @@ export function summarizeDiscover(
   const rows = (r.response?.store_items ?? [])
     .filter(
       (it): it is StoreItemWithAppid =>
-        it.visible !== false && typeof it.appid === "number" && keep(it),
+        it.visible !== false && typeof it.appid === "number" && isBaseGame(it) && keep(it),
     )
     .map((it) => storeCard(it, opts.tagMap))
     .sort((a, b) => (b.discount_pct as number) - (a.discount_pct as number));
@@ -450,6 +465,7 @@ export function summarizeWishlistDetailed(
       ? (b.discount_pct as number) - (a.discount_pct as number)
       : ((a.priority as number | null) ?? 1e9) - ((b.priority as number | null) ?? 1e9),
   );
+  const { included, returned } = capList(cards, WISHLIST_DETAIL_MAX);
   return wishlistDetailedFound.parse({
     found: true,
     total: items.length,
@@ -461,8 +477,8 @@ export function summarizeWishlistDetailed(
           "reviews or tags to check."
         : undefined,
     matched: cards.length,
-    returned: Math.min(cards.length, WISHLIST_DETAIL_MAX),
-    items: cards.slice(0, WISHLIST_DETAIL_MAX),
+    returned,
+    items: included,
   });
 }
 
@@ -510,6 +526,7 @@ export function summarizeRecommendations(
       (it): it is StoreItemWithAppid =>
         it.visible !== false &&
         typeof it.appid === "number" &&
+        isBaseGame(it) &&
         !ownedAppids.has(it.appid) &&
         !(excludeLower.length && matchesAnyTag(it.tags, tagMap, excludeLower)),
     )

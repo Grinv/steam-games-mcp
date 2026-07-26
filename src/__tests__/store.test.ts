@@ -147,6 +147,28 @@ test("summarizeDiscover: empty page returns metadata + no deals", () => {
   assert.deepEqual(s.deals, []);
 });
 
+test("summarizeDiscover drops DLC/soundtracks (related_items.parent_appid set), keeping only base games", () => {
+  // Regression: discover_games used to surface a DLC/upgrade-kit as a "deal"
+  // alongside real games — verified live against a real Steam appid. A base
+  // game never carries related_items; DLC/soundtracks always do.
+  const items: StoreItem[] = [
+    { appid: 1, name: "Real Game", best_purchase_option: { discount_pct: 50 } },
+    {
+      appid: 2,
+      name: "Some DLC",
+      best_purchase_option: { discount_pct: 90 },
+      related_items: { parent_appid: 1 },
+    },
+  ];
+  const s = summarizeDiscover({ response: { store_items: items } }, {}) as {
+    deals: { appid: number }[];
+  };
+  assert.deepEqual(
+    s.deals.map((d) => d.appid),
+    [1],
+  );
+});
+
 describe("summarizeWishlistDetailed", () => {
   test("empty wishlist → found:false with a private/empty reason", () => {
     const s = summarizeWishlistDetailed({ response: { items: [] } }) as {
@@ -188,6 +210,27 @@ describe("summarizeWishlistDetailed", () => {
     assert.equal(s.enriched, 1);
     assert.equal(s.matched, 1);
     assert.match(s.note!, /1 of 2/);
+  });
+
+  test("keeps DLC/soundtracks (unlike discover_games/get_recommended_games) — a player may legitimately wishlist those", () => {
+    const s = summarizeWishlistDetailed({
+      response: {
+        items: [
+          {
+            appid: 2,
+            priority: 1,
+            store_item: {
+              appid: 2,
+              name: "Some DLC",
+              best_purchase_option: { discount_pct: 0 },
+              related_items: { parent_appid: 1 },
+            },
+          },
+        ],
+      },
+    }) as { matched: number; items: { appid: number }[] };
+    assert.equal(s.matched, 1);
+    assert.equal(s.items[0]!.appid, 2);
   });
 
   test("fully enriched wishlist carries no note", () => {
@@ -312,6 +355,28 @@ describe("summarizeRecommendations", () => {
     assert.deepEqual(
       s.recommendations.map((r) => r.appid),
       [600],
+    );
+  });
+
+  test("drops DLC/soundtracks (related_items.parent_appid set), keeping only base games", () => {
+    // Regression: get_recommended_games used to surface a DLC/upgrade-kit as a
+    // pick alongside real games — verified live against a real Steam appid.
+    const candidates: StoreItem[] = [
+      { appid: 700, name: "Real Game", tags: [{ tagid: 1, weight: 900 }] },
+      {
+        appid: 800,
+        name: "Some DLC",
+        tags: [{ tagid: 1, weight: 900 }],
+        related_items: { parent_appid: 700 },
+      },
+    ];
+    const tagWeights = new Map([["Roguelike", 10]]);
+    const s = summarizeRecommendations(candidates, tagWeights, new Set(), RECO_TAG_MAP, 10, [
+      "Roguelike",
+    ]) as { recommendations: { appid: number }[] };
+    assert.deepEqual(
+      s.recommendations.map((r) => r.appid),
+      [700],
     );
   });
 });
