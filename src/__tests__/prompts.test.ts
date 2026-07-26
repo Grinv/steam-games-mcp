@@ -40,6 +40,21 @@ describe("prompts", () => {
     assert.doesNotMatch(text, /discover_games/);
   });
 
+  test("what_should_i_play still threads steamid into get_owned_games when tags is also given", async (t) => {
+    // Regression: the tags branch used to call get_owned_games with no steamid
+    // at all, silently falling back to the default STEAM_ID even when a
+    // different player's steamid was explicitly requested.
+    const { client, close } = await connectServer(ENV);
+    t.after(close);
+    const res = await client.getPrompt({
+      name: "what_should_i_play",
+      arguments: { steamid: "76561197960287930", tags: "Roguelike" },
+    });
+    const text = (res.messages[0]!.content as { text: string }).text;
+    assert.match(text, /get_owned_games/);
+    assert.match(text, /76561197960287930/);
+  });
+
   test("is_it_worth_buying weaves the game name into the message", async (t) => {
     const { client, close } = await connectServer(ENV);
     t.after(close);
