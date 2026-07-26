@@ -1,3 +1,8 @@
+---
+name: tool-description-check
+description: Self-check a new or edited MCP tool `description`/field `.describe()` text against Glama's Tool Definition Quality Score (TDQS) rubric before committing. Use whenever a tool description or schema field description in src/tools/*.ts is added or changed.
+---
+
 # Tool descriptions: what to check before committing
 
 When adding or editing a tool's `description` (or a schema field's
@@ -39,7 +44,7 @@ Purpose, and are the two dimensions most worth double-checking on a new tool.
   not "No API key required" alone.
 - **Parameter Semantics has a structural ceiling.** If a schema's
   `.describe()` coverage is already ~100% (this repo's convention — see the
-  Conventions section in [AGENTS.md](../AGENTS.md)), the rubric's own baseline
+  Conventions section in [AGENTS.md](../../AGENTS.md)), the rubric's own baseline
   is 3/5 for that dimension _even with a perfect description_ — restating
   schema fields in prose adds no information and isn't rewarded. Don't chase
   this by padding descriptions; only add prose when there's a genuinely

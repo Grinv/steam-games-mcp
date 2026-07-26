@@ -1,3 +1,8 @@
+---
+name: live-audit
+description: Audit steam-games-mcp — build/test/lint gate, live MCP tool edge-case sweep (input validation, SteamID64/vanity/appid edge cases, key-gating), and source-level code review. Use when asked to test/audit the published or just-fixed steam-games-mcp package, hunt for bugs/edge cases, or repeat "the same kind of testing as before."
+---
+
 # live-audit — steam-games-mcp health check + edge-case hunt
 
 Repo-specific playbook, for any agent/model working on this repo (not tied to
@@ -24,6 +29,17 @@ per-call risk here isn't "did I just modify a real account," it's "did I just
 call a key-gated tool without a key," "did I treat a private profile's
 default response as a bug," or "did I burn a real person's SteamID64 in a
 committed test fixture." Read `## 2` before live-calling anything.
+
+## Contents
+
+- 0. Confirm "published"/"fixed" actually means what you think it means
+- 1. Static pass first (cheap, catches regressions before you burn API calls)
+- 2. Safety rules for live testing (read before calling anything)
+- 3. Live edge-case sweep
+- 4. Source-level code review
+- 5. Docs/metadata consistency
+- 6. Report, then fix only what's confirmed
+- 7. Commit + changelog, if asked
 
 ## 0. Confirm "published"/"fixed" actually means what you think it means
 
@@ -167,26 +183,12 @@ environment supports concurrent subagents/background tasks.
   trace, a confusing validation message, or (worse) malformed input silently
   accepted and producing a wrong result. A clean, expected Zod validation
   error is correct behavior, not a finding.
-- **Live prompt testing** (`src/tools/prompts.ts`) — a static read comparing
-  prompt text against tool names/params misses argument-handling bugs.
-  Actually render every prompt through the real MCP protocol:
-  `npx @modelcontextprotocol/inspector --cli node dist/index.js --method
-prompts/list`, then `--method prompts/get --prompt-name <name>
---prompt-args key=value key2=value2` (space-separated `key=value` pairs, NOT
-  a JSON blob — the CLI rejects JSON with "Invalid parameter format"). Run
-  each prompt with no args, with only one of several optional args set at a
-  time, and with all of them set — an argument that's individually optional
-  can still have a bug that only shows up when given alone. Watch out for a
-  SteamID64 argument specifically: the inspector CLI's own `--prompt-args
-key=value` parsing silently coerces a numeric-looking value through a JS
-  number, and a 17-digit SteamID64 exceeds `Number.MAX_SAFE_INTEGER` — it
-  comes out the other side with its last couple of digits corrupted (e.g.
-  `...930` → `...940`), even though the prompt's own `z.string()` schema never
-  asked for that. Confirmed this is the inspector's bug, not this server's, by
-  sending the identical `prompts/get` call as raw JSON-RPC over stdio (a JSON
-  string round-trips exactly) — don't spend time chasing this as a steam-games-mcp
-  finding if it recurs; just verify any SteamID64-argument prompt test that way
-  instead of trusting the inspector CLI's rendering of the digits.
+- **Live prompt testing**: run the `prompt-check` skill against every prompt
+  in `src/tools/prompts.ts` — a static read comparing prompt text against
+  tool names/params misses argument-handling bugs that only show up when
+  actually rendered through the real MCP protocol (this skill also covers a
+  SteamID64-specific inspector-CLI number-precision quirk worth knowing
+  about here).
 
 For anything that looks like a bug, **don't stop at the symptom** — grep the
 source for the actual mechanism (the fetch call/regex/cap that produced it)
@@ -223,6 +225,20 @@ Sweep every file under `src/tools/`, `src/format/`, `src/clients/`, and
 `src/lib/` (lighter pass on the last group unless something specific points
 there) for:
 
+- A tool whose field name for a concept diverges from every sibling tool
+  handling the same concept (e.g. one player-data tool naming its
+  SteamID64/vanity-name parameter differently from another). Grep every call
+  site of a shared concept and diff the field names — don't just check each
+  in isolation. No input schema in this codebase is `.strict()`, so a
+  plausible-but-wrong name is silently dropped as an unrecognized key instead
+  of erroring, and the tool quietly falls back to whatever its field being
+  _absent_ means (e.g. an unfiltered/global result) — this looks like a
+  legitimate answer, not a bug, unless you already know what the correctly-
+  filtered result should look like. Confirmed live on a sibling project
+  (anilist-mcp-server): a search tool's user-filter parameter was named
+  differently from every other user-scoped tool, so passing the
+  sibling-consistent (but wrong) name silently returned the unfiltered global
+  feed instead of erroring or filtering.
 - A shaper in `src/format/*.ts` that dereferences a raw Steam field unguarded
   instead of going through its co-located `*.schemas.ts`'s `schema.parse()` —
   AGENTS.md requires every summarizer build its return value that way so the
@@ -273,37 +289,15 @@ there) for:
 
 ## 5. Docs/metadata consistency
 
-Check every one of these, not just a sample:
-
-- `README.md`'s tool table matches `src/server.ts`'s registrations (names,
-  and the keyless-vs-key-gated column against each tool's actual behavior).
-- `manifest.json`'s and `server.json`'s `tools` arrays list the same tool
-  **names** as what's actually registered (`npm test`'s `e2e.test.ts` already
-  asserts this — treat a failure there as authoritative). Their `description`
-  fields are deliberately short, independent marketing-style summaries, NOT a
-  copy of the tool's full `.describe()`/`description` text in
-  `src/tools/*.ts` — don't "fix" them to match verbatim, that's not a bug. Do
-  re-read them for accuracy if a tool's _behavior_ changed in a way the short
-  summary now misrepresents.
-- Tool `description`/field `.describe()` text in `src/tools/*.ts` itself:
-  does it still match the actual `inputSchema`/`outputSchema` and the real
-  behavior? Cross-check new/edited descriptions against
-  `docs/tool-descriptions.md` (Glama's TDQS rubric) per AGENTS.md.
-- `CHANGELOG.md`'s `[Unreleased]` section (see `docs/changelog-style.md` for
-  entry style) has one line per real behavior change made in this pass — add
-  missing entries, don't just flag them as missing.
-- `AGENTS.md`'s "Keyless caveat" list and its `src/` tree (and this `skills/`
-  entry) still match the filesystem and the actual keyless method list.
-- `docs/notes.md`, `docs/releasing.md`, `docs/clients.md` and any other
-  `docs/*.md` for stale phrasing (e.g. describing something as "once
-  published"/"upcoming" that already shipped).
+Run the `docs-consistency-check` skill.
 
 ## 6. Report, then fix only what's confirmed
 
 Rank findings by severity. For each: what's wrong, concrete repro (exact tool
 call + params), the file/line causing it, and the fix shape. Silence on a
 category you didn't get to (rather than implying full coverage) beats a false
-"all clear."
+"all clear." Then run the `self-learning` skill against each confirmed
+finding.
 
 If asked to fix: implement the smallest correct change, add/extend a test in
 the matching `src/__tests__/*.test.ts` (mirror the existing test's style in
@@ -319,7 +313,7 @@ the diff alone.
 
 One `fix:`/`feat:` commit per logically distinct change (don't bundle two
 unrelated fixes into one commit), then a separate `docs:` commit adding to
-`CHANGELOG.md`'s `[Unreleased]` section (style: `docs/changelog-style.md`)
+`CHANGELOG.md`'s `[Unreleased]` section (style: the `changelog-style` skill)
 with one bullet per fix, each linking that fix commit's short sha
 (`https://github.com/Grinv/steam-games-mcp/commit/<7-char-sha>`).
 Author/committer `Grinv <4070730+Grinv@users.noreply.github.com>`, **no**

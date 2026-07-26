@@ -1,3 +1,8 @@
+---
+name: changelog-style
+description: Turn a commit range into CHANGELOG.md entries following common-changelog style. Use when finishing a PR (adding to the [Unreleased] section) or cutting a release (moving [Unreleased] under a new version heading).
+---
+
 # Changelog entries: style & workflow
 
 Entries in `CHANGELOG.md` should be short and self-describing. Style reference:
@@ -26,7 +31,10 @@ and glincker/changelog-generator.
   user-visible side effects (behavior change, perf, a fixed edge case) still
   gets an entry describing that effect, not the refactor itself.
 - **Link commits/PRs/issues**: reference the commit that made the change, and
-  the PR or issue too when one exists.
+  the PR or issue too when one exists. Exception: a version whose entire
+  content is one single commit — don't repeat the identical link after every
+  bullet; put one link at the section level instead (e.g. "Everything below
+  is one commit: `[<sha>](...)`." right under the version heading).
 - **No dangling link line**: keep an entry and its link(s) on one physical
   source line, even if long. GitHub renders a single soft-wrapped newline
   inside a list item as a real line break, so a wrapped entry shows its link

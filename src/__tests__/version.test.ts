@@ -56,7 +56,7 @@ test("manifest.json's tools list matches every tool the server actually register
 
 // AGENTS.md mandates a .describe() on every tool parameter, written for the
 // calling model — this guards that convention going forward instead of relying
-// on review to catch a new undocumented parameter (see docs/tool-descriptions.md).
+// on review to catch a new undocumented parameter (see the tool-description-check skill).
 test("every tool parameter has a .describe() for the calling model", async () => {
   const { client, close } = await connectServer({});
   try {
