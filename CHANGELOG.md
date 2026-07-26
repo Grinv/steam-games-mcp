@@ -6,6 +6,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix `get_game_achievements`/`get_global_achievements` reporting a schema-less appid (e.g. a DLC/soundtrack) as an invalid-credentials error instead of a clean empty result. ([b6a6338](https://github.com/Grinv/steam-games-mcp/commit/b6a6338))
+- Fix `messageFor` echoing raw upstream error/HTML body text through a handful of error paths (`not_found`/`bad_request`/unclassified codes) instead of a clean message; harden `get_player_summary`/`get_player_bans` against a raw upstream 400 the same way every sibling player tool already was. ([b6a6338](https://github.com/Grinv/steam-games-mcp/commit/b6a6338))
+- Fix `find_friends_who_own` returning unbounded `owners`/`private_friends`/`unavailable_friends` lists instead of capping them like every sibling tool. ([6a74fda](https://github.com/Grinv/steam-games-mcp/commit/6a74fda))
+- Fix `discover_games`/`get_recommended_games` surfacing DLC/soundtracks alongside real games. ([f95a153](https://github.com/Grinv/steam-games-mcp/commit/f95a153))
+- Fix the `what_should_i_play` prompt dropping an explicitly-given `steamid` when `tags` was also given. ([05e476f](https://github.com/Grinv/steam-games-mcp/commit/05e476f))
+
 ## [0.10.3] - 2026-07-23
 
 ### Fixed
