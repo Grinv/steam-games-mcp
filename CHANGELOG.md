@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-07-28
+
 ### Fixed
 
 - Fix `get_followed_games` (200-item cap), `get_wishlist`'s light default list (100-item cap), `compare_players` (top-50 cap on returned shared games) and `get_review_histogram` (24/30-entry caps) descriptions not disclosing their own fixed output caps.
