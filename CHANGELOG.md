@@ -6,6 +6,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix `get_followed_games` (200-item cap), `get_wishlist`'s light default list (100-item cap), `compare_players` (top-50 cap on returned shared games) and `get_review_histogram` (24/30-entry caps) descriptions not disclosing their own fixed output caps.
+- Fix `get_items`'s description not disclosing that an unknown/invalid appid comes back marked `available:false` instead of being dropped, the same behavior `get_prices`'s description already states.
+
 ## [0.10.4] - 2026-07-26
 
 ### Fixed

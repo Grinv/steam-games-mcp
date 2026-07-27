@@ -120,8 +120,9 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Get review trend over time",
       description:
         "Get how a game's reviews trend over time by appid: a long-term history (rollup_type " +
-        "reports each entry's granularity, e.g. 'week' or 'month', chosen server-side by Steam) " +
-        "and the recent per-day breakdown, each with positive/negative counts and positive %. Good " +
+        "reports each entry's granularity, e.g. 'week' or 'month', chosen server-side by Steam; " +
+        "capped at the most recent 24 entries) and the recent per-day breakdown (capped at the most " +
+        "recent 30 days), each with positive/negative counts and positive %. Good " +
         "for 'are reviews improving / did an update hurt reception'. For a current summary and " +
         "example review text instead of a trend, use get_game_reviews. Get the appid from " +
         "search_games. No key.",

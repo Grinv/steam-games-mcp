@@ -88,6 +88,16 @@ npm run inspector      # run under the MCP Inspector
   model: explain when to use a tool and what each parameter means. Check new
   or edited descriptions against the `tool-description-check` skill (Glama's
   TDQS rubric) before committing.
+- **Name a field for what it actually accepts, not a generic ID suffix** —
+  e.g. `steamid` (a 17-digit SteamID64 only) rather than a generic
+  `user_id`/`id`, with the vanity/custom-profile-name case handled by its
+  own separate `vanity` field (resolved to a `steamid` via
+  `resolve_vanity_url`), and `get_game`'s `appid`/`name` kept as two
+  distinct optional fields instead of one overloaded `id`. Keep the same
+  field name for the same concept across every tool that takes it — grep
+  sibling tools before naming a new field for an existing concept (`steamid`
+  is one shared schema exported from `tools/webShared.ts`, not redeclared
+  per tool).
 - Keep dependencies minimal. New deps need a clear justification (supply-chain).
 - **Never commit secrets.** The key comes from env vars / OS keychain only.
 - Cross-platform: macOS, Linux and Windows. Avoid POSIX-only shell in npm

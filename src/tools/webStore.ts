@@ -96,7 +96,9 @@ export function registerStoreWebTools(
         "Get price/discount, review % (positive), hardware compatibility, popular user tags and " +
         "release date for a LIST of games by appid in ONE keyless call. The efficient way to price-, " +
         "rating-, tag- and compat-check a wishlist or library without a request per game. For a bigger " +
-        "batch (up to 500 appids) when you only need price, use get_prices instead. Each item " +
+        "batch (up to 500 appids) when you only need price, use get_prices instead. An unknown/invalid " +
+        "appid comes back as its own row marked available:false (never dropped from the list), same " +
+        "as get_prices. Each item " +
         "carries four compatibility fields, each verified/playable/unsupported/unknown: steam_deck " +
         "(Steam Deck), steam_os (SteamOS in general), steam_machine (the Steam Machine console " +
         "specifically), and steam_frame (Steam Frame VR headset); a `vr_support` flag " +
@@ -278,9 +280,9 @@ export function registerStoreWebTools(
         "List the games a player 'follows' on the Steam store, by SteamID64 — a lighter opt-in " +
         "(get sale/update notifications) that's separate from the wishlist; many players follow more " +
         "games than they wishlist. Works without a key, but only if that player's follows/profile are " +
-        "public — otherwise it returns found:false. Returns appids + store_url only (no price/name); " +
-        "pass the appids to get_items for price, review % and compat. Convert a vanity name with " +
-        "resolve_vanity_url first.",
+        "public — otherwise it returns found:false. Returns appids + store_url only (no price/name), " +
+        "capped at the first 200 (check `returned` vs `total`); pass the appids to get_items for " +
+        "price, review % and compat. Convert a vanity name with resolve_vanity_url first.",
       inputSchema: z.object({ steamid }),
       outputSchema: getFollowedGamesOutput,
       annotations: READ_ONLY,
@@ -295,7 +297,8 @@ export function registerStoreWebTools(
       description:
         "List a player's Steam wishlist by SteamID64. Works without a key, but only if that player's " +
         "wishlist/profile is public — otherwise it returns found:false. By default returns a light " +
-        "list of appids (sorted by priority, no names). Set include_details for full store cards in " +
+        "list of appids (sorted by priority, no names), capped at the first 100 (check `returned` vs " +
+        "`total`). Set include_details for full store cards in " +
         "ONE call (name, price/discount, review %, Deck/SteamOS/Machine/Frame compat, vr_support, tags, release) — " +
         "no need to follow up with get_items. Narrow it in the SAME call with tags (e.g. " +
         "['Metroidvania']), platform (NATIVE windows/mac/linux build), steam_deck / steam_os / " +

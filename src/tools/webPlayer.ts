@@ -155,8 +155,10 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       title: "Compare two players' libraries",
       description:
         "Find games two players both own, with each one's playtime — 'what can my friend and I both " +
-        "play', 'do we have anything in common'. Checks each player's FULL library, unlike " +
-        "get_owned_games which caps at the top 50 by playtime. Requires STEAM_API_KEY and both " +
+        "play', 'do we have anything in common'. Checks each player's FULL library to find every " +
+        "shared game, unlike get_owned_games which caps its own list at the top 50 by playtime — but " +
+        "the returned list here is itself capped at the top 50 shared games by combined playtime " +
+        "(check `returned` vs `shared_count`). Requires STEAM_API_KEY and both " +
         "profiles' game-details to be public — otherwise it returns found:false. Omit steamid to " +
         "compare against yourself (STEAM_ID).",
       inputSchema: z.object({
