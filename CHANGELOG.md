@@ -13,6 +13,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Fix `get_friend_list` leaking a raw 404 error for a syntactically valid but nonexistent SteamID64, instead of the graceful `found:false` every sibling tool already gives the exact same id. ([cd67c0f](https://github.com/Grinv/steam-games-mcp/commit/cd67c0f))
+- Fix `is_it_worth_buying`, `what_should_i_play` and `deals_digest` not trimming whitespace-only optional arguments — a blank `game` defeated `is_it_worth_buying`'s "ask which game" fallback entirely, and blank `tags`/`budget`/`min_discount`/`min_review` were spliced directly into the tool-call instruction instead of falling back to their defaults. ([e4d1160](https://github.com/Grinv/steam-games-mcp/commit/e4d1160))
+- Fix `compare_players` sinking the whole call with a generic error when just one player's own library lookup hit a transient error (rate-limited/network/5xx) — the message now names which player's lookup actually failed. ([2cc0452](https://github.com/Grinv/steam-games-mcp/commit/2cc0452))
 - Fix the shipped `.mcpb` bundle including dev-only files (skill docs tripled via symlinks, contributor-only docs, tooling configs) instead of just the ~9 files actually needed at runtime. ([49a9959](https://github.com/Grinv/steam-games-mcp/commit/49a9959))
 - Fix README's links to dev/contributor docs excluded from the bundle (`docs/`, `AGENTS.md`, `SECURITY.md`) breaking when read from an installed extension instead of GitHub. ([37154c9](https://github.com/Grinv/steam-games-mcp/commit/37154c9))
 - Fix `PRIVACY.md`/`SECURITY.md` claiming player-specific data is never cached (missing the `get_player_summary` Steam-level exception) and miscrediting cached data to `get_game_reviews` instead of the review histogram. ([93924d9](https://github.com/Grinv/steam-games-mcp/commit/93924d9))
