@@ -32,9 +32,10 @@ src/
                   #   query/wishlist-sorted card services)
   tools/          # storefront.ts, webStore.ts (keyless-capable Web API tools),
                   #   webPlayer.ts (key-gated player tools), webShared.ts (steamid
-                  #   schema + steamIdTool helper shared by the two), common.ts
-                  #   (shared param schemas + reply wrapper across storefront+web),
-                  #   guard.ts, prompts.ts (MCP Prompts)
+                  #   schema, steamIdTool helper and requireKey, shared by the two),
+                  #   common.ts (shared param schemas, toCompatFilters + reply
+                  #   wrapper across storefront+web), guard.ts, prompts.ts (MCP
+                  #   Prompts)
   __tests__/      # node:test (*.test.ts) + helpers.ts
 scripts/          # build-tests.mjs, run-tests.mjs, sync-version.mjs (generic),
                   #   check-api.mjs (domain), preversion-check.mjs (CHANGELOG gate)
