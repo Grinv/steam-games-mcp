@@ -79,14 +79,21 @@ export const steamFrame = z
 // tool-facing names to the camelCase shape clients/storeService.ts's
 // discoverGames/getWishlistDetailed expect — shared by discover_games and
 // get_wishlist (tools/webStore.ts) so a 6th compat dimension only needs
-// renaming in one place instead of two.
+// renaming in one place instead of two. The return type is keyed off
+// CompatFilters's own keys (Record<keyof CompatFilters, ...>, forcing every
+// key to be present in the object literal below) instead of copying its
+// field list a third time — so adding a field to CompatFilters
+// (format/store.ts) without adding the matching rename here is a compile
+// error, not a silent gap.
 export function toCompatFilters(input: {
   platform?: z.infer<typeof platform>;
   steam_deck?: z.infer<typeof steamDeck>;
   steam_os?: z.infer<typeof steamOs>;
   steam_machine?: z.infer<typeof steamMachine>;
   steam_frame?: z.infer<typeof steamFrame>;
-}): CompatFilters & { platform?: z.infer<typeof platform> } {
+}): Record<keyof CompatFilters, CompatFilters[keyof CompatFilters]> & {
+  platform?: z.infer<typeof platform>;
+} {
   return {
     platform: input.platform,
     steamDeck: input.steam_deck,
