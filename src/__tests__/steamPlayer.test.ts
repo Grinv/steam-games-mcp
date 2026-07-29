@@ -597,6 +597,27 @@ describe("get_friend_list", () => {
     assert.match(s.reason, /friends list/i);
   });
 
+  test("get_friend_list: a syntactically valid but nonexistent steamid reports found:false, not a raw 404", async (t) => {
+    // Confirmed live: Steam answers a plain 404 ("No matching resource was
+    // found") for a well-formed SteamID64 that isn't a real account — distinct
+    // from the accountid-0 case above (a raw 400), but every sibling tool
+    // (get_player_summary, get_owned_games, ...) already degrades this same id
+    // to found:false, so get_friend_list should too instead of leaking the 404.
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetFriendList")
+        ? jsonResponse({ error: "No matching resource was found" }, { status: 404 })
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_friend_list",
+      arguments: { steamid: "76561199999999999" },
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /friends list/i);
+  });
+
   test("get_friend_list: a genuine 500 propagates as a tool error, not found:false", async (t) => {
     // #friendsRaw only swallows 403/401 into null (→ found:false); every
     // other failure code must still surface as a real error.

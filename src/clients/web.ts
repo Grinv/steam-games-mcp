@@ -7,7 +7,7 @@
 import { HttpClient } from "../lib/http.js";
 import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
-import { ApiError, withFallbackOn } from "../lib/errors.js";
+import { ApiError, type ApiErrorCode, withFallbackOn } from "../lib/errors.js";
 import { messageFor } from "../lib/result.js";
 import { notFound, PRIVATE_PROFILE_REASON } from "../format/shared.js";
 import {
@@ -348,6 +348,20 @@ export class SteamWebClient {
     return { response: { players } };
   }
 
+  // Codes GetFriendList answers with instead of its usual private-friends-list
+  // shape: forbidden/unauthorized for a private list, bad_request for some
+  // malformed/out-of-range steamids (e.g. accountid 0), and not_found for a
+  // syntactically valid but nonexistent account (confirmed live: this was
+  // leaking as a raw tool error instead of found:false, unlike every sibling
+  // tool). Local to #friendsRaw — the sibling code-checks elsewhere in this
+  // file each cover a different endpoint's own reasons, not this same set.
+  static readonly #FRIENDLIST_NOT_FOUND_CODES: readonly ApiErrorCode[] = [
+    "forbidden",
+    "unauthorized",
+    "bad_request",
+    "not_found",
+  ];
+
   // Fetch the raw friend list, translating a private friends list into `null`
   // instead of throwing. Shared by getFriendList and findFriendsWhoOwn.
   async #friendsRaw(steamid: string): Promise<FriendListResponse | null> {
@@ -357,13 +371,7 @@ export class SteamWebClient {
         relationship: "friend",
       });
     } catch (e) {
-      // bad_request alongside forbidden/unauthorized: Steam answers a raw 400 for
-      // some malformed/out-of-range steamids (e.g. accountid 0) instead of its
-      // usual private-profile response — treat it the same way.
-      if (
-        e instanceof ApiError &&
-        (e.code === "forbidden" || e.code === "unauthorized" || e.code === "bad_request")
-      )
+      if (e instanceof ApiError && SteamWebClient.#FRIENDLIST_NOT_FOUND_CODES.includes(e.code))
         return null;
       throw e;
     }
