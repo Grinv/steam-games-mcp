@@ -19,6 +19,7 @@ import {
   steamFrame,
   steamMachine,
   steamOs,
+  toCompatFilters,
 } from "./common.js";
 import { steamid, steamIdTool } from "./webShared.js";
 import { wishlistNotFound, withNotFound } from "../format/shared.schemas.js";
@@ -224,23 +225,19 @@ export function registerStoreWebTools(
       outputSchema: discoverGamesOutput,
       annotations: READ_ONLY,
     },
-    ({
-      released_after,
-      released_within_days,
-      steam_deck,
-      steam_os,
-      steam_machine,
-      steam_frame,
-      platform: plat,
-      tags,
-      min_review,
-      min_reviews,
-      min_discount,
-      count,
-      start,
-      country,
-      language,
-    }) => {
+    (input) => {
+      const {
+        released_after,
+        released_within_days,
+        tags,
+        min_review,
+        min_reviews,
+        min_discount,
+        count,
+        start,
+        country,
+        language,
+      } = input;
       // Resolve the recency cutoff (unix seconds): explicit date wins, else a
       // rolling window of N days from now.
       let releasedAfter: number | undefined;
@@ -249,12 +246,8 @@ export function registerStoreWebTools(
         releasedAfter = Math.floor(Date.now() / 1000) - released_within_days * 86400;
       return reply(() =>
         store.discoverGames({
+          ...toCompatFilters(input),
           releasedAfter,
-          steamDeck: steam_deck,
-          steamOs: steam_os,
-          steamMachine: steam_machine,
-          steamFrame: steam_frame,
-          platform: plat,
           tags,
           minReview: min_review,
           minReviews: min_reviews,
@@ -385,40 +378,17 @@ export function registerStoreWebTools(
       outputSchema: getWishlistOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(
-      web,
-      reply,
-      (
-        sid,
-        {
-          include_details,
-          on_sale_only,
-          tags,
-          min_review,
-          min_discount,
-          platform: plat,
-          steam_deck,
-          steam_os,
-          steam_machine,
-          steam_frame,
-          country,
-          language,
-        },
-      ) =>
-        web.getWishlist(sid, {
-          includeDetails: include_details,
-          onSaleOnly: on_sale_only,
-          tags,
-          minReview: min_review,
-          minDiscount: min_discount,
-          platform: plat,
-          steamDeck: steam_deck,
-          steamOs: steam_os,
-          steamMachine: steam_machine,
-          steamFrame: steam_frame,
-          country,
-          language,
-        }),
+    steamIdTool(web, reply, (sid, input) =>
+      web.getWishlist(sid, {
+        ...toCompatFilters(input),
+        includeDetails: input.include_details,
+        onSaleOnly: input.on_sale_only,
+        tags: input.tags,
+        minReview: input.min_review,
+        minDiscount: input.min_discount,
+        country: input.country,
+        language: input.language,
+      }),
     ),
   );
 }

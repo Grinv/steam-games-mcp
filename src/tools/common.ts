@@ -4,6 +4,7 @@
 // a guarded ToolResult. Kept here so the two registration files stay DRY.
 import { z } from "zod";
 import { jsonResult, type ToolResult } from "../lib/result.js";
+import type { CompatFilters } from "../format/store.js";
 import { guard } from "./guard.js";
 
 export const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
@@ -73,6 +74,27 @@ export const steamFrame = z
       "'playable' = Playable or Verified.",
   )
   .optional();
+
+// Renames the 5 hardware-compat tool args above from their snake_case
+// tool-facing names to the camelCase shape clients/storeService.ts's
+// discoverGames/getWishlistDetailed expect — shared by discover_games and
+// get_wishlist (tools/webStore.ts) so a 6th compat dimension only needs
+// renaming in one place instead of two.
+export function toCompatFilters(input: {
+  platform?: z.infer<typeof platform>;
+  steam_deck?: z.infer<typeof steamDeck>;
+  steam_os?: z.infer<typeof steamOs>;
+  steam_machine?: z.infer<typeof steamMachine>;
+  steam_frame?: z.infer<typeof steamFrame>;
+}): CompatFilters & { platform?: z.infer<typeof platform> } {
+  return {
+    platform: input.platform,
+    steamDeck: input.steam_deck,
+    steamOs: input.steam_os,
+    steamMachine: input.steam_machine,
+    steamFrame: input.steam_frame,
+  };
+}
 
 // Run a formatter and wrap its result as a JSON ToolResult; guard() turns any
 // thrown ApiError into an actionable { isError: true } result.
