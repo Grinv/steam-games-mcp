@@ -29,3 +29,15 @@ Check every one of these, not just a sample:
 - `docs/notes.md`, `docs/clients.md` and any other `docs/*.md` for stale
   phrasing (e.g. describing something as "once published"/"upcoming" that
   already shipped).
+- `PRIVACY.md` and `SECURITY.md`: re-verify every specific claim against the
+  actual current code, don't just skim for plausibility — which credentials
+  exist and how each is transmitted/redacted, what is and isn't cached (incl.
+  cache key/TTL), the current list of read-only vs. write/mutating tools, and
+  any host-allowlist statement. This class of drift is easy to miss because
+  it reads fine on its own and only breaks against the code: this repo's own
+  `SECURITY.md`/`PRIVACY.md` both claimed "player-specific data is never
+  cached" after a later feature (`get_player_summary`'s Steam-level cache)
+  added exactly that, and a separate claim conflated an actually-cached field
+  ("review histogram") with a similarly-named never-cached one ("reviews")
+  — neither doc was self-evidently wrong, both required re-reading the
+  client code to catch.
