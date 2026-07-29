@@ -8,16 +8,19 @@
            store.steampowered.com/favicon.ico (Steam's own logo-mark ink), a
            dark blue-black consistent with the site's body background
            (measured #0f1923).
-       Shape is an original abstraction (a rounded pill + two dots, evoking a
-       gamepad/joystick pair) — not Steam's own logo mark — color association
-       only. Corners are natively rounded (rx = height/2), no linejoin trick
-       needed.
+       Shape is a literal (but simplified/original) gamepad silhouette — a
+       rounded capsule body with a D-pad cross on the left and two action
+       buttons on the right — not Steam's own logo mark; color association
+       only. Corners are natively rounded (rx = height/2 on the body,
+       rounded-rect joins on the D-pad arms), no linejoin trick needed.
        See generate-icon.py in this same directory for how this was actually
        rasterized to assets/icon.png (a plain SVG->PNG render loses the
        transparent background in both a Chrome screenshot and macOS Quick
        Look's SVG thumbnailer — both silently composite against opaque
        white regardless of this file's own lack of a background rect). -->
-  <rect x="66" y="171" width="380" height="170" rx="85" fill="#67c1f5"/>
-  <circle cx="176" cy="256" r="46" fill="#071937"/>
-  <circle cx="336" cy="256" r="46" fill="#071937"/>
+  <rect x="56" y="176" width="400" height="160" rx="80" fill="#67c1f5"/>
+  <rect x="111" y="233" width="110" height="46" rx="14" fill="#071937"/>
+  <rect x="143" y="201" width="46" height="110" rx="14" fill="#071937"/>
+  <circle cx="360" cy="224" r="30" fill="#071937"/>
+  <circle cx="400" cy="276" r="30" fill="#071937"/>
 </svg>
