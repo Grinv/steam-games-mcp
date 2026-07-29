@@ -20,7 +20,13 @@ npx @modelcontextprotocol/inspector --cli node dist/index.js --method prompts/ge
 
 Run each prompt with no args, with only one of several optional args set at
 a time, and with all of them set — an argument that's individually optional
-can still have a bug that only shows up when given alone.
+can still have a bug that only shows up when given alone. Also try a
+whitespace-only value (`"   "`) for every optional string arg, not just
+omitted-vs-present: it's truthy in JS, so a missing `.trim()` on
+prompts.ts's own argsSchema (separate from tools/*.ts's, and not
+automatically covered by a tool-schema trim fix like 61fe40a) slips past a
+`field ? ... : ...`/`field ?? "default"` check the same way an actually-set
+value would.
 
 **Watch out for a SteamID64 argument specifically**: the inspector CLI's own
 `--prompt-args key=value` parsing silently coerces a numeric-looking value
