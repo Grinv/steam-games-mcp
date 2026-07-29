@@ -76,6 +76,20 @@ error path (a private profile, a malformed SteamID64, a delisted appid), and
 does it assert on the _specific_ resulting message/shape (not just
 "isError: true")?
 
+Also ask the same question about **protocol era**, not just error paths:
+`src/__tests__/e2e.test.ts`'s default connections (`helpers.ts`'s
+`connectServer()`, and the plain `new Client(...)` in e2e's first test) all
+negotiate the legacy (2025) era — `versionNegotiation` defaults to `'legacy'`.
+Only the tests that explicitly pass `{ versionNegotiation: { mode: 'auto' } }`
+ever exercise the modern (2026-07-28) era, so any wire-level behavior that
+differs by era (`serverInfo` stamping, `cacheHints`, a future
+elicitation/sampling `input_required` path) needs its own modern-era test —
+the legacy-era suite passing green proves nothing about it. Confirmed
+concretely: `cacheHints` (added for `tools/list`/`prompts/list`/
+`server/discover`) had to be verified with a dedicated modern-era connection
+and a spy `ResponseCacheStore`, since the legacy-era suite would stay green
+whether or not it worked at all.
+
 Anything red here is the actual finding — stop and report it before moving to
 live testing.
 
