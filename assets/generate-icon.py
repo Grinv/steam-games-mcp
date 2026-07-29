@@ -18,12 +18,14 @@ Gradient stops are Valve's own real Steam logo gradient, pulled directly
 from their official SVG asset
 (upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg, the
 <linearGradient id="A"> behind their "eye" mark) — not approximated from a
-page-background sample. The foreground (D-pad + buttons) is plain white,
+page-background sample. The foreground (D-pad + 4-button diamond) is plain white,
 matching how the real logo puts a solid white mark over that same gradient.
 Shape is a literal (but simplified/original) gamepad silhouette — a rounded,
-near-square capsule body with a D-pad cross on the left and two action
-buttons on the right — not Steam's own logo mark (their actual "eye"
-glyph); gradient/color association only.
+near-square capsule body with a D-pad cross on the left and a 4-button
+diamond on the right (matching how a real controller's face buttons are
+laid out — a 2-button version read as an unrecognizable pair of dots) —
+not Steam's own logo mark (their actual "eye" glyph); gradient/color
+association only.
 """
 
 from pathlib import Path
@@ -53,12 +55,14 @@ WHITE = (0xFF, 0xFF, 0xFF)
 # A near-square body (380x260, ~1.46:1) rather than an elongated pill.
 BODY_BOX = (66, 126, 446, 386)
 
-DPAD_CENTER = (180, 256)
+DPAD_CENTER = (172, 256)
 DPAD_ARM_LEN = 116  # full span of each arm (tip to tip through center)
-DPAD_THICK = 48
+DPAD_THICK = 46
 
-BTN_CENTERS = [(332, 220), (376, 286)]  # diagonal 2-button layout
-BTN_RADIUS = 32
+# 4 face buttons in a diamond (matches a real controller's A/B/X/Y layout)
+BTN_CENTER = (356, 256)
+BTN_OFFSET = 46
+BTN_RADIUS = 26
 
 
 def lerp_color(t, stops):
@@ -112,10 +116,12 @@ def main():
         fill=(*WHITE, 255),
     )
 
+    bcx, bcy = BTN_CENTER
+    off = BTN_OFFSET
     r = BTN_RADIUS * SCALE
-    for bx, by in BTN_CENTERS:
-        bx, by = bx * SCALE, by * SCALE
-        d2.ellipse([bx - r, by - r, bx + r, by + r], fill=(*WHITE, 255))
+    for dx, dy in [(0, -off), (off, 0), (0, off), (-off, 0)]:
+        px, py = (bcx + dx) * SCALE, (bcy + dy) * SCALE
+        d2.ellipse([px - r, py - r, px + r, py + r], fill=(*WHITE, 255))
 
     out = img.resize((SIZE, SIZE), Image.LANCZOS)
     out.save(OUT)
