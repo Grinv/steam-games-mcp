@@ -14,9 +14,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Bump the MCP TypeScript SDK (`@modelcontextprotocol/{server,client,core,codemod}`) from `2.0.0-beta.5` to the `2.0.0` stable release.
 - Advertise `get_player_summary`/`get_friend_list`'s `state` field as an enum of its 7 possible values in the output schema, instead of an open string. ([47989fc](https://github.com/Grinv/steam-games-mcp/commit/47989fc))
+- Advertise each schema field's default value (e.g. `get_game_reviews`'s `limit`, `discover_games`'s `count`/`start`) directly in its inputSchema instead of only in prose. ([e86eb29](https://github.com/Grinv/steam-games-mcp/commit/e86eb29))
 
 ### Fixed
 
+- Fix every tool silently dropping an unrecognized parameter name and running with defaults instead of rejecting it — every tool's input schema is now `.strict()`. ([e86eb29](https://github.com/Grinv/steam-games-mcp/commit/e86eb29))
+- Fix `resolve_vanity_url`/`STEAM_ID` silently resolving to "not found" instead of the intended profile when the vanity name/SteamID carries stray whitespace (Steam's vanity lookup is an exact match). ([e86eb29](https://github.com/Grinv/steam-games-mcp/commit/e86eb29))
 - Fix `compare_players`/`find_friends_who_own` silently missing a played free-to-play game (e.g. Path of Exile, Warframe) — neither call set `include_played_free_games`, so Steam omitted it from the response entirely instead of reporting it as owned/shared. ([465b302](https://github.com/Grinv/steam-games-mcp/commit/465b302))
 - Fix HTTP 420 responses from Steam (observed live under rate limiting) being classified as a generic non-retryable error instead of the same retryable rate limit as HTTP 429. ([63e7893](https://github.com/Grinv/steam-games-mcp/commit/63e7893))
 - Fix `get_recently_played` reporting `found:false` ("profile is private") for a public profile that simply hasn't played anything in the last 2 weeks — it checked the wrong upstream field (`game_count`, from `GetOwnedGames`) instead of `GetRecentlyPlayedGames`'s own `total_count`. ([#2](https://github.com/Grinv/steam-games-mcp/issues/2))
