@@ -79,10 +79,49 @@ describe("prompts", () => {
     assert.doesNotMatch(text, /get_game_reviews/);
   });
 
+  test("is_it_worth_buying asks for the game instead of failing when it's whitespace-only", async (t) => {
+    // Regression: a whitespace-only string is truthy in JS, so without
+    // trimming it slipped past the `game ? ... : ask` check and produced a
+    // garbled "Should I buy \"   \"?" instead of the intended fallback.
+    const { client, close } = await connectServer(ENV);
+    t.after(close);
+    const res = await client.getPrompt({ name: "is_it_worth_buying", arguments: { game: "   " } });
+    const text = (res.messages[0]!.content as { text: string }).text;
+    assert.match(text, /which game/i);
+    assert.doesNotMatch(text, /get_game_reviews/);
+  });
+
+  test("what_should_i_play defers to get_recommended_games when tags is whitespace-only", async (t) => {
+    const { client, close } = await connectServer(ENV);
+    t.after(close);
+    const res = await client.getPrompt({
+      name: "what_should_i_play",
+      arguments: { tags: "   " },
+    });
+    const text = (res.messages[0]!.content as { text: string }).text;
+    assert.match(text, /get_recommended_games/);
+    assert.doesNotMatch(text, /discover_games/);
+  });
+
   test("deals_digest defaults min_discount/min_review when omitted", async (t) => {
     const { client, close } = await connectServer(ENV);
     t.after(close);
     const res = await client.getPrompt({ name: "deals_digest", arguments: {} });
+    const text = (res.messages[0]!.content as { text: string }).text;
+    assert.match(text, /min_discount: 50/);
+    assert.match(text, /min_review: 80/);
+  });
+
+  test("deals_digest defaults min_discount/min_review when they're whitespace-only", async (t) => {
+    // Regression: min_discount/min_review used `?? "default"`, which only
+    // catches an actually-omitted (undefined) argument — a trimmed-to-empty
+    // whitespace string still slipped through as "" instead of the default.
+    const { client, close } = await connectServer(ENV);
+    t.after(close);
+    const res = await client.getPrompt({
+      name: "deals_digest",
+      arguments: { min_discount: "   ", min_review: "  " },
+    });
     const text = (res.messages[0]!.content as { text: string }).text;
     assert.match(text, /min_discount: 50/);
     assert.match(text, /min_review: 80/);

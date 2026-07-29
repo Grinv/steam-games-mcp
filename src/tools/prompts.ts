@@ -24,24 +24,29 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
       title: "What should I play next?",
       description:
         "Recommend games from the Steam catalog based on a player's library and taste, excluding what they already own.",
-      argsSchema: z.object({
-        steamid: z
-          .string()
-          .describe(
-            "SteamID64 whose library to base taste on. Omit to use the configured STEAM_ID.",
-          )
-          .optional(),
-        budget: z
-          .string()
-          .describe("Max price, e.g. '$20' or 'free'. Omit for no limit.")
-          .optional(),
-        tags: z
-          .string()
-          .describe(
-            "Comma-separated tags to steer toward, e.g. 'Roguelike, Deckbuilding'. Omit to infer from the library.",
-          )
-          .optional(),
-      }),
+      argsSchema: z
+        .object({
+          steamid: z
+            .string()
+            .trim()
+            .describe(
+              "SteamID64 whose library to base taste on. Omit to use the configured STEAM_ID.",
+            )
+            .optional(),
+          budget: z
+            .string()
+            .trim()
+            .describe("Max price, e.g. '$20' or 'free'. Omit for no limit.")
+            .optional(),
+          tags: z
+            .string()
+            .trim()
+            .describe(
+              "Comma-separated tags to steer toward, e.g. 'Roguelike, Deckbuilding'. Omit to infer from the library.",
+            )
+            .optional(),
+        })
+        .strict(),
     },
     ({ steamid, budget, tags }) =>
       promptResult(
@@ -62,34 +67,37 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
       title: "Is this game worth buying?",
       description:
         "Gather price, reviews (lifetime + recent trend) and Steam Deck compatibility for a buying verdict. game is optional — if omitted, asks which game instead of failing.",
-      argsSchema: z.object({
-        // Optional rather than required: not every MCP client elicits a
-        // missing required prompt argument from the user (e.g. Claude Code
-        // doesn't — it just fails the call), so a missing game is instead
-        // handled in the prompt text below, universally across clients.
-        game: completable(
-          z
-            .string()
-            .describe(
-              "Game title or Steam appid. Start typing for live title suggestions. Omit to be asked which game you mean.",
-            ),
-          async (value) => {
-            // Best-effort: a completion list is a nice-to-have, so a transient
-            // upstream failure degrades to no suggestions instead of an error
-            // surfacing in the client's live-typing UI.
-            try {
-              const r = await store.searchGames(value);
-              const results = r.results as { name?: string }[] | undefined;
-              return (results ?? [])
-                .map((g) => g.name)
-                .filter((n): n is string => Boolean(n))
-                .slice(0, COMPLETION_LIMIT);
-            } catch {
-              return [];
-            }
-          },
-        ).optional(),
-      }),
+      argsSchema: z
+        .object({
+          // Optional rather than required: not every MCP client elicits a
+          // missing required prompt argument from the user (e.g. Claude Code
+          // doesn't — it just fails the call), so a missing game is instead
+          // handled in the prompt text below, universally across clients.
+          game: completable(
+            z
+              .string()
+              .trim()
+              .describe(
+                "Game title or Steam appid. Start typing for live title suggestions. Omit to be asked which game you mean.",
+              ),
+            async (value) => {
+              // Best-effort: a completion list is a nice-to-have, so a transient
+              // upstream failure degrades to no suggestions instead of an error
+              // surfacing in the client's live-typing UI.
+              try {
+                const r = await store.searchGames(value);
+                const results = r.results as { name?: string }[] | undefined;
+                return (results ?? [])
+                  .map((g) => g.name)
+                  .filter((n): n is string => Boolean(n))
+                  .slice(0, COMPLETION_LIMIT);
+              } catch {
+                return [];
+              }
+            },
+          ).optional(),
+        })
+        .strict(),
     },
     ({ game }) =>
       promptResult(
@@ -111,23 +119,34 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
     {
       title: "Today's deals digest",
       description: "A curated list of well-reviewed discounted games from Steam's catalog.",
-      argsSchema: z.object({
-        min_discount: z.string().describe("Minimum discount %, e.g. '50'. Default 50.").optional(),
-        min_review: z
-          .string()
-          .describe("Minimum positive-review %, e.g. '85'. Default 80.")
-          .optional(),
-        tags: z
-          .string()
-          .describe("Comma-separated tags to filter by, e.g. 'Roguelike'. Omit for any genre.")
-          .optional(),
-      }),
+      argsSchema: z
+        .object({
+          min_discount: z
+            .string()
+            .trim()
+            .describe("Minimum discount %, e.g. '50'. Default 50.")
+            .optional(),
+          min_review: z
+            .string()
+            .trim()
+            .describe("Minimum positive-review %, e.g. '85'. Default 80.")
+            .optional(),
+          tags: z
+            .string()
+            .trim()
+            .describe("Comma-separated tags to filter by, e.g. 'Roguelike'. Omit for any genre.")
+            .optional(),
+        })
+        .strict(),
     },
     ({ min_discount, min_review, tags }) =>
       promptResult(
         "Curated deals digest",
         "Give me today's best Steam deals.\n\n" +
-          `Call discover_games with min_discount: ${min_discount ?? "50"}, min_review: ${min_review ?? "80"}` +
+          // `||`, not `??`: an empty string (blank/whitespace-only input,
+          // already trimmed by the schema above) must fall back to the
+          // default too, not just an actually-omitted (undefined) argument.
+          `Call discover_games with min_discount: ${min_discount || "50"}, min_review: ${min_review || "80"}` +
           `${tags ? `, tags: ${tags}` : ""}. Present the top results as a short digest: name, discount %, ` +
           "final price, review %, and a clickable store_url — sorted by the best combination of discount and reviews.",
       ),
