@@ -1,9 +1,10 @@
-import { test } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { VERSION } from "../version.js";
 import { connectServer } from "./helpers.js";
+import { renderChangelogRelease } from "../../scripts/sync-version.mjs";
 
 // Tests run from the dist-tests/ working directory; the repo root is one level up.
 const root = join(process.cwd(), "..");
@@ -95,6 +96,36 @@ test("CHANGELOG.md's newest dated section matches package.json version", () => {
   const match = changelog.match(/^## \[(\d+\.\d+\.\d+)\]/m);
   assert.ok(match, "CHANGELOG.md has no dated version heading");
   assert.equal(match?.[1], pkg.version);
+});
+
+describe("renderChangelogRelease", () => {
+  test("renames Unreleased and reopens a fresh empty section above it", () => {
+    const fixture =
+      "## [Unreleased]\n\n### Fixed\n\n- Something ([abc1234](https://example.com)).\n\n" +
+      "## [0.9.0] - 2026-07-29\n\n### Added\n\n- Old thing.\n";
+
+    const out = renderChangelogRelease(fixture, "0.10.0", "2026-08-01");
+
+    assert.match(out, /## \[Unreleased\]\n\n## \[0\.10\.0\] - 2026-08-01\n/);
+    assert.match(out, /## \[0\.10\.0\][\s\S]*- Something/);
+    assert.match(out, /## \[0\.9\.0\] - 2026-07-29\n\n### Added\n\n- Old thing\./);
+  });
+
+  test("is a no-op when [Unreleased] has no bullets (idempotent re-run / no-user-facing-change release)", () => {
+    const fixture = "## [Unreleased]\n\n## [0.9.0] - 2026-07-29\n\n### Added\n\n- Old thing.\n";
+    assert.equal(renderChangelogRelease(fixture, "0.10.0", "2026-08-01"), fixture);
+  });
+
+  test("is a no-op when [Unreleased] has only blank lines before the next heading", () => {
+    const fixture = "## [Unreleased]\n\n\n## [0.9.0] - 2026-07-29\n\n- Old thing.\n";
+    assert.equal(renderChangelogRelease(fixture, "0.10.0", "2026-08-01"), fixture);
+  });
+
+  test("throws if the Unreleased heading is missing entirely", () => {
+    assert.throws(() =>
+      renderChangelogRelease("## [0.10.0] - 2026-08-01\n", "0.11.0", "2026-09-01"),
+    );
+  });
 });
 
 test("server.json versions (+ mcpb release URL) match package.json", () => {

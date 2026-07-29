@@ -37,18 +37,45 @@ jobs:
             flag {print}
           ' CHANGELOG.md > RELEASE_NOTES.md
           echo "----- release notes for $VERSION -----"; cat RELEASE_NOTES.md
+          # Fail loudly instead of shipping an empty GitHub Release body — this
+          # exact failure happened on 2026-07-29 (v0.11.0): the tagged commit's
+          # CHANGELOG.md still said "## [Unreleased]" instead of "## [$VERSION]",
+          # so this awk matched nothing. sync-version.mjs now renames the heading
+          # itself, but this is the safety net for whatever slips past that.
+          if [ ! -s RELEASE_NOTES.md ] || ! grep -q '[^[:space:]]' RELEASE_NOTES.md; then
+            echo "::error::No CHANGELOG.md section found for '## [$VERSION]' — RELEASE_NOTES.md is empty. Check that CHANGELOG.md's heading was renamed from '## [Unreleased]'."
+            exit 1
+          fi
       - name: Create GitHub Release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
         with:
           files: steam-games-mcp.mcpb
           body_path: RELEASE_NOTES.md
+      # Idempotency guard: npm rejects re-publishing an existing version outright,
+      # which would otherwise abort this job before the MCP Registry steps below
+      # ever run (e.g. a tag re-run, or a version published manually as a
+      # one-time bootstrap before Trusted Publishing was configured).
+      - name: Check if this version is already published to npm
+        id: npm_check
+        run: |
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if npm view "steam-games-mcp@${PKG_VERSION}" version >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
       # Trusted Publishing (OIDC): no token. Requires npm >= 11.5.1 and a
-      # trusted publisher configured for this package on npmjs.com.
-      # 12.0.0 briefly shipped a broken provenance path ("Cannot find module
-      # 'sigstore'", npm/cli#9722); fixed in 12.0.1, so @latest is safe again.
-      - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
+      # trusted publisher configured for this package on npmjs.com. Pin an
+      # exact, verified-good version rather than floating `@latest` — matches
+      # every other tool in this workflow being pinned to an exact commit/tag
+      # (checkout/setup-node/gh-release above). npm 12.0.0 shipped a broken
+      # provenance path ("Cannot find module 'sigstore'", npm/cli#9722); fixed
+      # in 12.0.1 (npm/cli#9740, released 2026-07-10) — verified live via
+      # `npm view npm version` that 12.0.1 is the current `latest` dist-tag.
+      - name: Install npm for trusted publishing
+        run: npm install -g npm@12.0.1
       - name: Publish to npm (trusted publishing + provenance)
+        if: steps.npm_check.outputs.already_published != 'true'
         run: npm publish --provenance --access public
 
       # Publish to the official MCP Registry (registry.modelcontextprotocol.io).
