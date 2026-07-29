@@ -89,6 +89,15 @@ jobs:
           jq --arg sha "$SHA" \
             '(.packages[] | select(.registryType=="mcpb")).fileSha256 = $sha' \
             server.json > server.json.tmp && mv server.json.tmp server.json
+          # jq's select() silently no-ops (exit 0, document unchanged) if no
+          # package has registryType=="mcpb" — this would publish a stale/missing
+          # fileSha256 to the MCP Registry with no error anywhere. Verify the
+          # injection actually took instead of trusting jq's exit code.
+          GOT="$(jq -r '.packages[] | select(.registryType=="mcpb") | .fileSha256' server.json)"
+          if [ "$GOT" != "$SHA" ]; then
+            echo "::error::Failed to inject fileSha256 into server.json — no package with registryType==\"mcpb\" found, or the update didn't take. Got: '$GOT', expected: '$SHA'"
+            exit 1
+          fi
       - name: Install mcp-publisher
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
