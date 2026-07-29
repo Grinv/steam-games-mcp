@@ -73,6 +73,7 @@ jobs:
       # in 12.0.1 (npm/cli#9740, released 2026-07-10) — verified live via
       # `npm view npm version` that 12.0.1 is the current `latest` dist-tag.
       - name: Install npm for trusted publishing
+        if: steps.npm_check.outputs.already_published != 'true'
         run: npm install -g npm@12.0.1
       - name: Publish to npm (trusted publishing + provenance)
         if: steps.npm_check.outputs.already_published != 'true'
