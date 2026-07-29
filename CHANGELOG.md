@@ -6,6 +6,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Add a privacy policy (`PRIVACY.md`) covering data handling and caching, linked from README and manifest.json's `privacy_policies`. ([91ee519](https://github.com/Grinv/steam-games-mcp/commit/91ee519))
+- Add an original gamepad icon, in Steam's own color gradient, for the MCPB/Connectors Directory submission. ([f18dc23](https://github.com/Grinv/steam-games-mcp/commit/f18dc23), [3b5d8d0](https://github.com/Grinv/steam-games-mcp/commit/3b5d8d0), [081001f](https://github.com/Grinv/steam-games-mcp/commit/081001f), [4409607](https://github.com/Grinv/steam-games-mcp/commit/4409607))
+
+### Fixed
+
+- Fix the shipped `.mcpb` bundle including dev-only files (skill docs tripled via symlinks, contributor-only docs, tooling configs) instead of just the ~9 files actually needed at runtime. ([49a9959](https://github.com/Grinv/steam-games-mcp/commit/49a9959))
+- Fix README's links to dev/contributor docs excluded from the bundle (`docs/`, `AGENTS.md`, `SECURITY.md`) breaking when read from an installed extension instead of GitHub. ([37154c9](https://github.com/Grinv/steam-games-mcp/commit/37154c9))
+- Fix `PRIVACY.md`/`SECURITY.md` claiming player-specific data is never cached (missing the `get_player_summary` Steam-level exception) and miscrediting cached data to `get_game_reviews` instead of the review histogram. ([93924d9](https://github.com/Grinv/steam-games-mcp/commit/93924d9))
+
 ## [0.11.0] - 2026-07-29
 
 ### Added
