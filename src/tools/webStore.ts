@@ -211,7 +211,12 @@ export function registerStoreWebTools(
             .max(200)
             .describe("How many catalog entries to scan (default 50). Raise for stricter filters.")
             .default(50),
-          start: z.number().int().min(0).describe("Pagination offset into the catalog.").default(0),
+          start: z
+            .number()
+            .int()
+            .min(0)
+            .describe("Pagination offset into the catalog (default 0).")
+            .default(0),
           country,
           language,
         })

@@ -67,6 +67,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
           appid,
           language: z
             .string()
+            .trim()
             .min(2)
             .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
             .optional(),
@@ -355,6 +356,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
           appid,
           language: z
             .string()
+            .trim()
             .min(2)
             .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
             .optional(),

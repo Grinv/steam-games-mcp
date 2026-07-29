@@ -17,11 +17,13 @@ export const appid = z
 // Per-call overrides of the server defaults (STEAM_COUNTRY / STEAM_LANGUAGE).
 export const country = z
   .string()
+  .trim()
   .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code, e.g. US, RU, DE.")
   .describe("Country (cc) for prices/currency; overrides STEAM_COUNTRY for this call.")
   .optional();
 export const language = z
   .string()
+  .trim()
   .min(2)
   .describe("Store language (e.g. english, russian); overrides STEAM_LANGUAGE for this call.")
   .optional();

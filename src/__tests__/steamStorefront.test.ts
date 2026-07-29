@@ -41,6 +41,22 @@ describe("search_games", () => {
     assert.match(u, /cc=RU/);
     assert.match(u, /l=russian/);
   });
+
+  // Regression: a padded country/language override (e.g. pasted with stray
+  // whitespace) must still be usable — country's regex is anchored
+  // (^[A-Za-z]{2}$) so untrimmed whitespace would otherwise fail validation
+  // outright instead of being accepted like the trimmed value.
+  test("search_games trims whitespace from per-call country/language overrides", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    const res = await client.callTool({
+      name: "search_games",
+      arguments: { term: "portal", country: " RU ", language: " russian " },
+    });
+    assert.equal(res.isError, undefined);
+    const u = mock.calls.find((c) => c.url.includes("/api/storesearch"))!.url;
+    assert.match(u, /cc=RU/);
+    assert.match(u, /l=russian/);
+  });
 });
 
 describe("get_game", () => {

@@ -103,6 +103,7 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
             .default(5),
           review_language: z
             .string()
+            .trim()
             .describe("Filter reviews by language, e.g. 'english'. Default 'all'.")
             .default("all"),
           type: z
