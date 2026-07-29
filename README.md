@@ -198,6 +198,12 @@ Per-client config and all tunables: [docs/clients.md](docs/clients.md).
 - **`.mcpb` bundle:** download the new bundle from the releases page and reinstall.
 - **From source:** `git pull && npm ci && npm run build`.
 
+## Privacy Policy
+
+`steam-games-mcp` runs entirely on your own machine and collects no data of
+its own — see [PRIVACY.md](PRIVACY.md) for exactly what it sends to Steam and
+what (if anything) it stores locally.
+
 ## License
 
 [MIT](LICENSE) © Grinv

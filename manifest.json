@@ -17,6 +17,10 @@
     "url": "https://github.com/Grinv/steam-games-mcp"
   },
   "license": "MIT",
+  "privacy_policies": [
+    "https://github.com/Grinv/steam-games-mcp/blob/main/PRIVACY.md",
+    "https://store.steampowered.com/privacy_agreement/"
+  ],
   "keywords": ["mcp", "steam", "games"],
   "server": {
     "type": "node",
