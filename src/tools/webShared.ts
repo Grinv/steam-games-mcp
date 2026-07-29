@@ -19,14 +19,18 @@ export const steamid = z
   .optional();
 
 // Collapses the "resolve steamid (arg or STEAM_ID default), call one client
-// method" shape shared by several steamid-only tools — keyed via requireKey
+// method" shape shared by every steamid tool — keyed via requireKey
 // (webPlayer.ts), or keyless via reply (webStore.ts's get_followed_games).
-// `web` is duck-typed to just what's needed, so this stays client-agnostic.
+// Generic over the tool's full input type so tools that take extra params
+// besides steamid (get_owned_games's check_appids, compare_players's
+// other_steamid, ...) still go through this instead of each hand-rolling
+// `await web.requireSteamId(id)` themselves. `web` is duck-typed to just
+// what's needed, so this stays client-agnostic.
 export const steamIdTool =
-  (
+  <TIn extends { steamid?: string }>(
     web: { requireSteamId: (explicit?: string) => Promise<string> },
     wrap: (fn: () => Promise<Record<string, unknown>>) => Promise<ToolResult>,
-    fn: (sid: string) => Promise<Record<string, unknown>>,
+    fn: (sid: string, input: TIn) => Promise<Record<string, unknown>>,
   ) =>
-  ({ steamid: id }: { steamid?: string }) =>
-    wrap(async () => fn(await web.requireSteamId(id)));
+  (input: TIn) =>
+    wrap(async () => fn(await web.requireSteamId(input.steamid), input));

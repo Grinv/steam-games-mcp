@@ -155,8 +155,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: findFriendsWhoOwnOutput,
       annotations: READ_ONLY,
     },
-    ({ appids, steamid: id }) =>
-      requireKey(async () => web.findFriendsWhoOwn(await web.requireSteamId(id), appids)),
+    steamIdTool(web, requireKey, (sid, { appids }) => web.findFriendsWhoOwn(sid, appids)),
   );
 
   server.registerTool(
@@ -186,8 +185,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: comparePlayersOutput,
       annotations: READ_ONLY,
     },
-    ({ steamid: id, other_steamid }) =>
-      requireKey(async () => web.comparePlayers(await web.requireSteamId(id), other_steamid)),
+    steamIdTool(web, requireKey, (sid, { other_steamid }) =>
+      web.comparePlayers(sid, other_steamid),
+    ),
   );
 
   server.registerTool(
@@ -251,8 +251,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: getOwnedGamesOutput,
       annotations: READ_ONLY,
     },
-    ({ steamid: id, check_appids }) =>
-      requireKey(async () => web.getOwnedGames(await web.requireSteamId(id), check_appids)),
+    steamIdTool(web, requireKey, (sid, { check_appids }) => web.getOwnedGames(sid, check_appids)),
   );
 
   server.registerTool(
@@ -326,14 +325,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: getRecommendedGamesOutput,
       annotations: READ_ONLY,
     },
-    ({ steamid: id, count, exclude_tags, min_discount }) =>
-      requireKey(async () =>
-        web.getRecommendedGames(await web.requireSteamId(id), {
-          count,
-          excludeTags: exclude_tags,
-          minDiscount: min_discount,
-        }),
-      ),
+    steamIdTool(web, requireKey, (sid, { count, exclude_tags, min_discount }) =>
+      web.getRecommendedGames(sid, { count, excludeTags: exclude_tags, minDiscount: min_discount }),
+    ),
   );
 
   server.registerTool(
@@ -365,9 +359,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: getPlayerAchievementsOutput,
       annotations: READ_ONLY,
     },
-    ({ steamid: id, appid: app, language }) =>
-      requireKey(async () =>
-        web.getPlayerAchievements(await web.requireSteamId(id), app, language),
-      ),
+    steamIdTool(web, requireKey, (sid, { appid: app, language }) =>
+      web.getPlayerAchievements(sid, app, language),
+    ),
   );
 }

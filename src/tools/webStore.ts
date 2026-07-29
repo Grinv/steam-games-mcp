@@ -385,24 +385,27 @@ export function registerStoreWebTools(
       outputSchema: getWishlistOutput,
       annotations: READ_ONLY,
     },
-    ({
-      steamid: id,
-      include_details,
-      on_sale_only,
-      tags,
-      min_review,
-      min_discount,
-      platform: plat,
-      steam_deck,
-      steam_os,
-      steam_machine,
-      steam_frame,
-      country,
-      language,
-    }) =>
-      reply(async () => {
-        const sid = await web.requireSteamId(id);
-        return web.getWishlist(sid, {
+    steamIdTool(
+      web,
+      reply,
+      (
+        sid,
+        {
+          include_details,
+          on_sale_only,
+          tags,
+          min_review,
+          min_discount,
+          platform: plat,
+          steam_deck,
+          steam_os,
+          steam_machine,
+          steam_frame,
+          country,
+          language,
+        },
+      ) =>
+        web.getWishlist(sid, {
           includeDetails: include_details,
           onSaleOnly: on_sale_only,
           tags,
@@ -415,7 +418,7 @@ export function registerStoreWebTools(
           steamFrame: steam_frame,
           country,
           language,
-        });
-      }),
+        }),
+    ),
   );
 }
