@@ -16,6 +16,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Fix `compare_players`/`find_friends_who_own` silently missing a played free-to-play game (e.g. Path of Exile, Warframe) — neither call set `include_played_free_games`, so Steam omitted it from the response entirely instead of reporting it as owned/shared. ([465b302](https://github.com/Grinv/steam-games-mcp/commit/465b302))
+- Fix HTTP 420 responses from Steam (observed live under rate limiting) being classified as a generic non-retryable error instead of the same retryable rate limit as HTTP 429. ([63e7893](https://github.com/Grinv/steam-games-mcp/commit/63e7893))
 - Fix `get_recently_played` reporting `found:false` ("profile is private") for a public profile that simply hasn't played anything in the last 2 weeks — it checked the wrong upstream field (`game_count`, from `GetOwnedGames`) instead of `GetRecentlyPlayedGames`'s own `total_count`. ([#2](https://github.com/Grinv/steam-games-mcp/issues/2))
 
 ## [0.10.5] - 2026-07-28
