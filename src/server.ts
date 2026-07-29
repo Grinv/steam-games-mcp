@@ -26,6 +26,15 @@ const INSTRUCTIONS =
   "personalized picks based on a player's own library (not manual filters), use get_recommended_games. " +
   "Tools that need the key report clearly when it is unset.";
 
+// Tools/prompts are registered once here and never change for the life of
+// the process (no dynamic add/remove) and carry no per-session variation, so
+// a client-side cache of tools/list, prompts/list and server/discover can
+// safely live for an hour and be shared across clients (protocol revision
+// 2026-07-28's cacheHints; unset fields still fall back to the SDK's
+// conservative ttlMs:0/private default).
+const HOUR_MS = 3_600_000;
+const STATIC_CACHE_HINT = { ttlMs: HOUR_MS, cacheScope: "public" } as const;
+
 /** Construct a fully-registered MCP server. Shared by start() and tests. */
 export function buildServer(config: Config, logger: Logger): McpServer {
   const store = new StorefrontClient(config, logger);
@@ -33,7 +42,14 @@ export function buildServer(config: Config, logger: Logger): McpServer {
 
   const server = new McpServer(
     { name: "steam-games-mcp", version: VERSION },
-    { instructions: INSTRUCTIONS },
+    {
+      instructions: INSTRUCTIONS,
+      cacheHints: {
+        "tools/list": STATIC_CACHE_HINT,
+        "prompts/list": STATIC_CACHE_HINT,
+        "server/discover": STATIC_CACHE_HINT,
+      },
+    },
   );
 
   registerStorefrontTools(server, store);

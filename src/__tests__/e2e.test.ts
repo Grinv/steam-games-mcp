@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, copyFileSync, writeFileSync, rmSync } from "node
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { Client } from "@modelcontextprotocol/client";
+import { Client, type CacheKey, type ResponseCacheStore } from "@modelcontextprotocol/client";
 import { textOf } from "./helpers.js";
 import { VERSION } from "../version.js";
 
@@ -110,6 +110,112 @@ describe("e2e (real built bundle over stdio)", () => {
       assert.match(textOf(res), /needs a Steam Web API key/i);
     } finally {
       await client.close();
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  // A minimal ResponseCacheStore that just records every write, so a test can
+  // inspect the ttlMs/cacheScope the client computed from the wire response
+  // instead of guessing from the SDK's type declarations — the client's own
+  // listTools()/listPrompts() return value doesn't expose those fields (they
+  // only drive the client's internal cache), so this is the only way to
+  // observe them from outside the SDK.
+  function spyCacheStore() {
+    const writes: { method: string; expiresAt?: number; scope?: string }[] = [];
+    const store: ResponseCacheStore = {
+      get: () => undefined,
+      set: (key: CacheKey, entry) => {
+        writes.push({ method: key.method, expiresAt: entry.expiresAt, scope: entry.scope });
+        return 0;
+      },
+      delete: () => {},
+      evict: () => {},
+      clear: () => {},
+    };
+    return { store, writes };
+  }
+
+  test("server.ts's cacheHints give tools/list and prompts/list a 1h public hint under the modern era, and don't leak into the legacy era", async (t) => {
+    if (!existsSync(distPath)) {
+      t.skip("dist/index.js not built — run `npm run build` first (CI builds before tests)");
+      return;
+    }
+    const HOUR_MS = 3_600_000;
+    const sandbox = makeSandbox();
+
+    try {
+      // Modern era: server.ts's cacheHints should reach the client as a
+      // ~1h/public hint on both list-singleton methods.
+      {
+        const { store, writes } = spyCacheStore();
+        const client = new Client(
+          { name: "e2e-cache-modern", version: "0" },
+          { versionNegotiation: { mode: "auto" }, responseCacheStore: store },
+        );
+        const transport = new StdioClientTransport({
+          command: process.execPath,
+          args: [join(sandbox, "index.js")],
+          env: envWithoutCredentials(),
+        });
+        const before = Date.now();
+        try {
+          await client.connect(transport);
+          await client.listTools();
+          await client.listPrompts();
+        } finally {
+          await client.close();
+        }
+
+        const toolsWrite = writes.find((w) => w.method === "tools/list");
+        const promptsWrite = writes.find((w) => w.method === "prompts/list");
+        assert.ok(toolsWrite, "tools/list should write a cache entry under the modern era");
+        assert.equal(toolsWrite?.scope, "public");
+        assert.ok(
+          toolsWrite!.expiresAt! >= before + HOUR_MS - 10_000 &&
+            toolsWrite!.expiresAt! <= before + HOUR_MS + 10_000,
+          `tools/list's expiresAt should be ~1h out, got ${toolsWrite?.expiresAt} (before=${before})`,
+        );
+        assert.equal(promptsWrite?.scope, "public");
+      }
+
+      // Legacy era: the 2025 wire carries no ttlMs/cacheScope fields at all,
+      // so our modern-era hint must never surface there — the client falls
+      // back to its own defaultCacheTtlMs (0, "immediately stale").
+      {
+        const { store, writes } = spyCacheStore();
+        const client = new Client(
+          { name: "e2e-cache-legacy", version: "0" },
+          { responseCacheStore: store },
+        );
+        const transport = new StdioClientTransport({
+          command: process.execPath,
+          args: [join(sandbox, "index.js")],
+          env: envWithoutCredentials(),
+        });
+        const before = Date.now();
+        try {
+          await client.connect(transport);
+          await client.listTools();
+        } finally {
+          await client.close();
+        }
+
+        const toolsWrite = writes.find((w) => w.method === "tools/list");
+        assert.ok(
+          toolsWrite,
+          "tools/list should still write an entry (backs the tools/list-derived index)",
+        );
+        assert.notEqual(
+          toolsWrite?.scope,
+          "public",
+          "the legacy era must never see the modern-era cache hint",
+        );
+        assert.ok(
+          toolsWrite!.expiresAt! <= before + 1000,
+          `legacy era's entry should be immediately stale, got expiresAt=${toolsWrite?.expiresAt} (before=${before})`,
+        );
+      }
+    } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }
   });

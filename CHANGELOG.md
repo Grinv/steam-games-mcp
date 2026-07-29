@@ -6,6 +6,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Advertise a 1-hour, publicly-shareable cache hint (protocol revision 2026-07-28's `cacheHints`) for `tools/list`/`prompts/list`/`server/discover`, since the tool and prompt list never changes for the life of the process — lets a modern-era client skip re-fetching them on every reconnect. No effect on 2025-era clients.
+
 ### Changed
 
 - Bump the MCP TypeScript SDK (`@modelcontextprotocol/{server,client,core,codemod}`) from `2.0.0-beta.5` to the `2.0.0` stable release.
