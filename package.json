@@ -32,7 +32,8 @@
     "dist",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "PRIVACY.md"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",

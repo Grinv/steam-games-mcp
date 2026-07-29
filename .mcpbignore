@@ -8,10 +8,27 @@ dist-tests/
 docs/
 coverage/
 
+# Agent/contributor tooling — dev-only, irrelevant to an installed extension.
+# .agents/skills and .claude/skills are symlinks to skills/; mcpb pack
+# resolves symlinks to real files, so without these the same 7 files were
+# shipping three times over.
+.claude/
+.agents/
+skills/
+AGENTS.md
+CLAUDE.md
+SECURITY.md
+# Glama.ai directory metadata (maintainer GitHub usernames) — read by
+# Glama's crawler from the repo/npm page, not needed by an installed
+# extension at runtime.
+glama.json
+
 # Tooling / config
 tsconfig.json
 tsup.config.ts
 eslint.config.js
+.prettierrc.json
+.gitattributes
 .nvmrc
 .gitignore
 .mcpbignore
@@ -22,6 +39,12 @@ eslint.config.js
 # Tests & sourcemaps
 **/*.test.*
 **/*.map
+
+# Icon regeneration source (dev-only, needs Python/Pillow — not runtime
+# assets). manifest.json's icon field only needs assets/icon.png, which
+# stays included.
+assets/icon-source.svg
+assets/generate-icon.py
 
 # OS
 .DS_Store
