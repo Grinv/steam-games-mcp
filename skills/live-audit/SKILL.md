@@ -251,6 +251,17 @@ there) for:
 - A tool that assumes a private profile 404s instead of returning a
   restricted-but-200 shape (or vice versa) — Steam's actual behavior differs
   by endpoint, don't assume one implies the other for a sibling endpoint.
+- A raw-response TS interface or a private/empty-detection helper (e.g.
+  `isPrivate()`) reused across two upstream endpoints that merely _look_
+  alike (same steamid-in/games-list-out shape) — confirmed recurring:
+  `getRecentlyPlayed` reused `GetOwnedGames`' `OwnedGamesResponse`/`isPrivate`
+  (keyed on `game_count`), but `GetRecentlyPlayedGames` actually answers with
+  its own `total_count` field, so a public profile with zero recent playtime
+  (`{total_count:0}`, no `games` key) was misreported as private for every
+  release through v0.10.5. Grep every reused response type/helper across
+  `src/clients/web.ts` and diff the real field name each endpoint returns —
+  don't assume a sibling call shares the same upstream field names just
+  because the TS type does.
 - Missing bounds/caps on a collection-shaped response (owned games,
   achievements, friend list, wishlist) that AGENTS.md says must be trimmed —
   check the actual cap constant still matches what's documented in the tool's

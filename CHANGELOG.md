@@ -6,6 +6,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix `get_recently_played` reporting `found:false` ("profile is private") for a public profile that simply hasn't played anything in the last 2 weeks — it checked the wrong upstream field (`game_count`, from `GetOwnedGames`) instead of `GetRecentlyPlayedGames`'s own `total_count`. ([#2](https://github.com/Grinv/steam-games-mcp/issues/2))
+
 ## [0.10.5] - 2026-07-28
 
 ### Fixed

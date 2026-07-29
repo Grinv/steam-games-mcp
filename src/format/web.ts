@@ -202,10 +202,23 @@ export function summarizeComparePlayers(
   });
 }
 
+// GetRecentlyPlayedGames uses its own count field (`total_count`), distinct
+// from GetOwnedGames' `game_count` — a public profile with nothing played in
+// the last 2 weeks answers `{total_count: 0}` with no `games` array, which
+// isPrivate()'s `game_count`/`games` check would misreport as private since
+// neither of ITS fields is ever present in this endpoint's response at all.
+export interface RecentlyPlayedResponse {
+  response?: { total_count?: number; games?: OwnedGame[] };
+}
+
+function isPrivateRecentlyPlayed(r: RecentlyPlayedResponse): boolean {
+  return r.response?.total_count === undefined && r.response?.games === undefined;
+}
+
 export function summarizeRecentlyPlayed(
-  r: OwnedGamesResponse,
+  r: RecentlyPlayedResponse,
 ): z.infer<typeof getRecentlyPlayedOutput> {
-  if (isPrivate(r)) {
+  if (isPrivateRecentlyPlayed(r)) {
     return getRecentlyPlayedOutput.parse({
       found: false,
       reason: PRIVATE_PROFILE_REASON,
@@ -215,7 +228,7 @@ export function summarizeRecentlyPlayed(
   }
   return getRecentlyPlayedOutput.parse({
     found: true,
-    total: r.response?.game_count ?? r.response?.games?.length ?? 0,
+    total: r.response?.total_count ?? r.response?.games?.length ?? 0,
     games: (r.response?.games ?? []).map((g) => ({
       appid: g.appid,
       name: g.name ?? null,

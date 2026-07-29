@@ -149,6 +149,25 @@ describe("get_recently_played", () => {
     assert.deepEqual(s.games, []);
   });
 
+  test("get_recently_played reports found:true with an empty list for a public profile with no recent activity (distinct from private)", async (t) => {
+    // GetRecentlyPlayedGames' own keyless-of-privacy shape is {total_count:0}
+    // with no `games` array at all — distinct from a private profile's empty
+    // `{response:{}}` (no total_count key either).
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetRecentlyPlayedGames")
+        ? jsonResponse({ response: { total_count: 0 } })
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_recently_played",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { found: boolean; total: number; games: unknown[] };
+    assert.equal(s.found, true);
+    assert.equal(s.total, 0);
+    assert.deepEqual(s.games, []);
+  });
+
   test("get_recently_played: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetRecentlyPlayedGames") ? htmlResponse(ROUTING_400) : jsonResponse({}),

@@ -37,6 +37,7 @@ import {
   type PlayerAchievementsResponse,
   type PlayerBansResponse,
   type PlayerSummariesResponse,
+  type RecentlyPlayedResponse,
   type SteamLevelResponse,
   type VanityResponse,
   type WishlistResponse,
@@ -211,7 +212,10 @@ export class SteamWebClient {
   async getRecentlyPlayed(steamid: string): Promise<Record<string, unknown>> {
     const res = await withFallbackOn(
       "bad_request",
-      () => this.#get<OwnedGamesResponse>("IPlayerService/GetRecentlyPlayedGames/v1/", { steamid }),
+      () =>
+        this.#get<RecentlyPlayedResponse>("IPlayerService/GetRecentlyPlayedGames/v1/", {
+          steamid,
+        }),
       {},
     );
     return summarizeRecentlyPlayed(res);
