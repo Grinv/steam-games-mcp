@@ -24,7 +24,7 @@ export const priceFieldsSchema = z
 
 // detailApp's price() — appdetails-derived price.
 export const detailPriceSchema = z
-  .union([
+  .discriminatedUnion("is_free", [
     z.object({ is_free: z.literal(true) }).strict(),
     priceFieldsSchema.extend({ is_free: z.literal(false) }),
   ])

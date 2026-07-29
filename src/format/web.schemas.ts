@@ -22,7 +22,7 @@ export const personaStates = [
   "looking to play",
 ] as const;
 
-export const getPlayerSummaryOutput = z.union([
+export const getPlayerSummaryOutput = z.discriminatedUnion("found", [
   z.object({ found: z.literal(false) }).strict(),
   z
     .object({
@@ -50,7 +50,7 @@ const ownedGame = z
     playtime_2weeks_hours: z.number().nullable(),
   })
   .strict();
-export const getOwnedGamesOutput = z.union([
+export const getOwnedGamesOutput = z.discriminatedUnion("found", [
   z
     .object({
       found: z.literal(false),
@@ -99,7 +99,7 @@ export const comparePlayersFound = z
   })
   .strict();
 
-export const getRecentlyPlayedOutput = z.union([
+export const getRecentlyPlayedOutput = z.discriminatedUnion("found", [
   gamesNotFound,
   z
     .object({
@@ -206,7 +206,7 @@ export const wishlistLightFound = z
   })
   .strict();
 
-export const getPlayerBansOutput = z.union([
+export const getPlayerBansOutput = z.discriminatedUnion("found", [
   z.object({ found: z.literal(false) }).strict(),
   z
     .object({
@@ -222,7 +222,7 @@ export const getPlayerBansOutput = z.union([
     .strict(),
 ]);
 
-export const getFollowedGamesOutput = z.union([
+export const getFollowedGamesOutput = z.discriminatedUnion("found", [
   gamesNotFound,
   z
     .object({

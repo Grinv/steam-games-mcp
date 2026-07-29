@@ -958,6 +958,23 @@ describe("resolve_vanity_url", () => {
     assert.ok(mock.calls.some((c) => c.url.includes("key=test-key")));
   });
 
+  // Regression: ResolveVanityURL is an exact-match lookup, so leading/trailing
+  // whitespace (e.g. pasted from a URL) would otherwise silently resolve to
+  // found:false instead of the real profile.
+  test("trims surrounding whitespace from the vanity name before sending it upstream", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    const res = await client.callTool({
+      name: "resolve_vanity_url",
+      arguments: { vanity: "  gabe  " },
+    });
+    const s = res.structuredContent as { found: boolean; steamid: string };
+    assert.equal(s.found, true);
+    assert.equal(s.steamid, "76561197960287930");
+    assert.ok(
+      mock.calls.some((c) => c.url.includes("vanityurl=gabe") && !c.url.includes("vanityurl=%20")),
+    );
+  });
+
   // An unmatched vanity name is a normal, successful "no match" result — not a
   // tool error — and Steam's own `message` (when present) is surfaced as the reason.
   test("reports found:false for a vanity name with no match", async (t) => {

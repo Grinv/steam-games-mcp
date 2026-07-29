@@ -43,6 +43,23 @@ describe("loadConfig", () => {
     assert.equal(c.language, "german");
   });
 
+  test("surrounding whitespace on a real value is trimmed, not carried through", () => {
+    // Regression: resolve_vanity_url is an exact-match lookup, so a padded
+    // STEAM_ID would silently resolve to "not found" instead of the real
+    // profile — trim it the same way an accidentally-padded value should
+    // never survive into a value Steam compares byte-for-byte.
+    const c = loadConfig({
+      STEAM_ID: " 76561197960287930 ",
+      STEAM_API_KEY: " ABCDEF0123 ",
+      STEAM_COUNTRY: " DE ",
+      STEAM_LANGUAGE: " german ",
+    });
+    assert.equal(c.defaultSteamId, "76561197960287930");
+    assert.equal(c.steamApiKey, "ABCDEF0123");
+    assert.equal(c.country, "DE");
+    assert.equal(c.language, "german");
+  });
+
   test("invalid numeric/enum env values fail clearly instead of silently coercing", () => {
     // loadConfig runs the env through a zod schema with no try/catch — an
     // invalid override should throw, not silently fall back to a default.

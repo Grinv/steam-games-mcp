@@ -243,6 +243,16 @@ describe("e2e (real built bundle over stdio)", () => {
     const badBatch = await client.callTool({ name: "get_prices", arguments: { appids: [] } });
     assert.equal(badBatch.isError, true, "an empty appids array should fail schema validation");
 
+    // Every tool input schema is .strict(): an unrecognized param name (e.g. a
+    // plausible-but-wrong field an agent guessed) must be rejected up front
+    // instead of being silently dropped and the tool running with defaults.
+    const badKey = await client.callTool({
+      name: "search_games",
+      arguments: { term: "half life", bogus_field: "oops" },
+    });
+    assert.equal(badKey.isError, true, "an unrecognized param should fail schema validation");
+    assert.match(textOf(badKey), /bogus_field/i);
+
     const prompt = await client.getPrompt({ name: "is_it_worth_buying", arguments: {} });
     const promptText = (prompt.messages[0]!.content as { text: string }).text;
     assert.match(promptText, /which game/i);

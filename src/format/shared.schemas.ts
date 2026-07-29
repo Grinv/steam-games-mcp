@@ -12,10 +12,31 @@ export const notFoundReason = z.object({ found: z.literal(false), reason: z.stri
 // one or more found:true shapes — the "found:false ∪ found:true" union every
 // tool with a not-found path needs, instead of each tools/*.ts call site
 // hand-writing `z.union([...])` itself.
+//
+// The common case (exactly one `found` shape) uses a discriminated union on
+// `found` — Zod validates by picking the matching branch directly instead of
+// trying every member, and a mismatch reports which branch was expected. That
+// requires each member to have a distinct `found` literal, which doesn't hold
+// when get_wishlist passes two found:true shapes (light vs. detailed) — that
+// case falls back to a plain union instead.
+export function withNotFound<NotFound extends z.ZodTypeAny, Found extends z.ZodTypeAny>(
+  notFound: NotFound,
+  found: Found,
+): z.ZodDiscriminatedUnion<[NotFound, Found], "found">;
 export function withNotFound<
   NotFound extends z.ZodTypeAny,
   Found extends readonly [z.ZodTypeAny, ...z.ZodTypeAny[]],
->(notFound: NotFound, ...found: Found) {
+>(notFound: NotFound, ...found: Found): z.ZodUnion<[NotFound, ...Found]>;
+export function withNotFound(notFound: z.ZodTypeAny, ...found: z.ZodTypeAny[]) {
+  if (found.length === 1) {
+    // The overloads above are the real (checked) contract for callers; Zod's
+    // own discriminatedUnion typing wants each member typed as discriminable
+    // up front, which a generic z.ZodTypeAny parameter can't express here —
+    // every actual caller passes an object with a `found` literal (enforced
+    // by notFoundReason/gamesNotFound/wishlistNotFound and each *Found schema).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return z.discriminatedUnion("found", [notFound, found[0]!] as any);
+  }
   return z.union([notFound, ...found]);
 }
 

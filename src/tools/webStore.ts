@@ -54,20 +54,22 @@ export function registerStoreWebTools(
       description:
         "Get recent news / patch notes for a game by appid (title, date, author, excerpt, link). " +
         "Get the appid from search_games. Works without an API key.",
-      inputSchema: z.object({
-        appid,
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(20)
-          .describe("How many news items (1-20). Default 5.")
-          .optional(),
-      }),
+      inputSchema: z
+        .object({
+          appid,
+          limit: z
+            .number()
+            .int()
+            .min(1)
+            .max(20)
+            .describe("How many news items (1-20). Default 5.")
+            .default(5),
+        })
+        .strict(),
       outputSchema: getGameNewsOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id, limit }) => reply(() => web.getNews(id, limit ?? 5)),
+    ({ appid: id, limit }) => reply(() => web.getNews(id, limit)),
   );
 
   server.registerTool(
@@ -81,7 +83,7 @@ export function registerStoreWebTools(
         `first, capped at the first ${ACHIEVEMENTS_MAX} (check ` +
         "`returned` vs `count` — most games have far fewer). " +
         "Get the appid from search_games. Works without a key.",
-      inputSchema: z.object({ appid }),
+      inputSchema: z.object({ appid }).strict(),
       outputSchema: getGlobalAchievementsOutput,
       annotations: READ_ONLY,
     },
@@ -107,15 +109,17 @@ export function registerStoreWebTools(
         "'Souls-like', most-relevant first); a clickable `store_url` to the game's Steam page; and, " +
         "when on sale, `discount_end` (ISO UTC time the discount expires — for 'how long is this deal " +
         "valid'). Get appids from search_games / get_wishlist / get_owned_games.",
-      inputSchema: z.object({
-        appids: z
-          .array(z.number().int().positive())
-          .min(1)
-          .max(100)
-          .describe("Steam appids (1-100)."),
-        country,
-        language,
-      }),
+      inputSchema: z
+        .object({
+          appids: z
+            .array(z.number().int().positive())
+            .min(1)
+            .max(100)
+            .describe("Steam appids (1-100)."),
+          country,
+          language,
+        })
+        .strict(),
       outputSchema: getItemsOutput,
       annotations: READ_ONLY,
     },
@@ -150,66 +154,68 @@ export function registerStoreWebTools(
         "those are scanned popularity-first and applied afterward over that same window — great for " +
         "popular titles; a niche match may fall outside the top `count` (raise count for stricter " +
         "filters).",
-      inputSchema: z.object({
-        released_after: z
-          .string()
-          .regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date, e.g. 2026-03-01.")
-          .describe("Keep only games released on/after this date (YYYY-MM-DD).")
-          .optional(),
-        released_within_days: z
-          .number()
-          .int()
-          .min(1)
-          .describe("Alternative to released_after: released within the last N days.")
-          .optional(),
-        steam_deck: steamDeck,
-        steam_os: steamOs,
-        steam_machine: steamMachine,
-        steam_frame: steamFrame,
-        platform,
-        tags: z
-          .array(z.string().min(1))
-          .min(1)
-          .describe(
-            "Keep only games carrying ALL of these user tags (case-insensitive), e.g. " +
-              "['Roguelike','Deckbuilding']. Use exact Steam tag names. Applied over the scanned " +
-              "popularity window, so raise `count` when combining niche tags.",
-          )
-          .optional(),
-        min_review: z
-          .number()
-          .int()
-          .min(0)
-          .max(100)
-          .describe("Minimum positive-review %, e.g. 85. Applied over the returned page.")
-          .optional(),
-        min_reviews: z
-          .number()
-          .int()
-          .min(0)
-          .describe("Minimum review count (filters out games with too few reviews).")
-          .optional(),
-        min_discount: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .describe(
-            "Minimum discount %, e.g. 80 for '80%+ off' — this is the 'deals' filter. " +
-              "Omit to include full-price games.",
-          )
-          .optional(),
-        count: z
-          .number()
-          .int()
-          .min(1)
-          .max(200)
-          .describe("How many catalog entries to scan (default 50). Raise for stricter filters.")
-          .optional(),
-        start: z.number().int().min(0).describe("Pagination offset into the catalog.").optional(),
-        country,
-        language,
-      }),
+      inputSchema: z
+        .object({
+          released_after: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date, e.g. 2026-03-01.")
+            .describe("Keep only games released on/after this date (YYYY-MM-DD).")
+            .optional(),
+          released_within_days: z
+            .number()
+            .int()
+            .min(1)
+            .describe("Alternative to released_after: released within the last N days.")
+            .optional(),
+          steam_deck: steamDeck,
+          steam_os: steamOs,
+          steam_machine: steamMachine,
+          steam_frame: steamFrame,
+          platform,
+          tags: z
+            .array(z.string().min(1))
+            .min(1)
+            .describe(
+              "Keep only games carrying ALL of these user tags (case-insensitive), e.g. " +
+                "['Roguelike','Deckbuilding']. Use exact Steam tag names. Applied over the scanned " +
+                "popularity window, so raise `count` when combining niche tags.",
+            )
+            .optional(),
+          min_review: z
+            .number()
+            .int()
+            .min(0)
+            .max(100)
+            .describe("Minimum positive-review %, e.g. 85. Applied over the returned page.")
+            .optional(),
+          min_reviews: z
+            .number()
+            .int()
+            .min(0)
+            .describe("Minimum review count (filters out games with too few reviews).")
+            .optional(),
+          min_discount: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .describe(
+              "Minimum discount %, e.g. 80 for '80%+ off' — this is the 'deals' filter. " +
+                "Omit to include full-price games.",
+            )
+            .optional(),
+          count: z
+            .number()
+            .int()
+            .min(1)
+            .max(200)
+            .describe("How many catalog entries to scan (default 50). Raise for stricter filters.")
+            .default(50),
+          start: z.number().int().min(0).describe("Pagination offset into the catalog.").default(0),
+          country,
+          language,
+        })
+        .strict(),
       outputSchema: discoverGamesOutput,
       annotations: READ_ONLY,
     },
@@ -265,7 +271,7 @@ export function registerStoreWebTools(
         "Get how many people are playing a game right now (live concurrent player count) by appid. " +
         "Get the appid from search_games. Works without a key. Errors clearly if the appid is unknown/invalid " +
         "rather than returning a null count.",
-      inputSchema: z.object({ appid }),
+      inputSchema: z.object({ appid }).strict(),
       outputSchema: getCurrentPlayersOutput,
       annotations: READ_ONLY,
     },
@@ -283,7 +289,7 @@ export function registerStoreWebTools(
         "public — otherwise it returns found:false. Returns appids + store_url only (no price/name), " +
         "capped at the first 200 (check `returned` vs `total`); pass the appids to get_items for " +
         "price, review % and compat. Convert a vanity name with resolve_vanity_url first.",
-      inputSchema: z.object({ steamid }),
+      inputSchema: z.object({ steamid }).strict(),
       outputSchema: getFollowedGamesOutput,
       annotations: READ_ONLY,
     },
@@ -314,61 +320,63 @@ export function registerStoreWebTools(
         "reports how many of `total` got checked, and `note` explains when some were skipped (their " +
         "filter/price data isn't available at all, not that they don't match). Convert a vanity name " +
         "with resolve_vanity_url first.",
-      inputSchema: z.object({
-        steamid,
-        include_details: z
-          .boolean()
-          .describe(
-            "Return full store cards (name, price, discount, reviews, compatibility, tags) per item " +
-              "in one call, instead of just appids. Implied by any filter below.",
-          )
-          .optional(),
-        on_sale_only: z
-          .boolean()
-          .describe(
-            "Only wishlist items currently discounted, ranked by discount %. Implies include_details.",
-          )
-          .optional(),
-        tags: z
-          .array(z.string().min(1))
-          .min(1)
-          .describe(
-            "Keep only wishlist items carrying ALL of these user tags (case-insensitive), e.g. " +
-              "['Metroidvania']. Implies include_details.",
-          )
-          .optional(),
-        min_review: z
-          .number()
-          .int()
-          .min(0)
-          .max(100)
-          .describe(
-            "Keep only items with at least this positive-review %. Implies include_details.",
-          )
-          .optional(),
-        min_discount: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .describe(
-            "Keep only items discounted at least this %, ranked by discount. Implies include_details.",
-          )
-          .optional(),
-        platform,
-        steam_deck: steamDeck,
-        steam_os: steamOs,
-        steam_machine: steamMachine,
-        steam_frame: steamFrame,
-        country: country.describe(
-          "Country (cc) for prices; overrides STEAM_COUNTRY. Only meaningful for store cards, so " +
-            "setting it implies include_details — the light appid list carries no price.",
-        ),
-        language: language.describe(
-          "Store language; overrides STEAM_LANGUAGE. Only meaningful for store cards, so setting it " +
-            "implies include_details — the light appid list carries no price.",
-        ),
-      }),
+      inputSchema: z
+        .object({
+          steamid,
+          include_details: z
+            .boolean()
+            .describe(
+              "Return full store cards (name, price, discount, reviews, compatibility, tags) per item " +
+                "in one call, instead of just appids. Implied by any filter below.",
+            )
+            .optional(),
+          on_sale_only: z
+            .boolean()
+            .describe(
+              "Only wishlist items currently discounted, ranked by discount %. Implies include_details.",
+            )
+            .optional(),
+          tags: z
+            .array(z.string().min(1))
+            .min(1)
+            .describe(
+              "Keep only wishlist items carrying ALL of these user tags (case-insensitive), e.g. " +
+                "['Metroidvania']. Implies include_details.",
+            )
+            .optional(),
+          min_review: z
+            .number()
+            .int()
+            .min(0)
+            .max(100)
+            .describe(
+              "Keep only items with at least this positive-review %. Implies include_details.",
+            )
+            .optional(),
+          min_discount: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .describe(
+              "Keep only items discounted at least this %, ranked by discount. Implies include_details.",
+            )
+            .optional(),
+          platform,
+          steam_deck: steamDeck,
+          steam_os: steamOs,
+          steam_machine: steamMachine,
+          steam_frame: steamFrame,
+          country: country.describe(
+            "Country (cc) for prices; overrides STEAM_COUNTRY. Only meaningful for store cards, so " +
+              "setting it implies include_details — the light appid list carries no price.",
+          ),
+          language: language.describe(
+            "Store language; overrides STEAM_LANGUAGE. Only meaningful for store cards, so setting it " +
+              "implies include_details — the light appid list carries no price.",
+          ),
+        })
+        .strict(),
       outputSchema: getWishlistOutput,
       annotations: READ_ONLY,
     },

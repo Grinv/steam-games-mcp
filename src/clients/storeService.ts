@@ -200,7 +200,9 @@ export class StoreServiceClient {
       .slice(0, BASED_ON_TAGS_LIMIT)
       .map(([tag]) => tag);
 
-    const count = Math.min(Math.max(opts.count ?? 10, 1), 25);
+    // The tool schema's own min(1).max(25) already bounds this — no need to
+    // re-clamp here, just fall back for direct (non-tool) callers.
+    const count = opts.count ?? 10;
     // Same server-side price filter #queryCatalog uses for discover_games — cuts
     // the candidate pool down to matching deals instead of scoring 150 items and
     // discarding most of them locally for a "good discounts only" request.
