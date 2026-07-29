@@ -9,6 +9,19 @@
 import { z } from "zod";
 import { gamesNotFound } from "./shared.schemas.js";
 
+// Steam's `personastate` is a small fixed index (0-6, per the Web API docs);
+// format/web.ts's summarizers map it through this same list, so the two
+// can't silently drift.
+export const personaStates = [
+  "offline",
+  "online",
+  "busy",
+  "away",
+  "snooze",
+  "looking to trade",
+  "looking to play",
+] as const;
+
 export const getPlayerSummaryOutput = z.union([
   z.object({ found: z.literal(false) }).strict(),
   z
@@ -17,7 +30,7 @@ export const getPlayerSummaryOutput = z.union([
       steamid: z.string().optional(),
       name: z.string().nullable(),
       real_name: z.string().nullable(),
-      state: z.string(),
+      state: z.enum(personaStates),
       visibility: z.enum(["public", "private"]),
       country: z.string().nullable(),
       level: z.number().nullable(),
@@ -234,7 +247,7 @@ export const friendListFound = z
         .object({
           steamid: z.string().optional(),
           name: z.string().nullable(),
-          state: z.string(),
+          state: z.enum(personaStates),
           in_game: z.string().nullable(),
           profile_url: z.string().nullable(),
           friends_since: z.string().nullable(),

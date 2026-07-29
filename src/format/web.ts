@@ -25,6 +25,7 @@ import {
   getPlayerBansOutput,
   getPlayerSummaryOutput,
   getRecentlyPlayedOutput,
+  personaStates,
   playerAchievementsFound,
   vanityFound,
   wishlistLightFound,
@@ -49,16 +50,6 @@ export interface PlayerSummariesResponse {
   response?: { players?: PlayerSummary[] };
 }
 
-const PERSONA_STATES = [
-  "offline",
-  "online",
-  "busy",
-  "away",
-  "snooze",
-  "looking to trade",
-  "looking to play",
-];
-
 // GetSteamLevel is fetched alongside GetPlayerSummaries and merged in; it has
 // its own failure mode (e.g. private inventory), so the level is nullable
 // independent of whether the summary itself was found.
@@ -77,7 +68,7 @@ export function summarizePlayer(
     steamid: p.steamid,
     name: p.personaname ?? null,
     real_name: p.realname || null,
-    state: PERSONA_STATES[p.personastate ?? 0] ?? "offline",
+    state: personaStates[p.personastate ?? 0] ?? "offline",
     visibility: p.communityvisibilitystate === 3 ? "public" : "private",
     country: p.loccountrycode || null,
     level: level ?? null,
@@ -563,7 +554,7 @@ export function summarizeFriendList(
       return {
         steamid: f.steamid,
         name: p?.personaname ?? null,
-        state: PERSONA_STATES[p?.personastate ?? 0] ?? "offline",
+        state: personaStates[p?.personastate ?? 0] ?? "offline",
         in_game: p?.gameextrainfo || null,
         profile_url: p?.profileurl ?? null,
         friends_since: isoDay(f.friend_since),
