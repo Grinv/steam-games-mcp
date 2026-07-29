@@ -59,7 +59,9 @@ verified-good npm version — no token; skipped without failing the job if this
 version is already on npm, so a re-run after a partial failure doesn't abort) →
 inject the just-packed `.mcpb`'s SHA-256 into `server.json` (fails loudly if the
 injection didn't actually match a package, instead of silently leaving a stale
-hash) → **publish to the official MCP Registry** (`mcp-publisher`, GitHub OIDC).
+hash) → **publish to the official MCP Registry** (`mcp-publisher`, GitHub OIDC;
+`mcp-publisher` itself is pinned to an exact version + verified SHA-256 rather
+than `latest`, since this step runs with live OIDC publishing credentials).
 Never hand-edit the version in the derived files; bump `package.json` via
 `npm version` and let the hook sync the rest.
 

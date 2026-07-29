@@ -14,6 +14,32 @@ import { dirname, join } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// `git ls-remote --tags` is *supposed* to also emit a peeled
+// "<commit-sha>\trefs/tags/<tag>^{}" line for an annotated tag, pointing at
+// the underlying commit — but GitHub's smart-HTTP response doesn't always
+// include it, so parsing only the direct line compares the tag OBJECT's sha
+// against a locally-dereferenced commit sha, which never match even when the
+// tag is genuinely up to date. Fetching into a throwaway ref and dereferencing
+// locally sidesteps that parsing entirely.
+function remoteTagCommitSha(tag, root) {
+  const tmpRef = `refs/tmp-preversion-check/${tag}`;
+  try {
+    execFileSync("git", ["fetch", "--quiet", "origin", `refs/tags/${tag}:${tmpRef}`], {
+      cwd: root,
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+  } catch {
+    return undefined; // No such tag on origin.
+  }
+  try {
+    return execFileSync("git", ["rev-parse", `${tmpRef}^{commit}`], { cwd: root })
+      .toString()
+      .trim();
+  } finally {
+    execFileSync("git", ["update-ref", "-d", tmpRef], { cwd: root });
+  }
+}
+
 // Guards against the exact race that orphaned anilist-mcp-server's v0.1.2: two
 // `npm version` runs close together with no push in between. `npm version`
 // creates its tag locally immediately, so if the *current* package.json
@@ -29,11 +55,12 @@ function checkUnpushedTagRace() {
     return; // Normal case: no tag yet for the current version.
   }
 
-  let remoteHasTag;
+  const localSha = execFileSync("git", ["rev-parse", `${tag}^{commit}`], { cwd: root })
+    .toString()
+    .trim();
+  let remoteSha;
   try {
-    remoteHasTag = execFileSync("git", ["ls-remote", "--tags", "origin", tag], { cwd: root })
-      .toString()
-      .includes(`refs/tags/${tag}`);
+    remoteSha = remoteTagCommitSha(tag, root);
   } catch (err) {
     console.error(
       `preversion-check: git tag ${tag} exists locally for the current package.json version, ` +
@@ -43,7 +70,7 @@ function checkUnpushedTagRace() {
     );
     process.exit(1);
   }
-  if (!remoteHasTag) {
+  if (remoteSha === undefined) {
     console.error(
       `preversion-check: git tag ${tag} exists locally for the current package.json version ` +
         "but hasn't been pushed to origin.\n" +
@@ -54,7 +81,18 @@ function checkUnpushedTagRace() {
     );
     process.exit(1);
   }
-  console.log(`preversion-check: git tag ${tag} is already on origin — OK.`);
+  if (remoteSha !== localSha) {
+    console.error(
+      `preversion-check: git tag ${tag} exists on origin, but the LOCAL tag points at a ` +
+        `different commit (${localSha.slice(0, 7)} vs. origin's ${remoteSha.slice(0, 7)}).\n` +
+        "This means the tag was moved locally (e.g. `git tag -f`) without pushing that move — " +
+        "bumping the version again now would silently orphan the retagged commit. Push the " +
+        `move first (git push --force origin ${tag}) or reset the local tag back to match ` +
+        "origin if the move was a mistake, then retry.",
+    );
+    process.exit(1);
+  }
+  console.log(`preversion-check: git tag ${tag} matches origin — OK.`);
 }
 
 function checkChangelog() {
