@@ -6,9 +6,8 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
-import { errorResult, type ToolResult } from "../lib/result.js";
-import { READ_ONLY, appid, reply } from "./common.js";
-import { steamid, steamIdTool } from "./webShared.js";
+import { READ_ONLY, appid } from "./common.js";
+import { requireKey as makeRequireKey, steamid, steamIdTool } from "./webShared.js";
 import { notFoundReason, withNotFound } from "../format/shared.schemas.js";
 import { recommendedGamesFound } from "../format/store.schemas.js";
 import { ACHIEVEMENTS_MAX } from "../format/web.js";
@@ -37,19 +36,8 @@ const getRecommendedGamesOutput = withNotFound(notFoundReason, recommendedGamesF
 const resolveVanityUrlOutput = withNotFound(notFoundReason, vanityFound);
 
 export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): void {
-  // Gate every tool in this file on the key; one clear message instead of a
-  // round-trip 403.
-  const requireKey = (fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> => {
-    if (!web.configured) {
-      return Promise.resolve(
-        errorResult(
-          "This tool needs a Steam Web API key. Set STEAM_API_KEY to a free key from " +
-            "https://steamcommunity.com/dev/apikey. (Note: the target profile must also be public.)",
-        ),
-      );
-    }
-    return reply(fn);
-  };
+  // Every tool below is gated on the key via requireKey (webShared.ts).
+  const requireKey = makeRequireKey(web);
 
   server.registerTool(
     "get_game_achievements",

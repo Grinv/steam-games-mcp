@@ -4,7 +4,27 @@
 // tools/common.ts, which stays domain-agnostic (shared with tools/storefront.ts
 // too) — `steamid` and the steamid-resolving helper below are Web-API-specific.
 import { z } from "zod";
-import type { ToolResult } from "../lib/result.js";
+import { errorResult, type ToolResult } from "../lib/result.js";
+import { reply } from "./common.js";
+
+// Gates every key-required player tool on STEAM_API_KEY being set; one clear
+// message instead of a round-trip 403. Lives here (not as a private closure
+// inside webPlayer.ts) so "what happens when the key is missing" is
+// discoverable next to this file's other Web-API-specific building blocks —
+// `web` is duck-typed to just what's needed, so this stays client-agnostic.
+export const requireKey =
+  (web: { configured: boolean }) =>
+  (fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> => {
+    if (!web.configured) {
+      return Promise.resolve(
+        errorResult(
+          "This tool needs a Steam Web API key. Set STEAM_API_KEY to a free key from " +
+            "https://steamcommunity.com/dev/apikey. (Note: the target profile must also be public.)",
+        ),
+      );
+    }
+    return reply(fn);
+  };
 
 export const steamid = z
   .string()
@@ -19,8 +39,8 @@ export const steamid = z
   .optional();
 
 // Collapses the "resolve steamid (arg or STEAM_ID default), call one client
-// method" shape shared by every steamid tool — keyed via requireKey
-// (webPlayer.ts), or keyless via reply (webStore.ts's get_followed_games).
+// method" shape shared by every steamid tool — wrapped via requireKey above
+// (webPlayer.ts's tools), or keyless via reply (webStore.ts's get_followed_games).
 // Generic over the tool's full input type so tools that take extra params
 // besides steamid (get_owned_games's check_appids, compare_players's
 // other_steamid, ...) still go through this instead of each hand-rolling
