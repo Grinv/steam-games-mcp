@@ -8,7 +8,12 @@ description: Cut a release of steam-games-mcp — draft CHANGELOG entries, check
 `package.json` is the **single source of truth** for the version. The npm
 `version` lifecycle hook runs `scripts/sync-version.mjs`, which propagates it to
 `src/version.ts`, `manifest.json` and `server.json` (incl. the `.mcpb` release-asset
-URL); `version.test.ts` guards that they never drift.
+URL); `version.test.ts` guards that they never drift. The same script also dates
+`CHANGELOG.md`'s `[Unreleased]` section into this version's own heading (and
+leaves a fresh empty `[Unreleased]` above it) — don't hand-retitle it yourself,
+before or after `npm version`; that manual step was forgotten twice before this
+automation existed. `version.test.ts` guards this too (the newest dated heading
+must match `package.json`'s version).
 
 A `preversion` hook (`scripts/preversion-check.mjs`) runs first — it's a
 presence-only safety net, not a substitute for actually running the skill

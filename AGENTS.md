@@ -63,7 +63,9 @@ npm run inspector      # run under the MCP Inspector
 ## Conventions
 
 - **Docs and in-code text are English** (README, docs, comments, tool
-  descriptions, error messages).
+  descriptions, error messages) — and so is everything posted to a public/shared
+  surface (commit messages, GitHub issue/PR comments and bodies), regardless of
+  what language the working conversation happens to be in.
 - Runtime floor is **Node ≥ 20** (global `fetch`, stable `node:test`); tsup
   targets `node20`.
 - **Never write to stdout** — it is the MCP protocol channel. Use the logger,

@@ -86,6 +86,17 @@ test("manifest.json's prompts list matches every prompt the server actually regi
   }
 });
 
+// scripts/sync-version.mjs dates CHANGELOG.md's [Unreleased] section into this
+// version's own heading as part of `npm version` — this guards that it actually
+// ran (a version bump with a still-undated [Unreleased] slipped through twice
+// before that automation existed).
+test("CHANGELOG.md's newest dated section matches package.json version", () => {
+  const changelog = readFileSync(join(root, "CHANGELOG.md"), "utf8");
+  const match = changelog.match(/^## \[(\d+\.\d+\.\d+)\]/m);
+  assert.ok(match, "CHANGELOG.md has no dated version heading");
+  assert.equal(match?.[1], pkg.version);
+});
+
 test("server.json versions (+ mcpb release URL) match package.json", () => {
   assert.equal(server.version, pkg.version);
   for (const p of server.packages) assert.equal(p.version, pkg.version);

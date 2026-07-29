@@ -41,7 +41,7 @@
     "test": "npm run build:tests && node scripts/run-tests.mjs",
     "test:coverage": "npm run build:tests && node scripts/run-tests.mjs --coverage",
     "preversion": "node scripts/preversion-check.mjs",
-    "version": "node scripts/sync-version.mjs && git add src/version.ts manifest.json server.json",
+    "version": "node scripts/sync-version.mjs && git add src/version.ts manifest.json server.json CHANGELOG.md",
     "lint": "eslint .",
     "check:api": "node scripts/check-api.mjs",
     "format": "prettier --write .",
