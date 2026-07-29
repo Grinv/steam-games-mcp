@@ -791,6 +791,36 @@ describe("find_friends_who_own", () => {
     assert.ok(s.matches.every((m) => m.owners.length === 0));
     assert.equal(s.private_friends.length, 0);
   });
+
+  // Regression: without include_played_free_games, Steam omits a played
+  // free-to-play game from a friend's GetOwnedGames entirely — an owning
+  // friend would then be silently missing from `owners` (not even landing
+  // in private_friends/unavailable_friends), contradicting "checks each
+  // friend's FULL library".
+  test("find_friends_who_own finds an owner of a free-to-play game (needs include_played_free_games)", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("GetFriendList")) return jsonResponse(FRIENDLIST);
+      if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
+      if (url.includes("GetOwnedGames")) {
+        if (!url.includes("include_played_free_games=true")) return jsonResponse({ response: {} });
+        return jsonResponse({
+          response: { game_count: 1, games: [{ appid: 570, playtime_forever: 120 }] },
+        });
+      }
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [570], steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as {
+      matches: { appid: number; owners: { steamid: string }[] }[];
+      private_friends: unknown[];
+    };
+    const m570 = s.matches.find((m) => m.appid === 570)!;
+    assert.equal(m570.owners.length, 2);
+    assert.equal(s.private_friends.length, 0);
+  });
 });
 
 describe("compare_players", () => {
@@ -887,6 +917,31 @@ describe("compare_players", () => {
     const s = res.structuredContent as { found: boolean; shared_count: number };
     assert.equal(s.found, true);
     assert.equal(s.shared_count, 0);
+  });
+
+  // Regression: without include_played_free_games, Steam omits a played
+  // free-to-play game from GetOwnedGames entirely — both players' shared
+  // f2p game would then silently vanish from the comparison instead of
+  // showing up as shared.
+  test("compare_players counts a shared free-to-play game (needs include_played_free_games)", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (!url.includes("GetOwnedGames")) return jsonResponse({});
+      const games = [{ appid: 570, name: "Dota 2", playtime_forever: 120 }];
+      if (!url.includes("include_played_free_games=true")) return jsonResponse({ response: {} });
+      return jsonResponse({ response: { game_count: games.length, games } });
+    });
+    const res = await client.callTool({
+      name: "compare_players",
+      arguments: { steamid: "76561197960287930", other_steamid: "76561197960287931" },
+    });
+    const s = res.structuredContent as {
+      found: boolean;
+      shared_count: number;
+      games: { appid: number }[];
+    };
+    assert.equal(s.found, true);
+    assert.equal(s.shared_count, 1);
+    assert.equal(s.games[0]!.appid, 570);
   });
 });
 

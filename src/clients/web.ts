@@ -255,8 +255,8 @@ export class SteamWebClient {
   // which caps to the top 50 by playtime — comparing needs the whole list.
   async comparePlayers(steamidA: string, steamidB: string): Promise<Record<string, unknown>> {
     const [a, b] = await Promise.all([
-      this.#ownedGamesRaw(steamidA, { include_appinfo: true }),
-      this.#ownedGamesRaw(steamidB, { include_appinfo: true }),
+      this.#ownedGamesRaw(steamidA, { include_appinfo: true, include_played_free_games: true }),
+      this.#ownedGamesRaw(steamidB, { include_appinfo: true, include_played_free_games: true }),
     ]);
     return summarizeComparePlayers(a, b);
   }
@@ -418,7 +418,13 @@ export class SteamWebClient {
   // steamid owns, or null when the profile/game-details are private. Only
   // requested appids are kept — the caller never needs the rest of the library.
   async #ownedPlaytimes(steamid: string, appids: number[]): Promise<Map<number, number> | null> {
-    const res = await this.#ownedGamesRaw(steamid, { include_appinfo: false });
+    // include_played_free_games: without it Steam omits a played free-to-play
+    // game (e.g. Path of Exile, Warframe) from the response entirely, so an
+    // owning friend would be misreported as a non-owner rather than an owner.
+    const res = await this.#ownedGamesRaw(steamid, {
+      include_appinfo: false,
+      include_played_free_games: true,
+    });
     if (res.response?.games === undefined && res.response?.game_count === undefined) return null;
     const wanted = new Set(appids);
     const playtimes = new Map<number, number>();
