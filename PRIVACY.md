@@ -66,9 +66,11 @@ settings.
   own memory only (never written to disk), for a short configurable TTL
   (`CACHE_TTL_MS`, default 5 minutes) to cut latency and avoid hammering the
   Storefront/Web APIs. Not every endpoint is cached (e.g. reviews, batch
-  prices and live player counts are always fetched fresh). The cache is
-  cleared entirely when the process exits and is never shared across
-  machines or users.
+  prices and live player counts are always fetched fresh); player-specific
+  data is never cached, with one exception — `get_player_summary`'s numeric
+  Steam level is cached for up to `CACHE_TTL_MS`, keyed by SteamID, since
+  it's non-sensitive and rarely changes. The cache is cleared entirely when
+  the process exits and is never shared across machines or users.
 - **Logging**: operational logs go to stderr only (never a file, never a
   remote endpoint, and there is no MCP `logging` capability wired up), with
   credentials redacted before anything is written — `STEAM_API_KEY` is
@@ -84,7 +86,7 @@ settings.
 Material changes will be noted in [CHANGELOG.md](CHANGELOG.md) and reflected
 here, at the same URL, with the effective date below updated.
 
-_Last updated: 2026-07-29._
+_Last updated: 2026-07-30._
 
 ## Contact
 

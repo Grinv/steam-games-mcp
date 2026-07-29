@@ -18,8 +18,11 @@
   or the client (see `src/lib/errors.ts`'s `redact`).
 - **No data kept between requests beyond a small TTL cache** (`CACHE_TTL_MS`,
   default 5 minutes) of non-personal store/catalog responses (game details,
-  reviews, tag dictionary). Player-specific responses (profile, library,
-  achievements, friends) are never cached.
+  review histogram, tag dictionary). Player-specific responses (profile,
+  library, achievements, friends) are never cached, with one exception:
+  `get_player_summary`'s numeric Steam level is cached for up to
+  `CACHE_TTL_MS` keyed by SteamID, since it's non-sensitive and rarely
+  changes.
 - **Typed, validated inputs.** Every tool's parameters are a Zod schema;
   malformed input is rejected before any request is made.
 
