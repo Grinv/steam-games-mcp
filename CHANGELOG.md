@@ -13,6 +13,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Bump the MCP TypeScript SDK (`@modelcontextprotocol/{server,client,core,codemod}`) from `2.0.0-beta.5` to the `2.0.0` stable release.
+- Advertise `get_player_summary`/`get_friend_list`'s `state` field as an enum of its 7 possible values in the output schema, instead of an open string. ([47989fc](https://github.com/Grinv/steam-games-mcp/commit/47989fc))
 
 ### Fixed
 
