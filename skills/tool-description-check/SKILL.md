@@ -204,3 +204,27 @@ is the complete TDQS methodology: scoring pipeline, exact LLM prompts
 (Appendix A), calibration examples, and weight formulas. Read it once for
 calibration examples if an edit isn't clearly hitting 4-5 on the dimension
 you're targeting.
+
+## Keep this checklist honest against drift
+
+This is an incremental, diff-based check by design — "new or edited"
+descriptions — which means a rule added here today says nothing about
+whether _already-registered_ tools already violate it. A sibling repo in
+this project family (anilist-mcp-server) found exactly that gap live: its
+"never contradict an annotation" rule (an `idempotentHint: true` tool whose
+own description says a repeat call errors, not no-ops) was added in a fix
+commit that corrected _other_ tools' descriptions — but the delete-tool
+annotations that rule was written to catch were never rechecked against it
+at the same time, and stayed wrong from the very first release through
+several audits after.
+
+- **A new or tightened rule here implies an immediate retroactive sweep, not
+  just future guidance.** When you add or tighten a rule in this file, run
+  it against every currently registered tool (not just the one you're
+  editing) before considering the update done, and fix what it finds in the
+  same pass.
+- **Periodically run this whole checklist as a full sweep**, not only on
+  new/edited descriptions — e.g. before a release, or whenever asked for a
+  broader audit — since incremental diff-based checking alone lets an
+  already-registered tool drift out of compliance forever once nobody edits
+  it again.
