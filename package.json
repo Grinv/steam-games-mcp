@@ -59,7 +59,7 @@
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/codemod": "2.0.0",
     "@modelcontextprotocol/core": "2.0.0",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "esbuild": "0.28.1",
     "eslint": "^10.8.0",
     "eslint-config-prettier": "10.1.8",
