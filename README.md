@@ -11,6 +11,7 @@ read store details, prices, reviews, discounts and news (no key), plus player
 profiles, libraries and achievements via the official **Steam Web API** (free key).
 
 **Read-only · official Steam APIs only · most tools need no key · open source.**
+
 Nobody logs in; the only credential is a free Steam Web API key you set yourself,
 and the server never writes, trades, posts, launches games, or makes purchases.
 
