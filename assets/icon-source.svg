@@ -1,0 +1,23 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- steam-games-mcp icon — original vector source. Colors measured live
+       from Steam's own site/assets, not guessed:
+         #67c1f5 — getComputedStyle background-color sampled on
+           store.steampowered.com (Steam's familiar light-blue accent, close
+           to the commonly-cited "Steam blue" #66c0f4).
+         #071937 — most frequent non-transparent pixel color in
+           store.steampowered.com/favicon.ico (Steam's own logo-mark ink), a
+           dark blue-black consistent with the site's body background
+           (measured #0f1923).
+       Shape is an original abstraction (a rounded pill + two dots, evoking a
+       gamepad/joystick pair) — not Steam's own logo mark — color association
+       only. Corners are natively rounded (rx = height/2), no linejoin trick
+       needed.
+       See generate-icon.py in this same directory for how this was actually
+       rasterized to assets/icon.png (a plain SVG->PNG render loses the
+       transparent background in both a Chrome screenshot and macOS Quick
+       Look's SVG thumbnailer — both silently composite against opaque
+       white regardless of this file's own lack of a background rect). -->
+  <rect x="66" y="171" width="380" height="170" rx="85" fill="#67c1f5"/>
+  <circle cx="176" cy="256" r="46" fill="#071937"/>
+  <circle cx="336" cy="256" r="46" fill="#071937"/>
+</svg>

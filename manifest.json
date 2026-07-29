@@ -4,6 +4,7 @@
   "display_name": "Steam MCP Server",
   "version": "0.11.0",
   "description": "Search Steam games and read store details, prices, reviews and discounts (no key), plus player profiles, libraries and achievements via the Steam Web API.",
+  "icon": "assets/icon.png",
   "author": {
     "name": "Grinv",
     "email": "4070730+Grinv@users.noreply.github.com",
