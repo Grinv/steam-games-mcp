@@ -29,6 +29,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.10.5] - 2026-07-28
 
+Everything below is one commit: [37cafb8](https://github.com/Grinv/steam-games-mcp/commit/37cafb8).
+
 ### Fixed
 
 - Fix `get_followed_games` (200-item cap), `get_wishlist`'s light default list (100-item cap), `compare_players` (top-50 cap on returned shared games) and `get_review_histogram` (24/30-entry caps) descriptions not disclosing their own fixed output caps.
@@ -48,12 +50,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Fix `find_friends_who_own` failing entirely when just one friend's own library lookup hit a transient error (rate-limited/network/5xx) — that friend now lands in a new `unavailable_friends` list (with a sanitized reason) instead of sinking every other friend's results.
-- Fix `get_friend_list`/`find_friends_who_own` failing entirely when just one `GetPlayerSummaries` chunk (friend lists over 100) hit a transient error — the other chunks' names still come through.
-- Fix every tool's 401/403 error message blaming (or hedging about) "the credentials" even once the client already knows none were sent for that request — the message is now precise instead of guessing.
-- Fix `get_game_achievements`, `get_global_achievements` and `get_player_achievements` returning a huge achievement list (e.g. PAYDAY 2's 1,328) uncapped, blowing past the response size limit — each is now capped at 200 like their sibling tools.
+- Fix `find_friends_who_own` failing entirely when just one friend's own library lookup hit a transient error (rate-limited/network/5xx) — that friend now lands in a new `unavailable_friends` list (with a sanitized reason) instead of sinking every other friend's results. ([6caa333](https://github.com/Grinv/steam-games-mcp/commit/6caa333))
+- Fix `get_friend_list`/`find_friends_who_own` failing entirely when just one `GetPlayerSummaries` chunk (friend lists over 100) hit a transient error — the other chunks' names still come through. ([18df4ea](https://github.com/Grinv/steam-games-mcp/commit/18df4ea))
+- Fix every tool's 401/403 error message blaming (or hedging about) "the credentials" even once the client already knows none were sent for that request — the message is now precise instead of guessing. ([c3a4ea7](https://github.com/Grinv/steam-games-mcp/commit/c3a4ea7), [18df4ea](https://github.com/Grinv/steam-games-mcp/commit/18df4ea))
+- Fix `get_game_achievements`, `get_global_achievements` and `get_player_achievements` returning a huge achievement list (e.g. PAYDAY 2's 1,328) uncapped, blowing past the response size limit — each is now capped at 200 like their sibling tools. ([66595d9](https://github.com/Grinv/steam-games-mcp/commit/66595d9))
 
 ## [0.10.2] - 2026-07-22
+
+Everything below is one commit: [6ead972](https://github.com/Grinv/steam-games-mcp/commit/6ead972).
 
 ### Fixed
 
@@ -63,19 +67,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Fix `get_specials`/`get_featured` listing the same game twice within a section.
-- Fix `get_game`/`get_current_players` hiding the invalid appid behind a generic "not found" message.
-- Fix `get_current_players` treating Steam's 404 response for an unknown appid as a transport error instead of a clean not-found.
-- Fix `get_owned_games`'s `check_appids` reporting a private profile's games as `owned:false` instead of unknown.
+- Fix `get_specials`/`get_featured` listing the same game twice within a section. ([877ff59](https://github.com/Grinv/steam-games-mcp/commit/877ff59))
+- Fix `get_game`/`get_current_players` hiding the invalid appid behind a generic "not found" message. ([877ff59](https://github.com/Grinv/steam-games-mcp/commit/877ff59))
+- Fix `get_current_players` treating Steam's 404 response for an unknown appid as a transport error instead of a clean not-found. ([877ff59](https://github.com/Grinv/steam-games-mcp/commit/877ff59))
+- Fix `get_owned_games`'s `check_appids` reporting a private profile's games as `owned:false` instead of unknown. ([877ff59](https://github.com/Grinv/steam-games-mcp/commit/877ff59))
 
 ### Changed
 
-- Clarify `discover_games`'s `total_matching`, `get_wishlist`'s count fields, `get_recommended_games`'s `match_score`, and `get_review_histogram`'s `rollup_type` — each was easy to misread.
-- Correct `discover_games`'s claim that only `min_discount` filters server-side.
-- Correct `get_player_summary`/`get_recently_played`/`get_player_achievements`'s stated privacy requirements.
-- Document `get_recommended_games`'s empty-library case and `get_friend_list`'s 100-friend cap.
-- Cross-reference `get_game_reviews`/`get_review_histogram` and disclose `get_game_reviews`'s review-text truncation.
-- Fix the `what_should_i_play` prompt instructing a non-existent `discover_games` budget filter.
+- Clarify `discover_games`'s `total_matching`, `get_wishlist`'s count fields, `get_recommended_games`'s `match_score`, and `get_review_histogram`'s `rollup_type` — each was easy to misread. ([0521ffb](https://github.com/Grinv/steam-games-mcp/commit/0521ffb))
+- Correct `discover_games`'s claim that only `min_discount` filters server-side. ([0521ffb](https://github.com/Grinv/steam-games-mcp/commit/0521ffb))
+- Correct `get_player_summary`/`get_recently_played`/`get_player_achievements`'s stated privacy requirements. ([0521ffb](https://github.com/Grinv/steam-games-mcp/commit/0521ffb))
+- Document `get_recommended_games`'s empty-library case and `get_friend_list`'s 100-friend cap. ([0521ffb](https://github.com/Grinv/steam-games-mcp/commit/0521ffb))
+- Cross-reference `get_game_reviews`/`get_review_histogram` and disclose `get_game_reviews`'s review-text truncation. ([0521ffb](https://github.com/Grinv/steam-games-mcp/commit/0521ffb))
+- Fix the `what_should_i_play` prompt instructing a non-existent `discover_games` budget filter. ([0521ffb](https://github.com/Grinv/steam-games-mcp/commit/0521ffb))
 
 ## [0.10.0] - 2026-07-21
 
@@ -102,6 +106,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Remove the MCP `logging` capability and `notifications/message` push, deprecated as of protocol 2026-07-28 (SEP-2577) — logs are stderr-only now, so clients that displayed them (e.g. the MCP Inspector's logging panel) no longer will; `logging/setLevel` is no longer supported ([33878f5](https://github.com/Grinv/steam-games-mcp/commit/33878f5)).
 
 ## [0.9.0] - 2026-07-18
+
+Everything below is one commit: [99d56dc](https://github.com/Grinv/steam-games-mcp/commit/99d56dc).
 
 ### Added
 
