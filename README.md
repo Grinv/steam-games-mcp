@@ -118,7 +118,7 @@ need a free API key and a public profile. Three short steps:
    **Game details** to **Public**.
 
 > The key and Steam ID go in your MCP client config (the `env` block above) — see
-> [docs/clients.md](docs/clients.md) for per-client examples. Never commit them.
+> [docs/clients.md](https://github.com/Grinv/steam-games-mcp/blob/main/docs/clients.md) for per-client examples. Never commit them.
 
 ## Tools
 
@@ -188,9 +188,11 @@ npm run check:api    # live upstream health-check (Storefront keyless; player ch
 npm run inspector    # run under the MCP Inspector
 ```
 
-Runtime requires Node ≥ 20. Contributor/agent guidance: [AGENTS.md](AGENTS.md).
-Security policy: [SECURITY.md](SECURITY.md).
-Per-client config and all tunables: [docs/clients.md](docs/clients.md).
+Runtime requires Node ≥ 20. Contributor/agent guidance:
+[AGENTS.md](https://github.com/Grinv/steam-games-mcp/blob/main/AGENTS.md).
+Security policy: [SECURITY.md](https://github.com/Grinv/steam-games-mcp/blob/main/SECURITY.md).
+Per-client config and all tunables:
+[docs/clients.md](https://github.com/Grinv/steam-games-mcp/blob/main/docs/clients.md).
 
 ## Updating
 
