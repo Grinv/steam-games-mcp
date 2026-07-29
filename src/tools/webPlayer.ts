@@ -24,10 +24,13 @@ import {
   vanityFound,
 } from "../format/web.schemas.js";
 
-// Each of these tools has a found:false shape thrown by the CLIENT layer
-// (clients/web.ts, clients/storeService.ts) before the matching format/*.ts
-// summarizer ever runs, sharing the generic `notFoundReason` fragment — the
-// union with the summarizer's own found:true shape is assembled here.
+// Each of these tools has a found:false shape parsed against the generic
+// `notFoundReason` fragment — the union with the summarizer's own found:true
+// shape is assembled here. All but compare_players get their found:false
+// from the CLIENT layer (clients/web.ts) before the matching format/*.ts
+// summarizer ever runs; compare_players's is decided inside its own
+// summarizer (summarizeComparePlayers) instead, since the private-profile
+// check there needs both players' responses already fetched.
 const comparePlayersOutput = withNotFound(notFoundReason, comparePlayersFound);
 const findFriendsWhoOwnOutput = withNotFound(notFoundReason, findFriendsWhoOwnFound);
 const getFriendListOutput = withNotFound(notFoundReason, friendListFound);

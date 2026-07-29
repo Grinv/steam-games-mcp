@@ -10,7 +10,15 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
-import { PRIVATE_PROFILE_REASON, capList, hours, isoDay, storeUrl, stripHtml } from "./shared.js";
+import {
+  PRIVATE_PROFILE_REASON,
+  capList,
+  hours,
+  isoDay,
+  notFound,
+  storeUrl,
+  stripHtml,
+} from "./shared.js";
 import { notFoundReason, wishlistNotFound } from "./shared.schemas.js";
 import {
   comparePlayersFound,
@@ -162,7 +170,7 @@ export function summarizeComparePlayers(
   max = 50,
 ): z.infer<typeof notFoundReason> | z.infer<typeof comparePlayersFound> {
   if (isPrivate(a) || isPrivate(b)) {
-    return notFoundReason.parse({ found: false, reason: COMPARE_PRIVATE_REASON });
+    return notFound(COMPARE_PRIVATE_REASON);
   }
   const gamesA = new Map((a.response?.games ?? []).map((g) => [g.appid, g]));
   const gamesB = new Map((b.response?.games ?? []).map((g) => [g.appid, g]));
@@ -253,7 +261,7 @@ export function summarizePlayerAchievements(
 ): z.infer<typeof notFoundReason> | z.infer<typeof playerAchievementsFound> {
   const ps = r.playerstats;
   if (!ps?.success) {
-    return notFoundReason.parse({ found: false, reason: ps?.error ?? "No achievement stats" });
+    return notFound(ps?.error ?? "No achievement stats");
   }
   const all = ps.achievements ?? [];
   const unlocked = all.filter((a) => a.achieved === 1);
@@ -403,10 +411,7 @@ export function summarizeVanity(
 ): z.infer<typeof vanityFound> | z.infer<typeof notFoundReason> {
   const v = r.response;
   if (v?.success === 1 && v.steamid) return vanityFound.parse({ found: true, steamid: v.steamid });
-  return notFoundReason.parse({
-    found: false,
-    reason: v?.message ?? "No match for that vanity name",
-  });
+  return notFound(v?.message ?? "No match for that vanity name");
 }
 
 // ---- Web API: current players (keyless) -------------------------------------
