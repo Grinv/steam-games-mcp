@@ -254,11 +254,33 @@ export class SteamWebClient {
   // Shared games between two players' FULL libraries, unlike get_owned_games
   // which caps to the top 50 by playtime — comparing needs the whole list.
   async comparePlayers(steamidA: string, steamidB: string): Promise<Record<string, unknown>> {
-    const [a, b] = await Promise.all([
+    // Promise.allSettled, not Promise.all: a genuine transient failure
+    // (rate-limited/network/timeout/5xx) on EITHER player's own GetOwnedGames
+    // call would otherwise sink the whole comparison with a generic thrown
+    // error — name which player's lookup actually failed instead. Unlike
+    // findFriendsWhoOwn's per-friend degrade, there's no partial result to
+    // return here (the shared-games list genuinely needs both libraries), so
+    // this only improves the failure message, not the outcome.
+    const [a, b] = await Promise.allSettled([
       this.#ownedGamesRaw(steamidA, { include_appinfo: true, include_played_free_games: true }),
       this.#ownedGamesRaw(steamidB, { include_appinfo: true, include_played_free_games: true }),
     ]);
-    return summarizeComparePlayers(a, b);
+    if (a.status === "fulfilled" && b.status === "fulfilled") {
+      return summarizeComparePlayers(a.value, b.value);
+    }
+    const reasonFor = (r: PromiseSettledResult<OwnedGamesResponse>): string =>
+      r.status === "rejected"
+        ? r.reason instanceof ApiError
+          ? messageFor(r.reason)
+          : "an unexpected error"
+        : "";
+    const failed = [
+      a.status === "rejected" ? `the first player (${reasonFor(a)})` : null,
+      b.status === "rejected" ? `the second player (${reasonFor(b)})` : null,
+    ]
+      .filter((x): x is string => x !== null)
+      .join(" and ");
+    return notFound(`Couldn't fetch ${failed}'s library right now — try again.`);
   }
 
   async getPlayerAchievements(

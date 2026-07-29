@@ -964,6 +964,22 @@ describe("compare_players", () => {
     assert.equal(s.shared_count, 1);
     assert.equal(s.games[0]!.appid, 570);
   });
+
+  test("compare_players reports found:false naming which player failed on a genuine transient error, not a raw thrown error", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (!url.includes("GetOwnedGames")) return jsonResponse({});
+      if (url.includes("steamid=76561197960287931")) return jsonResponse({}, { status: 500 });
+      return jsonResponse(OWNED);
+    });
+    const res = await client.callTool({
+      name: "compare_players",
+      arguments: { steamid: "76561197960287930", other_steamid: "76561197960287931" },
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /second player/i);
+  });
 });
 
 describe("resolve_vanity_url", () => {
