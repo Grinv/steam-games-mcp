@@ -90,6 +90,22 @@ concretely: `cacheHints` (added for `tools/list`/`prompts/list`/
 and a spy `ResponseCacheStore`, since the legacy-era suite would stay green
 whether or not it worked at all.
 
+Don't try to run the whole unit suite (the ~240+ `helpers.ts`-based tests)
+under both eras — confirmed by direct test: a bare `McpServer.connect()` over
+`InMemoryTransport` (what every one of those tests uses) doesn't negotiate
+the modern era at all (`'auto'` silently falls back to legacy; `{pin:
+'2026-07-28'}` fails outright with `EraNegotiationFailed`) — era negotiation
+is `serveStdio`'s own hosting behavior, not something a bare `McpServer`
+instance implements. Real dual-era coverage only works through a spawned
+process (`e2e.test.ts`'s `StdioClientTransport` setup), which is too slow to
+duplicate per-tool. Instead, extend `e2e.test.ts`'s
+`assertRepresentativeSlice()` — one call per kind of protocol-level logic
+(tool registration, a key-gated short-circuit, a schema-validation
+rejection, a prompt call), not per tool — and keep every call inside it
+network-free (short-circuits before any fetch, or touches no client at all)
+since a live Storefront/Web API call has no place in the default `npm test`
+gate.
+
 Anything red here is the actual finding — stop and report it before moving to
 live testing.
 

@@ -220,6 +220,68 @@ describe("e2e (real built bundle over stdio)", () => {
     }
   });
 
+  // A representative slice of protocol-level behaviors, run once per protocol
+  // era (not once per tool — every tool already shares the same registration/
+  // validation/error-wrapping machinery, so this checks that machinery isn't
+  // era-sensitive, rather than re-testing every tool's own logic twice). Kept
+  // network-free like every other e2e test here: each call either short-
+  // circuits before any fetch (missing key, schema-validation rejection) or
+  // never touches a client at all (a prompt, which is pure message-template
+  // logic) — a live Storefront/Web API call has no place in the default
+  // `npm test` gate (that's what `check:api` is for).
+  async function assertRepresentativeSlice(client: Client): Promise<void> {
+    const { tools } = await client.listTools();
+    assert.equal(tools.length, 25, "every tool should register");
+
+    const { prompts } = await client.listPrompts();
+    assert.equal(prompts.length, 3, "every prompt should register");
+
+    const keyGated = await client.callTool({ name: "get_owned_games", arguments: {} });
+    assert.equal(keyGated.isError, true);
+    assert.match(textOf(keyGated), /needs a Steam Web API key/i);
+
+    const badBatch = await client.callTool({ name: "get_prices", arguments: { appids: [] } });
+    assert.equal(badBatch.isError, true, "an empty appids array should fail schema validation");
+
+    const prompt = await client.getPrompt({ name: "is_it_worth_buying", arguments: {} });
+    const promptText = (prompt.messages[0]!.content as { text: string }).text;
+    assert.match(promptText, /which game/i);
+  }
+
+  test("the representative behavior slice above holds under both the legacy and modern era", async (t) => {
+    if (!existsSync(distPath)) {
+      t.skip("dist/index.js not built — run `npm run build` first (CI builds before tests)");
+      return;
+    }
+    const sandbox = makeSandbox();
+
+    try {
+      for (const [label, clientOptions] of [
+        ["legacy", undefined],
+        ["modern", { versionNegotiation: { mode: "auto" as const } }],
+      ] as const) {
+        const client = new Client({ name: `e2e-slice-${label}`, version: "0" }, clientOptions);
+        const transport = new StdioClientTransport({
+          command: process.execPath,
+          args: [join(sandbox, "index.js")],
+          env: envWithoutCredentials(),
+        });
+        try {
+          await client.connect(transport);
+          await assertRepresentativeSlice(client);
+        } catch (err) {
+          throw new Error(`representative slice failed under the ${label} era: ${err}`, {
+            cause: err,
+          });
+        } finally {
+          await client.close();
+        }
+      }
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
   test("shuts down cleanly on SIGTERM (serveStdio's handle.close() wiring works in the real binary)", async (t) => {
     // The unit suite never exercises this: helpers.ts's connectServer() calls
     // server.close() directly on a bare McpServer, not through the serveStdio
