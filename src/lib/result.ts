@@ -88,7 +88,10 @@ export function messageFor(err: ApiError): string {
     case "not_modified":
       return "The content has not changed since the last request (304).";
     case "rate_limited":
-      return "Upstream rate limit hit (429). Please retry in a few seconds.";
+      // Steam's Store/Community endpoints are observed live to answer a rate
+      // limit as HTTP 420 as well as the documented 429 — report whichever
+      // one actually happened instead of assuming 429.
+      return `Upstream rate limit hit (${err.status ?? 429}). Please retry in a few seconds.`;
     case "server_error":
       return "The upstream service returned an error (5xx). Please retry later.";
     case "network":

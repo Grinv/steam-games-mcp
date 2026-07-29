@@ -12,6 +12,11 @@ test("classifyStatus maps HTTP codes to error codes and retryability", () => {
   assert.equal(classifyStatus(422).code, "bad_request");
   assert.equal(classifyStatus(429).code, "rate_limited");
   assert.equal(classifyStatus(429).retryable, true);
+  // 420 isn't in Steam's documented status list, but the Store/Community
+  // endpoints are observed live to answer it under load as the same
+  // "slow down" signal as 429 — must get the same retryable classification.
+  assert.equal(classifyStatus(420).code, "rate_limited");
+  assert.equal(classifyStatus(420).retryable, true);
   assert.equal(classifyStatus(503).code, "server_error");
   assert.equal(classifyStatus(503).retryable, true);
 });

@@ -7,7 +7,7 @@ export type ApiErrorCode =
   | "forbidden" // 403 — insufficient permissions/scope
   | "not_found" // 404 — no such resource
   | "not_modified" // 304 — cached content still fresh (conditional request)
-  | "rate_limited" // 429 — slow down
+  | "rate_limited" // 429 (also 420, observed live from Steam) — slow down
   | "server_error" // 5xx — upstream broke
   | "network" // connection failed
   | "timeout" // request aborted by our timeout
@@ -76,7 +76,10 @@ export function classifyStatus(status: number): { code: ApiErrorCode; retryable:
   if (status === 401) return { code: "unauthorized", retryable: false };
   if (status === 403) return { code: "forbidden", retryable: false };
   if (status === 404) return { code: "not_found", retryable: false };
-  if (status === 429) return { code: "rate_limited", retryable: true };
+  // 420 isn't in Steam's documented status list, but the Store/Community
+  // endpoints are observed live to answer it under load — the same
+  // "slow down" signal as 429 (historically popularized by Twitter's API).
+  if (status === 429 || status === 420) return { code: "rate_limited", retryable: true };
   if (status === 400 || status === 405 || status === 422)
     return { code: "bad_request", retryable: false };
   if (status >= 500) return { code: "server_error", retryable: true };
