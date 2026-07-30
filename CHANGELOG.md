@@ -6,6 +6,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Reject a non-http(s) `STEAM_API_BASE_URL`/`STEAM_STORE_BASE_URL` at startup instead of accepting any URL scheme. ([6317d0e](https://github.com/Grinv/steam-games-mcp/commit/6317d0e))
+- Change `get_game`'s missing-appid-and-name validation error to the SDK's generic "Input validation error: ..." wrapper instead of a bare sentence. ([6317d0e](https://github.com/Grinv/steam-games-mcp/commit/6317d0e))
+
+### Fixed
+
+- Fix `get_game_news` returning a misleading "resembles an injection attempt" error for a large/unassigned appid instead of a clean empty result. ([d04b623](https://github.com/Grinv/steam-games-mcp/commit/d04b623))
+- Fix `search_games`'s `term` and `get_game`'s `name` accepting a whitespace-only value and running a doomed search instead of failing validation. ([2c9699a](https://github.com/Grinv/steam-games-mcp/commit/2c9699a))
+- Trim a padded `search_games` `term` / `get_game` `name` before searching, instead of running the search unstripped. ([2c9699a](https://github.com/Grinv/steam-games-mcp/commit/2c9699a))
+
 ## [0.12.0] - 2026-07-30
 
 ### Added
