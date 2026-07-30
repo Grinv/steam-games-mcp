@@ -301,7 +301,7 @@ there) for:
   or a keyless-capable tool in `src/tools/webStore.ts`/`storefront.ts` that
   accidentally requires the key when it shouldn't (re-check against AGENTS.md's
   "Keyless caveat" list of methods that work without one). Also check the
-  *error-message* side of the same list: `HttpClient`'s `hasCredentials` is
+  _error-message_ side of the same list: `HttpClient`'s `hasCredentials` is
   fixed per client instance (`lib/http.ts`), not per request — a
   keyless-capable method that sends the key when present (`web.ts`'s
   "keyless-capable" group) needs its own call site to override
