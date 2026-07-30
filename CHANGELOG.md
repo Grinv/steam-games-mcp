@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-30
+
 ### Added
 
 - Add a privacy policy (`PRIVACY.md`) covering data handling and caching, linked from README and manifest.json's `privacy_policies`. ([91ee519](https://github.com/Grinv/steam-games-mcp/commit/91ee519))
