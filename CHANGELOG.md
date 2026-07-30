@@ -13,7 +13,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Raise runtime floor to Node ≥ 20.9 (was ≥ 20) — `__tests__/`'s `context.mock.timers` (20.4+) and `lib/http.ts`'s `AbortSignal.any()` (20.3+) already required more than the old floor stated.
+- Raise runtime floor to Node ≥ 20.11 (was ≥ 20) — `__tests__/`'s `context.mock.timers` (20.4+), `lib/http.ts`'s `AbortSignal.any()` (20.3+) and `scripts/*.mjs`'s `import.meta.dirname` (20.11+) already required more than the old floor stated.
 
 ### Fixed
 

@@ -12,10 +12,10 @@
 // Uses targeted token replacement — not JSON re-serialization — to preserve
 // each file's exact formatting.
 import { readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { join } from "node:path";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const root = join(import.meta.dirname, "..");
 
 function patch(rel, edits) {
   const file = join(root, rel);
