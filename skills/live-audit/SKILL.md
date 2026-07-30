@@ -259,16 +259,19 @@ there) for:
   handling the same concept (e.g. one player-data tool naming its
   SteamID64/vanity-name parameter differently from another). Grep every call
   site of a shared concept and diff the field names — don't just check each
-  in isolation. No input schema in this codebase is `.strict()`, so a
-  plausible-but-wrong name is silently dropped as an unrecognized key instead
-  of erroring, and the tool quietly falls back to whatever its field being
-  _absent_ means (e.g. an unfiltered/global result) — this looks like a
-  legitimate answer, not a bug, unless you already know what the correctly-
-  filtered result should look like. Confirmed live on a sibling project
-  (anilist-mcp-server): a search tool's user-filter parameter was named
-  differently from every other user-scoped tool, so passing the
-  sibling-consistent (but wrong) name silently returned the unfiltered global
-  feed instead of erroring or filtering.
+  in isolation. Every input schema in this codebase is a `z.strictObject()`
+  (since the July 2026 zod-modernization pass), so a plausible-but-wrong name
+  is rejected outright here with a clear "Unrecognized key" error rather than
+  silently dropped — verify live before flagging a naming mismatch as a
+  silent-fallback bug in THIS repo specifically. The risk this check still
+  guards against: a non-strict sibling project. Confirmed live on
+  anilist-mcp-server (which did not have strict schemas at the time): a
+  search tool's user-filter parameter was named differently from every other
+  user-scoped tool, so passing the sibling-consistent (but wrong) name
+  silently returned the unfiltered global feed instead of erroring or
+  filtering — keep checking naming consistency here too, since a
+  differently-but-plausibly-named field can still be a genuinely distinct,
+  valid optional param rather than the one you meant.
 - A shaper in `src/format/*.ts` that dereferences a raw Steam field unguarded
   instead of going through its co-located `*.schemas.ts`'s `schema.parse()` —
   AGENTS.md requires every summarizer build its return value that way so the
