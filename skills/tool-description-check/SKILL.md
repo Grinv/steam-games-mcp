@@ -90,9 +90,12 @@ Purpose Clarity — double-check those two first on any new or edited tool.
   role. This repo already does this well in a few places worth matching the
   style of: `get_items` ("for a bigger batch ... use get_prices instead")
   cross-references `get_prices` ("if you also need review %, ... use
-  get_items instead"); `get_global_achievements` (rarity-only, catalog-wide)
-  cross-references `get_game_achievements` (a specific player's own unlock
-  state).
+  get_items instead"); `get_global_achievements` (rarity by internal id
+  only, catalog-wide, no display names) cross-references `get_game_achievements`
+  (also catalog-wide/player-agnostic, but with full display names/descriptions
+  and a hidden flag) — both of which in turn cross-reference the actually
+  player-specific `get_player_achievements` (a given player's own unlock
+  progress).
 - Don't split one concept across near-duplicate tools, and don't collapse
   unrelated actions into one tool with a mode flag — one tool, one job,
   matching how this project already groups by domain (storefront reads vs.
