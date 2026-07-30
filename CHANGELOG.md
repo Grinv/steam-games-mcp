@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-07-30
+
 ### Changed
 
 - Reject a non-http(s) `STEAM_API_BASE_URL`/`STEAM_STORE_BASE_URL` at startup instead of accepting any URL scheme. ([6317d0e](https://github.com/Grinv/steam-games-mcp/commit/6317d0e))
