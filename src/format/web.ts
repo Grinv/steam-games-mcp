@@ -4,7 +4,7 @@
 // formatters (GetItems/Query/tags/enriched wishlist) live in ./store.ts.
 // Companion to ./storefront.ts and ./shared.ts.
 //
-// Every exported summarizer builds its return value via a matching `.strict()`
+// Every exported summarizer builds its return value via a matching `z.strictObject()`
 // zod schema's `.parse({...})` (see web.schemas.ts) instead of a bare object
 // literal — the schema is the single source of truth for the shape (see
 // storefront.ts's header comment for the full rationale).

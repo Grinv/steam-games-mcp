@@ -10,7 +10,6 @@ import { guard } from "./guard.js";
 export const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
 
 export const appid = z
-  .number()
   .int()
   .positive()
   .describe("Steam application id (appid). Get it from search_games.");

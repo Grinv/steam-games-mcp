@@ -89,6 +89,14 @@ npm run inspector      # run under the MCP Inspector
   apart) — `.parse()` calls and schema imports belong only in `format/`, never
   in `clients/`. Trim responses for token efficiency (cap big lists like a
   player's library, a game's achievements, or a friend list).
+- **Never use `z.date()`/`z.bigint()`/`z.nan()`/`.transform()`/`z.map()`/`z.set()`
+  in a tool's `inputSchema`/`outputSchema`.** The SDK converts every registered
+  schema via zod's native `z.toJSONSchema()` with its default
+  `unrepresentable: "throw"` (see `node_modules/@modelcontextprotocol/server/
+dist/src-*.mjs`'s `standardSchemaToJsonSchema`) — one of these types reaching
+  a tool schema throws at registration time, not a degraded-but-working JSON
+  Schema. Dates from Steam already arrive as display strings (e.g. `release_date`),
+  so plain `z.string()` is correct there anyway, not a workaround.
 - Use `describe()`/`test()` nesting in `src/__tests__/` whenever 2+ tests share
   a subject; a flat list of `test()` calls is fine for single-subject files.
 - Write tool `description`s and per-field `.describe()` text for the calling

@@ -27,13 +27,11 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "Search the Steam store by title — term can be partial or approximate, not an exact match; " +
         "returns matches with their appid (needed by the other game tools), price, Metacritic score " +
         "and platforms. No API key required.",
-      inputSchema: z
-        .object({
-          term: z.string().min(1).describe("Game title to search for."),
-          country,
-          language,
-        })
-        .strict(),
+      inputSchema: z.strictObject({
+        term: z.string().nonempty().describe("Game title to search for."),
+        country,
+        language,
+      }),
       outputSchema: searchGamesOutput,
       annotations: READ_ONLY,
     },
@@ -50,13 +48,13 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "Identify the game by appid (from search_games) OR by name — a title is resolved to the " +
         "closest store match. No API key required.",
       inputSchema: z
-        .object({
+        .strictObject({
           appid: appid
             .describe("Steam appid (from search_games). Provide appid OR name.")
             .optional(),
           name: z
             .string()
-            .min(1)
+            .nonempty()
             .describe(
               "Game title to look up instead of an appid — resolved to the closest store match. " +
                 "Provide appid OR name; appid wins if both are given.",
@@ -65,7 +63,9 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
           country,
           language,
         })
-        .strict(),
+        .refine((input) => input.appid !== undefined || input.name !== undefined, {
+          message: "Provide either appid or name.",
+        }),
       outputSchema: getGameOutput,
       annotations: READ_ONLY,
     },
@@ -73,8 +73,8 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       guard(async () => {
         let resolved = id;
         if (!resolved) {
-          if (!name) return errorResult("Provide either appid or name.");
-          const found = await store.resolveAppId(name, cc, l);
+          // The schema's .refine() above guarantees name is set whenever appid isn't.
+          const found = await store.resolveAppId(name!, cc, l);
           if (!found) return errorResult(`No Steam game found matching "${name}".`);
           resolved = found;
         }
@@ -91,31 +91,28 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "reviews for a game by appid. Review text over 600 characters is truncated. For long-term " +
         "trend instead of a snapshot, use get_review_histogram. Get the appid from search_games. " +
         "No API key required.",
-      inputSchema: z
-        .object({
-          appid,
-          limit: z
-            .number()
-            .int()
-            .min(1)
-            .max(20)
-            .describe("How many recent reviews (1-20). Default 5.")
-            .default(5),
-          review_language: z
-            .string()
-            .trim()
-            .describe("Filter reviews by language, e.g. 'english'. Default 'all'.")
-            .default("all"),
-          type: z
-            .enum(["all", "positive", "negative"])
-            .describe(
-              "Only positive or negative reviews. Default 'all'. Steam only computes the summary " +
-                "(score label, totals, %) for 'all' — filtering to positive/negative nulls those " +
-                "fields out, leaving only the review excerpts.",
-            )
-            .default("all"),
-        })
-        .strict(),
+      inputSchema: z.strictObject({
+        appid,
+        limit: z
+          .int()
+          .positive()
+          .max(20)
+          .describe("How many recent reviews (1-20). Default 5.")
+          .default(5),
+        review_language: z
+          .string()
+          .trim()
+          .describe("Filter reviews by language, e.g. 'english'. Default 'all'.")
+          .default("all"),
+        type: z
+          .enum(["all", "positive", "negative"])
+          .describe(
+            "Only positive or negative reviews. Default 'all'. Steam only computes the summary " +
+              "(score label, totals, %) for 'all' — filtering to positive/negative nulls those " +
+              "fields out, leaving only the review excerpts.",
+          )
+          .default("all"),
+      }),
       outputSchema: getGameReviewsOutput,
       annotations: READ_ONLY,
     },
@@ -135,7 +132,7 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "for 'are reviews improving / did an update hurt reception'. For a current summary and " +
         "example review text instead of a trend, use get_game_reviews. Get the appid from " +
         "search_games. No key.",
-      inputSchema: z.object({ appid }).strict(),
+      inputSchema: z.strictObject({ appid }),
       outputSchema: getReviewHistogramOutput,
       annotations: READ_ONLY,
     },
@@ -153,16 +150,14 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "come back in the same order as the given appids, one per id (unavailable ones marked " +
         "available:false, never dropped). Each row has the final/initial price and discount_percent " +
         "(or is_free). No API key required. Get appids from search_games or get_wishlist.",
-      inputSchema: z
-        .object({
-          appids: z
-            .array(z.number().int().positive())
-            .min(1)
-            .max(500)
-            .describe("Steam appids to price (1-500)."),
-          country,
-        })
-        .strict(),
+      inputSchema: z.strictObject({
+        appids: z
+          .array(z.int().positive())
+          .nonempty()
+          .max(500)
+          .describe("Steam appids to price (1-500)."),
+        country,
+      }),
       outputSchema: getPricesOutput,
       annotations: READ_ONLY,
     },
@@ -177,7 +172,7 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "List games currently on special (discounted) on the Steam store front page, with the " +
         "discount % and original/final price. For ALL catalog discounts (not just the front page), " +
         "use discover_games with min_discount. No API key required.",
-      inputSchema: z.object({ country, language }).strict(),
+      inputSchema: z.strictObject({ country, language }),
       outputSchema: getSpecialsOutput,
       annotations: READ_ONLY,
     },
@@ -193,7 +188,7 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "soon (each a list of games with appid and price), all in one call — for a general 'what's " +
         "on the store front page' overview. For just current discounts use get_specials (lighter), " +
         "or discover_games for catalog-wide deals with filters. No API key required.",
-      inputSchema: z.object({ country, language }).strict(),
+      inputSchema: z.strictObject({ country, language }),
       outputSchema: getFeaturedOutput,
       annotations: READ_ONLY,
     },

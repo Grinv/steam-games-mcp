@@ -3,7 +3,7 @@
 // lives here. Companion to ./web.ts (official Web API) and ./shared.ts (helpers).
 //
 // Every exported summarizer below builds its return value via a matching
-// `.strict()` zod schema's `.parse({...})` (see storefront.schemas.ts) instead
+// `z.strictObject()` zod schema's `.parse({...})` (see storefront.schemas.ts) instead
 // of a bare object literal — the schema is the single source of truth for the
 // shape, so a missing/extra field throws immediately when the summarizer runs
 // (any test, or a real call) instead of silently drifting from the

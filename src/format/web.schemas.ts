@@ -1,7 +1,7 @@
 // Zod schemas for format/web.ts's summarizers. Each exported summarizer builds
 // its return value via `schema.parse({...})` (see web.ts), so the schema is
 // the single source of truth for its shape — see storefront.schemas.ts for the
-// full rationale. `.strict()` throughout. Several tools' `found:false` branches
+// full rationale. `z.strictObject()` throughout. Several tools' `found:false` branches
 // are actually thrown by the CLIENT layer (clients/web.ts, clients/storeService.ts)
 // before a summarizer ever runs (a private profile/friends list, an empty
 // owned-library, ...) — those parse against the shared `notFoundReason`
@@ -23,262 +23,214 @@ export const personaStates = [
 ] as const;
 
 export const getPlayerSummaryOutput = z.discriminatedUnion("found", [
-  z.object({ found: z.literal(false) }).strict(),
-  z
-    .object({
-      found: z.literal(true),
-      steamid: z.string().optional(),
-      name: z.string().nullable(),
-      real_name: z.string().nullable(),
-      state: z.enum(personaStates),
-      visibility: z.enum(["public", "private"]),
-      country: z.string().nullable(),
-      level: z.number().nullable(),
-      created: z.string().nullable(),
-      in_game: z.string().nullable(),
-      profile_url: z.string().nullable(),
-      avatar: z.string().nullable(),
-    })
-    .strict(),
-]);
-
-const ownedGame = z
-  .object({
-    appid: z.number().optional(),
-    name: z.string().nullable(),
-    playtime_hours: z.number().nullable(),
-    playtime_2weeks_hours: z.number().nullable(),
-  })
-  .strict();
-export const getOwnedGamesOutput = z.discriminatedUnion("found", [
-  z
-    .object({
-      found: z.literal(false),
-      reason: z.string(),
-      game_count: z.null(),
-      games: z.array(z.never()),
-      owns: z.array(z.object({ appid: z.number(), owned: z.literal(false) }).strict()).optional(),
-    })
-    .strict(),
-  z
-    .object({
-      found: z.literal(true),
-      game_count: z.number(),
-      returned: z.number(),
-      games: z.array(ownedGame),
-      owns: z
-        .array(
-          z
-            .object({
-              appid: z.number(),
-              owned: z.boolean(),
-              playtime_hours: z.number().nullable(),
-            })
-            .strict(),
-        )
-        .optional(),
-    })
-    .strict(),
-]);
-
-export const comparePlayersFound = z
-  .object({
+  z.strictObject({ found: z.literal(false) }),
+  z.strictObject({
     found: z.literal(true),
-    shared_count: z.number(),
+    steamid: z.string().optional(),
+    name: z.string().nullable(),
+    real_name: z.string().nullable(),
+    state: z.enum(personaStates),
+    visibility: z.enum(["public", "private"]),
+    country: z.string().nullable(),
+    level: z.number().nullable(),
+    created: z.string().nullable(),
+    in_game: z.string().nullable(),
+    profile_url: z.string().nullable(),
+    avatar: z.string().nullable(),
+  }),
+]);
+
+const ownedGame = z.strictObject({
+  appid: z.number().optional(),
+  name: z.string().nullable(),
+  playtime_hours: z.number().nullable(),
+  playtime_2weeks_hours: z.number().nullable(),
+});
+export const getOwnedGamesOutput = z.discriminatedUnion("found", [
+  z.strictObject({
+    found: z.literal(false),
+    reason: z.string(),
+    game_count: z.null(),
+    games: z.array(z.never()),
+    owns: z.array(z.strictObject({ appid: z.number(), owned: z.literal(false) })).optional(),
+  }),
+  z.strictObject({
+    found: z.literal(true),
+    game_count: z.number(),
     returned: z.number(),
-    games: z.array(
-      z
-        .object({
-          appid: z.number().optional(),
-          name: z.string().nullable(),
-          playtime_hours_a: z.number().nullable(),
-          playtime_hours_b: z.number().nullable(),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
+    games: z.array(ownedGame),
+    owns: z
+      .array(
+        z.strictObject({
+          appid: z.number(),
+          owned: z.boolean(),
+          playtime_hours: z.number().nullable(),
+        }),
+      )
+      .optional(),
+  }),
+]);
+
+export const comparePlayersFound = z.strictObject({
+  found: z.literal(true),
+  shared_count: z.number(),
+  returned: z.number(),
+  games: z.array(
+    z.strictObject({
+      appid: z.number().optional(),
+      name: z.string().nullable(),
+      playtime_hours_a: z.number().nullable(),
+      playtime_hours_b: z.number().nullable(),
+    }),
+  ),
+});
 
 export const getRecentlyPlayedOutput = z.discriminatedUnion("found", [
   gamesNotFound,
-  z
-    .object({
-      found: z.literal(true),
-      total: z.number(),
-      games: z.array(ownedGame),
-    })
-    .strict(),
+  z.strictObject({
+    found: z.literal(true),
+    total: z.number(),
+    games: z.array(ownedGame),
+  }),
 ]);
 
-export const playerAchievementsFound = z
-  .object({
-    found: z.literal(true),
-    game: z.string().nullable(),
-    total: z.number(),
-    unlocked: z.number(),
-    completion_pct: z.number().nullable(),
-    returned: z.number(),
-    achievements: z.array(
-      z
-        .object({
-          name: z.string().optional(),
-          achieved: z.boolean(),
-          unlocked_at: z.string().nullable(),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
+export const playerAchievementsFound = z.strictObject({
+  found: z.literal(true),
+  game: z.string().nullable(),
+  total: z.number(),
+  unlocked: z.number(),
+  completion_pct: z.number().nullable(),
+  returned: z.number(),
+  achievements: z.array(
+    z.strictObject({
+      name: z.string().optional(),
+      achieved: z.boolean(),
+      unlocked_at: z.string().nullable(),
+    }),
+  ),
+});
 
-export const getGlobalAchievementsOutput = z
-  .object({
-    count: z.number(),
-    returned: z.number(),
-    achievements: z.array(
-      z.object({ name: z.string().optional(), percent: z.number().nullable() }).strict(),
-    ),
-  })
-  .strict();
+export const getGlobalAchievementsOutput = z.strictObject({
+  count: z.number(),
+  returned: z.number(),
+  achievements: z.array(
+    z.strictObject({ name: z.string().optional(), percent: z.number().nullable() }),
+  ),
+});
 
-export const getGameAchievementsOutput = z
-  .object({
-    game: z.string().nullable(),
-    total: z.number(),
-    returned: z.number(),
-    achievements: z.array(
-      z
-        .object({
-          api_name: z.string().optional(),
-          name: z.string().nullable(),
-          description: z.string().nullable(),
-          hidden: z.boolean(),
-          global_unlock_pct: z.number().nullable(),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
+export const getGameAchievementsOutput = z.strictObject({
+  game: z.string().nullable(),
+  total: z.number(),
+  returned: z.number(),
+  achievements: z.array(
+    z.strictObject({
+      api_name: z.string().optional(),
+      name: z.string().nullable(),
+      description: z.string().nullable(),
+      hidden: z.boolean(),
+      global_unlock_pct: z.number().nullable(),
+    }),
+  ),
+});
 
-export const getGameNewsOutput = z
-  .object({
-    items: z.array(
-      z
-        .object({
-          title: z.string().nullable(),
-          date: z.string().nullable(),
-          author: z.string().nullable(),
-          feed: z.string().nullable(),
-          excerpt: z.string().nullable(),
-          url: z.string().nullable(),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
+export const getGameNewsOutput = z.strictObject({
+  items: z.array(
+    z.strictObject({
+      title: z.string().nullable(),
+      date: z.string().nullable(),
+      author: z.string().nullable(),
+      feed: z.string().nullable(),
+      excerpt: z.string().nullable(),
+      url: z.string().nullable(),
+    }),
+  ),
+});
 
-export const vanityFound = z.object({ found: z.literal(true), steamid: z.string() }).strict();
+export const vanityFound = z.strictObject({ found: z.literal(true), steamid: z.string() });
 
-export const getCurrentPlayersOutput = z
-  .object({
-    appid: z.number(),
-    player_count: z.number().nullable(),
-  })
-  .strict();
+export const getCurrentPlayersOutput = z.strictObject({
+  appid: z.number(),
+  player_count: z.number().nullable(),
+});
 
 // get_wishlist's LIGHT success shape (no include_details/filters). The
 // not-found branch (empty/private wishlist) is the shared `wishlistNotFound`
 // fragment (format/shared.schemas.ts) — identical to the detailed summarizer's.
-export const wishlistLightFound = z
-  .object({
-    found: z.literal(true),
-    total: z.number(),
-    returned: z.number(),
-    items: z.array(
-      z
-        .object({
-          appid: z.number().optional(),
-          store_url: z.string().nullable(),
-          priority: z.number().nullable(),
-          added: z.string().nullable(),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
+export const wishlistLightFound = z.strictObject({
+  found: z.literal(true),
+  total: z.number(),
+  returned: z.number(),
+  items: z.array(
+    z.strictObject({
+      appid: z.number().optional(),
+      store_url: z.string().nullable(),
+      priority: z.number().nullable(),
+      added: z.string().nullable(),
+    }),
+  ),
+});
 
 export const getPlayerBansOutput = z.discriminatedUnion("found", [
-  z.object({ found: z.literal(false) }).strict(),
-  z
-    .object({
-      found: z.literal(true),
-      steamid: z.string().optional(),
-      vac_banned: z.boolean(),
-      vac_ban_count: z.number(),
-      game_ban_count: z.number(),
-      community_banned: z.boolean(),
-      economy_ban: z.string().nullable(),
-      days_since_last_ban: z.number().nullable(),
-    })
-    .strict(),
+  z.strictObject({ found: z.literal(false) }),
+  z.strictObject({
+    found: z.literal(true),
+    steamid: z.string().optional(),
+    vac_banned: z.boolean(),
+    vac_ban_count: z.number(),
+    game_ban_count: z.number(),
+    community_banned: z.boolean(),
+    economy_ban: z.string().nullable(),
+    days_since_last_ban: z.number().nullable(),
+  }),
 ]);
 
 export const getFollowedGamesOutput = z.discriminatedUnion("found", [
   gamesNotFound,
-  z
-    .object({
-      found: z.literal(true),
-      total: z.number(),
-      returned: z.number(),
-      games: z.array(z.object({ appid: z.number(), store_url: z.string().nullable() }).strict()),
-    })
-    .strict(),
+  z.strictObject({
+    found: z.literal(true),
+    total: z.number(),
+    returned: z.number(),
+    games: z.array(z.strictObject({ appid: z.number(), store_url: z.string().nullable() })),
+  }),
 ]);
 
 // summarizeFriendList never returns found:false itself — the client layer
 // (clients/web.ts's #friendsRaw) short-circuits to the shared `notFoundReason`
 // fragment before this ever runs, for a private friends list.
-export const friendListFound = z
-  .object({
-    found: z.literal(true),
-    total: z.number(),
-    returned: z.number(),
-    friends: z.array(
-      z
-        .object({
-          steamid: z.string().optional(),
-          name: z.string().nullable(),
-          state: z.enum(personaStates),
-          in_game: z.string().nullable(),
-          profile_url: z.string().nullable(),
-          friends_since: z.string().nullable(),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
+export const friendListFound = z.strictObject({
+  found: z.literal(true),
+  total: z.number(),
+  returned: z.number(),
+  friends: z.array(
+    z.strictObject({
+      steamid: z.string().optional(),
+      name: z.string().nullable(),
+      state: z.enum(personaStates),
+      in_game: z.string().nullable(),
+      profile_url: z.string().nullable(),
+      friends_since: z.string().nullable(),
+    }),
+  ),
+});
 
 // Same story as friendListFound: the client layer handles the private-list
 // found:false case before summarizeFriendsWhoOwn ever runs.
-const friendNameEntry = z.object({ steamid: z.string(), name: z.string().nullable() }).strict();
-export const findFriendsWhoOwnFound = z
-  .object({
-    found: z.literal(true),
-    total_friends: z.number(),
-    matches: z.array(
-      z
-        .object({
-          appid: z.number(),
-          owners: z.array(friendNameEntry.extend({ playtime_hours: z.number().nullable() })),
-          // Present (and > owners.length) only when the owner list was capped.
-          owners_total: z.number().optional(),
-        })
-        .strict(),
-    ),
-    private_friends: z.array(friendNameEntry),
-    private_friends_total: z.number().optional(),
-    // A friend whose own GetOwnedGames call failed (rate-limited/network/
-    // timeout/5xx) rather than came back private — see summarizeFriendsWhoOwn.
-    unavailable_friends: z.array(friendNameEntry.extend({ reason: z.string() })),
-    unavailable_friends_total: z.number().optional(),
-  })
-  .strict();
+const friendNameEntry = z.strictObject({ steamid: z.string(), name: z.string().nullable() });
+export const findFriendsWhoOwnFound = z.strictObject({
+  found: z.literal(true),
+  total_friends: z.number(),
+  matches: z.array(
+    z.strictObject({
+      appid: z.number(),
+      owners: z.array(friendNameEntry.extend({ playtime_hours: z.number().nullable() })),
+      // Present (and > owners.length) only when the owner list was capped.
+      owners_total: z.number().optional(),
+    }),
+  ),
+  private_friends: z.array(friendNameEntry),
+  private_friends_total: z.number().optional(),
+  // A friend whose own GetOwnedGames call failed (rate-limited/network/
+  // timeout/5xx) rather than came back private — see summarizeFriendsWhoOwn.
+  unavailable_friends: z.array(friendNameEntry.extend({ reason: z.string() })),
+  unavailable_friends_total: z.number().optional(),
+});

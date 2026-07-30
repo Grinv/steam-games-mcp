@@ -150,6 +150,9 @@ describe("get_game", () => {
   test("get_game errors when neither appid nor name is given", async (t) => {
     const { client } = await setupServer(t, ENV, router);
     const res = await client.callTool({ name: "get_game", arguments: {} });
+    // Enforced by the inputSchema's .refine(), not a handler-level errorResult()
+    // — the SDK wraps the message in its own "Input validation error: ..."
+    // prefix, so this intentionally matches loosely rather than the exact string.
     assertToolError(res, /appid or name/i);
   });
 

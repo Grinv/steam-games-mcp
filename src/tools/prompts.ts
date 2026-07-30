@@ -24,29 +24,27 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
       title: "What should I play next?",
       description:
         "Recommend games from the Steam catalog based on a player's library and taste, excluding what they already own.",
-      argsSchema: z
-        .object({
-          steamid: z
-            .string()
-            .trim()
-            .describe(
-              "SteamID64 whose library to base taste on. Omit to use the configured STEAM_ID.",
-            )
-            .optional(),
-          budget: z
-            .string()
-            .trim()
-            .describe("Max price, e.g. '$20' or 'free'. Omit for no limit.")
-            .optional(),
-          tags: z
-            .string()
-            .trim()
-            .describe(
-              "Comma-separated tags to steer toward, e.g. 'Roguelike, Deckbuilding'. Omit to infer from the library.",
-            )
-            .optional(),
-        })
-        .strict(),
+      argsSchema: z.strictObject({
+        steamid: z
+          .string()
+          .trim()
+          .describe(
+            "SteamID64 whose library to base taste on. Omit to use the configured STEAM_ID.",
+          )
+          .optional(),
+        budget: z
+          .string()
+          .trim()
+          .describe("Max price, e.g. '$20' or 'free'. Omit for no limit.")
+          .optional(),
+        tags: z
+          .string()
+          .trim()
+          .describe(
+            "Comma-separated tags to steer toward, e.g. 'Roguelike, Deckbuilding'. Omit to infer from the library.",
+          )
+          .optional(),
+      }),
     },
     ({ steamid, budget, tags }) =>
       promptResult(
@@ -67,37 +65,35 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
       title: "Is this game worth buying?",
       description:
         "Gather price, reviews (lifetime + recent trend) and Steam Deck compatibility for a buying verdict. game is optional — if omitted, asks which game instead of failing.",
-      argsSchema: z
-        .object({
-          // Optional rather than required: not every MCP client elicits a
-          // missing required prompt argument from the user (e.g. Claude Code
-          // doesn't — it just fails the call), so a missing game is instead
-          // handled in the prompt text below, universally across clients.
-          game: completable(
-            z
-              .string()
-              .trim()
-              .describe(
-                "Game title or Steam appid. Start typing for live title suggestions. Omit to be asked which game you mean.",
-              ),
-            async (value) => {
-              // Best-effort: a completion list is a nice-to-have, so a transient
-              // upstream failure degrades to no suggestions instead of an error
-              // surfacing in the client's live-typing UI.
-              try {
-                const r = await store.searchGames(value);
-                const results = r.results as { name?: string }[] | undefined;
-                return (results ?? [])
-                  .map((g) => g.name)
-                  .filter((n): n is string => Boolean(n))
-                  .slice(0, COMPLETION_LIMIT);
-              } catch {
-                return [];
-              }
-            },
-          ).optional(),
-        })
-        .strict(),
+      argsSchema: z.strictObject({
+        // Optional rather than required: not every MCP client elicits a
+        // missing required prompt argument from the user (e.g. Claude Code
+        // doesn't — it just fails the call), so a missing game is instead
+        // handled in the prompt text below, universally across clients.
+        game: completable(
+          z
+            .string()
+            .trim()
+            .describe(
+              "Game title or Steam appid. Start typing for live title suggestions. Omit to be asked which game you mean.",
+            ),
+          async (value) => {
+            // Best-effort: a completion list is a nice-to-have, so a transient
+            // upstream failure degrades to no suggestions instead of an error
+            // surfacing in the client's live-typing UI.
+            try {
+              const r = await store.searchGames(value);
+              const results = r.results as { name?: string }[] | undefined;
+              return (results ?? [])
+                .map((g) => g.name)
+                .filter((n): n is string => Boolean(n))
+                .slice(0, COMPLETION_LIMIT);
+            } catch {
+              return [];
+            }
+          },
+        ).optional(),
+      }),
     },
     ({ game }) =>
       promptResult(
@@ -119,25 +115,23 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
     {
       title: "Today's deals digest",
       description: "A curated list of well-reviewed discounted games from Steam's catalog.",
-      argsSchema: z
-        .object({
-          min_discount: z
-            .string()
-            .trim()
-            .describe("Minimum discount %, e.g. '50'. Default 50.")
-            .optional(),
-          min_review: z
-            .string()
-            .trim()
-            .describe("Minimum positive-review %, e.g. '85'. Default 80.")
-            .optional(),
-          tags: z
-            .string()
-            .trim()
-            .describe("Comma-separated tags to filter by, e.g. 'Roguelike'. Omit for any genre.")
-            .optional(),
-        })
-        .strict(),
+      argsSchema: z.strictObject({
+        min_discount: z
+          .string()
+          .trim()
+          .describe("Minimum discount %, e.g. '50'. Default 50.")
+          .optional(),
+        min_review: z
+          .string()
+          .trim()
+          .describe("Minimum positive-review %, e.g. '85'. Default 80.")
+          .optional(),
+        tags: z
+          .string()
+          .trim()
+          .describe("Comma-separated tags to filter by, e.g. 'Roguelike'. Omit for any genre.")
+          .optional(),
+      }),
     },
     ({ min_discount, min_review, tags }) =>
       promptResult(

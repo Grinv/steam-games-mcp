@@ -5,7 +5,7 @@
 // All three services return the same `StoreItem` shape, so one card builder
 // (baseCard/storeCard) and one set of tag/compat/platform helpers serve them all.
 //
-// Every exported summarizer builds its return value via a matching `.strict()`
+// Every exported summarizer builds its return value via a matching `z.strictObject()`
 // zod schema's `.parse({...})` (see store.schemas.ts) instead of a bare object
 // literal — the schema is the single source of truth for the shape (see
 // storefront.ts's header comment for the full rationale).

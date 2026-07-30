@@ -10,8 +10,8 @@ import type { LogLevel } from "./lib/logger.js";
 
 const EnvSchema = z.object({
   // --- Steam Web API: free key (player data). https://steamcommunity.com/dev/apikey
-  STEAM_API_KEY: z.string().trim().min(1).optional(),
-  STEAM_API_BASE_URL: z.string().trim().url().default("https://api.steampowered.com"),
+  STEAM_API_KEY: z.string().trim().nonempty().optional(),
+  STEAM_API_BASE_URL: z.httpUrl().trim().default("https://api.steampowered.com"),
   // Default player for the personal tools (wishlist/library/achievements) so a
   // SteamID64 need not be passed every call. Accepts a 17-digit SteamID64 or a
   // vanity name (the part after /id/), resolved once via the Web API (needs a key).
@@ -19,7 +19,7 @@ const EnvSchema = z.object({
   // here would silently resolve to "not found" instead of the intended profile.
   STEAM_ID: z.string().trim().min(2).optional(),
   // --- Steam Storefront API: no key; game/store data. ---
-  STEAM_STORE_BASE_URL: z.string().trim().url().default("https://store.steampowered.com"),
+  STEAM_STORE_BASE_URL: z.httpUrl().trim().default("https://store.steampowered.com"),
 
   // Storefront is region/locale-aware: cc = ISO country (prices), l = language.
   STEAM_COUNTRY: z.string().trim().min(2).max(2).default("US"),

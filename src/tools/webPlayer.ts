@@ -53,17 +53,15 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "achievement schema needs a key). For just the rarity by internal id without a key, use " +
         "get_global_achievements; for a few named highlights, see get_game's achievements_highlighted. " +
         "Get the appid from search_games.",
-      inputSchema: z
-        .object({
-          appid,
-          language: z
-            .string()
-            .trim()
-            .min(2)
-            .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
-            .optional(),
-        })
-        .strict(),
+      inputSchema: z.strictObject({
+        appid,
+        language: z
+          .string()
+          .trim()
+          .min(2)
+          .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
+          .optional(),
+      }),
       outputSchema: getGameAchievementsOutput,
       annotations: READ_ONLY,
     },
@@ -78,19 +76,17 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "Convert a Steam custom (vanity) profile name — the part after /id/ in a profile URL — into " +
         "the 17-digit SteamID64 that the player tools need. Requires STEAM_API_KEY. Returns " +
         "found:false if the name doesn't resolve to a profile.",
-      inputSchema: z
-        .object({
-          // .trim(): ResolveVanityURL is an exact-match lookup, so stray
-          // whitespace would silently resolve to found:false instead of erroring.
-          vanity: z
-            .string()
-            .trim()
-            .min(1)
-            .describe(
-              "Vanity name, e.g. 'gabelogannewell' from steamcommunity.com/id/gabelogannewell.",
-            ),
-        })
-        .strict(),
+      inputSchema: z.strictObject({
+        // .trim(): ResolveVanityURL is an exact-match lookup, so stray
+        // whitespace would silently resolve to found:false instead of erroring.
+        vanity: z
+          .string()
+          .trim()
+          .nonempty()
+          .describe(
+            "Vanity name, e.g. 'gabelogannewell' from steamcommunity.com/id/gabelogannewell.",
+          ),
+      }),
       outputSchema: resolveVanityUrlOutput,
       annotations: READ_ONLY,
     },
@@ -108,7 +104,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "public — otherwise it returns found:false. For 'which of my friends own game X', use " +
         "find_friends_who_own instead — it checks each friend's full library, not just this list. " +
         "Get the SteamID64 from resolve_vanity_url.",
-      inputSchema: z.object({ steamid }).strict(),
+      inputSchema: z.strictObject({ steamid }),
       outputSchema: getFriendListOutput,
       annotations: READ_ONLY,
     },
@@ -133,16 +129,14 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "failing the whole call — every other friend's result still comes through. Each of owners, " +
         "private_friends and unavailable_friends is capped at 100 entries (a sibling _total field " +
         "appears only when it was actually truncated). Get appids from search_games.",
-      inputSchema: z
-        .object({
-          appids: z
-            .array(z.number().int().positive())
-            .min(1)
-            .max(10)
-            .describe("Steam appids to check (1-10)."),
-          steamid,
-        })
-        .strict(),
+      inputSchema: z.strictObject({
+        appids: z
+          .array(z.int().positive())
+          .nonempty()
+          .max(10)
+          .describe("Steam appids to check (1-10)."),
+        steamid,
+      }),
       outputSchema: findFriendsWhoOwnOutput,
       annotations: READ_ONLY,
     },
@@ -161,18 +155,16 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "(check `returned` vs `shared_count`). Requires STEAM_API_KEY and both " +
         "profiles' game-details to be public — otherwise it returns found:false. Omit steamid to " +
         "compare against yourself (STEAM_ID).",
-      inputSchema: z
-        .object({
-          steamid,
-          other_steamid: z
-            .string()
-            .regex(
-              /^\d{17}$/,
-              "A SteamID64 is 17 digits. Use resolve_vanity_url to convert a custom profile name.",
-            )
-            .describe("The other player's 17-digit SteamID64 to compare against."),
-        })
-        .strict(),
+      inputSchema: z.strictObject({
+        steamid,
+        other_steamid: z
+          .string()
+          .regex(
+            /^\d{17}$/,
+            "A SteamID64 is 17 digits. Use resolve_vanity_url to convert a custom profile name.",
+          )
+          .describe("The other player's 17-digit SteamID64 to compare against."),
+      }),
       outputSchema: comparePlayersOutput,
       annotations: READ_ONLY,
     },
@@ -191,7 +183,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "a private profile (visibility reports 'private') — country, account age and the current " +
         "game only populate when the profile is public. For VAC/game/trade ban status instead, use " +
         "get_player_bans.",
-      inputSchema: z.object({ steamid }).strict(),
+      inputSchema: z.strictObject({ steamid }),
       outputSchema: getPlayerSummaryOutput,
       annotations: READ_ONLY,
     },
@@ -206,7 +198,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "Check a player's VAC, game, community and economy (trade) ban status by SteamID64 — 'is this " +
         "player banned', useful before trading or adding a friend. Ban status is always public — this " +
         "works even when the rest of the profile is private. Requires STEAM_API_KEY.",
-      inputSchema: z.object({ steamid }).strict(),
+      inputSchema: z.strictObject({ steamid }),
       outputSchema: getPlayerBansOutput,
       annotations: READ_ONLY,
     },
@@ -225,20 +217,18 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "library, with each result's own playtime_hours (null if not owned). For checking a FRIEND's " +
         "ownership instead of the player's own, use find_friends_who_own. Requires STEAM_API_KEY and " +
         "a public profile + game-details visibility. Get the SteamID64 from resolve_vanity_url.",
-      inputSchema: z
-        .object({
-          steamid,
-          check_appids: z
-            .array(z.number().int().positive())
-            .min(1)
-            .max(50)
-            .describe(
-              "Steam appids to reliably check ownership of (1-50), regardless of the top-50-by-" +
-                "playtime cap on `games`. Adds an `owns` field: [{appid, owned, playtime_hours}].",
-            )
-            .optional(),
-        })
-        .strict(),
+      inputSchema: z.strictObject({
+        steamid,
+        check_appids: z
+          .array(z.int().positive())
+          .nonempty()
+          .max(50)
+          .describe(
+            "Steam appids to reliably check ownership of (1-50), regardless of the top-50-by-" +
+              "playtime cap on `games`. Adds an `owns` field: [{appid, owned, playtime_hours}].",
+          )
+          .optional(),
+      }),
       outputSchema: getOwnedGamesOutput,
       annotations: READ_ONLY,
     },
@@ -254,7 +244,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "For all-time top games by playtime instead (capped to the top 50), use get_owned_games. " +
         "Requires STEAM_API_KEY and a public profile with game-details visibility (same requirement " +
         "as get_owned_games) — otherwise it returns found:false.",
-      inputSchema: z.object({ steamid }).strict(),
+      inputSchema: z.strictObject({ steamid }),
       outputSchema: getRecentlyPlayedOutput,
       annotations: READ_ONLY,
     },
@@ -284,36 +274,32 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "to fall back to. Requires STEAM_API_KEY and a public profile with game-details visible " +
         "(same requirement as get_owned_games) — found:false is also returned if the player owns " +
         "no games at all to base recommendations on.",
-      inputSchema: z
-        .object({
-          steamid,
-          count: z
-            .number()
-            .int()
-            .min(1)
-            .max(25)
-            .describe("How many recommendations to return (1-25). Default 10.")
-            .default(10),
-          exclude_tags: z
-            .array(z.string().min(1))
-            .min(1)
-            .describe(
-              "Drop any candidate carrying ANY of these tags (case-insensitive), e.g. " +
-                "['Souls-like'] for 'recommend me something except Souls-like'. Use exact Steam tag " +
-                "names — a misspelled/unrecognized one isn't an error, it just drops nothing.",
-            )
-            .optional(),
-          min_discount: z
-            .number()
-            .int()
-            .min(1)
-            .max(100)
-            .describe(
-              "Minimum discount %, e.g. 30 for '30%+ off'. Omit to include full-price games too.",
-            )
-            .optional(),
-        })
-        .strict(),
+      inputSchema: z.strictObject({
+        steamid,
+        count: z
+          .int()
+          .positive()
+          .max(25)
+          .describe("How many recommendations to return (1-25). Default 10.")
+          .default(10),
+        exclude_tags: z
+          .array(z.string().nonempty())
+          .nonempty()
+          .describe(
+            "Drop any candidate carrying ANY of these tags (case-insensitive), e.g. " +
+              "['Souls-like'] for 'recommend me something except Souls-like'. Use exact Steam tag " +
+              "names — a misspelled/unrecognized one isn't an error, it just drops nothing.",
+          )
+          .optional(),
+        min_discount: z
+          .int()
+          .positive()
+          .max(100)
+          .describe(
+            "Minimum discount %, e.g. 30 for '30%+ off'. Omit to include full-price games too.",
+          )
+          .optional(),
+      }),
       outputSchema: getRecommendedGamesOutput,
       annotations: READ_ONLY,
     },
@@ -336,18 +322,16 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "instead; for just the rarity without a key, use get_global_achievements. Requires " +
         "STEAM_API_KEY and a public profile with game-details visibility — otherwise it returns " +
         "found:false (also returned if the game has no achievements at all).",
-      inputSchema: z
-        .object({
-          steamid,
-          appid,
-          language: z
-            .string()
-            .trim()
-            .min(2)
-            .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
-            .optional(),
-        })
-        .strict(),
+      inputSchema: z.strictObject({
+        steamid,
+        appid,
+        language: z
+          .string()
+          .trim()
+          .min(2)
+          .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
+          .optional(),
+      }),
       outputSchema: getPlayerAchievementsOutput,
       annotations: READ_ONLY,
     },

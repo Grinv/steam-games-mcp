@@ -244,7 +244,7 @@ describe("e2e (real built bundle over stdio)", () => {
     const badBatch = await client.callTool({ name: "get_prices", arguments: { appids: [] } });
     assert.equal(badBatch.isError, true, "an empty appids array should fail schema validation");
 
-    // Every tool input schema is .strict(): an unrecognized param name (e.g. a
+    // Every tool input schema is a z.strictObject(): an unrecognized param name (e.g. a
     // plausible-but-wrong field an agent guessed) must be rejected up front
     // instead of being silently dropped and the tool running with defaults.
     const badKey = await client.callTool({

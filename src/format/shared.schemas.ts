@@ -1,11 +1,11 @@
 // Zod fragment shared by every client-layer early-return that short-circuits
 // before reaching a format/*.ts summarizer (a private profile/friends list,
-// an empty owned-library, an unresolvable tag dictionary, ...). `.strict()`
+// an empty owned-library, an unresolvable tag dictionary, ...). `z.strictObject()`
 // so an accidental extra field fails loudly at the construction site via
 // `.parse()`, exactly like every summarizer below it in format/*.ts.
 import { z } from "zod";
 
-export const notFoundReason = z.object({ found: z.literal(false), reason: z.string() }).strict();
+export const notFoundReason = z.strictObject({ found: z.literal(false), reason: z.string() });
 
 // Composes a tool's outputSchema from its not-found shape (usually
 // `notFoundReason`, but e.g. get_wishlist uses `wishlistNotFound` instead) plus
@@ -44,23 +44,19 @@ export function withNotFound(notFound: z.ZodTypeAny, ...found: z.ZodTypeAny[]) {
 // summarizer (format/web.ts's summarizeWishlist) or the detailed one
 // (format/store.ts's summarizeWishlistDetailed) — both check `items.length === 0`
 // the same way, so both parse against this one shared fragment.
-export const wishlistNotFound = z
-  .object({
-    found: z.literal(false),
-    reason: z.string(),
-    total: z.literal(0),
-    items: z.array(z.never()),
-  })
-  .strict();
+export const wishlistNotFound = z.strictObject({
+  found: z.literal(false),
+  reason: z.string(),
+  total: z.literal(0),
+  items: z.array(z.never()),
+});
 
 // Same shape as wishlistNotFound but keyed `games` instead of `items` — shared
 // by summarizeRecentlyPlayed and summarizeFollowedGames (format/web.ts), which
 // both check an empty appid/game list the same way.
-export const gamesNotFound = z
-  .object({
-    found: z.literal(false),
-    reason: z.string(),
-    total: z.literal(0),
-    games: z.array(z.never()),
-  })
-  .strict();
+export const gamesNotFound = z.strictObject({
+  found: z.literal(false),
+  reason: z.string(),
+  total: z.literal(0),
+  games: z.array(z.never()),
+});
