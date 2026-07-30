@@ -15,6 +15,12 @@ export interface RequestOptions {
   /** Max retry attempts for retryable failures (network/timeout/5xx/429). */
   retries?: number;
   signal?: AbortSignal;
+  /** Per-request override of HttpClientOptions.hasCredentials — for a call that
+   *  opportunistically attaches a credential without needing one (e.g. a
+   *  keyless-by-design endpoint sent a key anyway because one happens to be
+   *  configured), so a 401/403 there is attributed correctly instead of
+   *  blaming the client's overall credential state. */
+  hasCredentials?: boolean;
 }
 
 export interface HttpClientOptions {
@@ -112,7 +118,7 @@ export class HttpClient {
       clearTimeout(timer);
     }
 
-    if (!res.ok) throw await toHttpError(res, this.#opts.hasCredentials);
+    if (!res.ok) throw await toHttpError(res, options.hasCredentials ?? this.#opts.hasCredentials);
 
     if (res.status === 204) return undefined as T;
     const text = await res.text();

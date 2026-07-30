@@ -27,6 +27,18 @@ test("get_game_news works without a key", async (t) => {
   assert.equal(s.items[0]!.excerpt, "notes"); // HTML stripped
 });
 
+test("get_game_news: a 403 with a key configured is not blamed on credentials (endpoint is keyless by design)", async (t) => {
+  // Regression: GetNewsForApp is keyless-capable (key sent when present, per
+  // docs/architecture.md's "Keyless caveat") — a 403 here must never be
+  // reported as "the configured credentials are likely invalid" just because
+  // STEAM_API_KEY happens to be set.
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("GetNewsForApp") ? jsonResponse({}, { status: 403 }) : router(url),
+  );
+  const res = await client.callTool({ name: "get_game_news", arguments: { appid: 620 } });
+  assertToolError(res, /sends no credentials/i);
+});
+
 test("get_global_achievements parses percentages as numbers", async (t) => {
   const { client } = await setupServer(t, ENV, router);
   const res = await client.callTool({
@@ -98,6 +110,14 @@ test("get_current_players errors on a 200 response with a non-1 result too", asy
   assertToolError(res, /no steam app with id 999999999/i);
 });
 
+test("get_current_players: a 403 with a key configured is not blamed on credentials (endpoint is keyless by design)", async (t) => {
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("GetNumberOfCurrentPlayers") ? jsonResponse({}, { status: 403 }) : router(url),
+  );
+  const res = await client.callTool({ name: "get_current_players", arguments: { appid: 730 } });
+  assertToolError(res, /sends no credentials/i);
+});
+
 describe("get_wishlist", () => {
   test("get_wishlist sorts by priority (no key) and reports private as not-found", async (t) => {
     const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
@@ -113,6 +133,17 @@ describe("get_wishlist", () => {
     assert.equal(s.found, true);
     assert.equal(s.total, 2);
     assert.equal(s.items[0]!.appid, 620); // priority 1 sorts first
+  });
+
+  test("get_wishlist (light): a 403 with a key configured is not blamed on credentials (endpoint is keyless by design)", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetWishlist/v1") ? jsonResponse({}, { status: 403 }) : router(url),
+    );
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353" },
+    });
+    assertToolError(res, /sends no credentials/i);
   });
 
   test("get_wishlist include_details returns full store cards (name, price, tags) in one call", async (t) => {
@@ -489,6 +520,17 @@ describe("get_followed_games", () => {
     const s = res.structuredContent as { found: boolean; total: number };
     assert.equal(s.found, false);
     assert.equal(s.total, 0);
+  });
+
+  test("get_followed_games: a 403 with a key configured is not blamed on credentials (endpoint is keyless by design)", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetGamesFollowed") ? jsonResponse({}, { status: 403 }) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_followed_games",
+      arguments: { steamid: "76561197960287930" },
+    });
+    assertToolError(res, /sends no credentials/i);
   });
 
   test("get_followed_games still succeeds when GetGamesFollowedCount fails (falls back to appids.length)", async (t) => {

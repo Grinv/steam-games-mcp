@@ -99,8 +99,16 @@ export class SteamWebClient {
     });
   }
 
-  #get<T>(path: string, query: Query): Promise<T> {
-    return this.#http.getJson<T>(path, { query: { key: this.#key, ...query } });
+  // `opts.hasCredentials` lets a keyless-capable call (one that attaches the
+  // key opportunistically when configured, without needing it) override the
+  // client-wide credential flag, so a 401/403 there is never misattributed to
+  // "the configured credentials are likely invalid" — see the callers under
+  // "keyless-capable (key sent when present)" below.
+  #get<T>(path: string, query: Query, opts?: { hasCredentials?: boolean }): Promise<T> {
+    return this.#http.getJson<T>(path, {
+      query: { key: this.#key, ...query },
+      hasCredentials: opts?.hasCredentials,
+    });
   }
 
   // Resolve the SteamID64 a player tool should act on: the explicit argument
@@ -468,11 +476,11 @@ export class SteamWebClient {
   // ---- keyless-capable (key sent when present) ------------------------------
 
   async getNews(appid: number, count: number): Promise<Record<string, unknown>> {
-    const res = await this.#get<NewsResponse>("ISteamNews/GetNewsForApp/v2/", {
-      appid,
-      count,
-      maxlength: 400,
-    });
+    const res = await this.#get<NewsResponse>(
+      "ISteamNews/GetNewsForApp/v2/",
+      { appid, count, maxlength: 400 },
+      { hasCredentials: false },
+    );
     return summarizeNews(res);
   }
 
@@ -482,6 +490,7 @@ export class SteamWebClient {
         const res = await this.#get<GlobalAchievementsResponse>(
           "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
           { gameid: appid },
+          { hasCredentials: false },
         );
         return summarizeGlobalAchievements(res);
       } catch (e) {
@@ -513,6 +522,7 @@ export class SteamWebClient {
       res = await this.#get<CurrentPlayersResponse>(
         "ISteamUserStats/GetNumberOfCurrentPlayers/v1/",
         { appid },
+        { hasCredentials: false },
       );
     } catch (err) {
       if (err instanceof ApiError && err.code === "not_found") {
@@ -539,7 +549,12 @@ export class SteamWebClient {
   async #getWishlistLight(steamid: string): Promise<Record<string, unknown>> {
     const res = await withFallbackOn(
       "bad_request",
-      () => this.#get<WishlistResponse>("IWishlistService/GetWishlist/v1/", { steamid }),
+      () =>
+        this.#get<WishlistResponse>(
+          "IWishlistService/GetWishlist/v1/",
+          { steamid },
+          { hasCredentials: false },
+        ),
       {},
     );
     return summarizeWishlist(res);
@@ -559,7 +574,12 @@ export class SteamWebClient {
   #followedGamesRaw(steamid: string): Promise<FollowedGamesResponse> {
     return withFallbackOn(
       "bad_request",
-      () => this.#get<FollowedGamesResponse>("IStoreService/GetGamesFollowed/v1/", { steamid }),
+      () =>
+        this.#get<FollowedGamesResponse>(
+          "IStoreService/GetGamesFollowed/v1/",
+          { steamid },
+          { hasCredentials: false },
+        ),
       {},
     );
   }
@@ -570,9 +590,8 @@ export class SteamWebClient {
     try {
       return await this.#get<FollowedGamesCountResponse>(
         "IStoreService/GetGamesFollowedCount/v1/",
-        {
-          steamid,
-        },
+        { steamid },
+        { hasCredentials: false },
       );
     } catch {
       return {};
