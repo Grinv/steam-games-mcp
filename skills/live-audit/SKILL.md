@@ -300,7 +300,17 @@ there) for:
   cleanly through the shared key-check helper when `STEAM_API_KEY` is unset,
   or a keyless-capable tool in `src/tools/webStore.ts`/`storefront.ts` that
   accidentally requires the key when it shouldn't (re-check against AGENTS.md's
-  "Keyless caveat" list of methods that work without one).
+  "Keyless caveat" list of methods that work without one). Also check the
+  *error-message* side of the same list: `HttpClient`'s `hasCredentials` is
+  fixed per client instance (`lib/http.ts`), not per request — a
+  keyless-capable method that sends the key when present (`web.ts`'s
+  "keyless-capable" group) needs its own call site to override
+  `hasCredentials: false`, or a 403 there gets misattributed to "the
+  configured credentials are likely invalid" whenever any key is configured.
+  Confirmed one sibling in that exact group (`getGlobalAchievements`) already
+  had a fix; four others (`getNews`, `getCurrentPlayers`, `getFollowedGames`,
+  `#getWishlistLight`) didn't, until this pass added the same override to all
+  five — diff every method under that comment block, not just one.
 - Tool failures that don't go through `guard()`/`result.ts` — AGENTS.md
   requires every tool failure return `{ isError: true }`, never a raw throw.
 - `.clients/` files doing any response-shaping themselves instead of leaving

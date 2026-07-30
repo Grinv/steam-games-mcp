@@ -18,9 +18,11 @@ Valve states _all_ Web API use requires a key
 (https://steamcommunity.com/dev), but several endpoints answer without one and
 we rely on that: `GetNewsForApp`, `GetGlobalAchievementPercentagesForApp`,
 `GetNumberOfCurrentPlayers`, `IWishlistService/GetWishlist`,
-`IStoreService/GetGamesFollowed`(+`Count`), and the store-browse services
-(`IStoreBrowseService/GetItems`, `IStoreQueryService/Query`). These tools are
-exposed without the key gate; the key is still sent when present.
+`IStoreService/GetGamesFollowed`(+`Count`), the store-browse services
+(`IStoreBrowseService/GetItems`, `IStoreQueryService/Query`), tag-name
+resolution (`IStoreService/GetTagList`), and the enriched wishlist
+(`IWishlistService/GetWishlistSortedFiltered`). These tools are exposed
+without the key gate; the key is still sent when present.
 
 ## No SteamDB, no third-party deal service
 
