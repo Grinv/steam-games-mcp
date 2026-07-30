@@ -17,7 +17,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Fix a 403 from a keyless Web API or store-service tool being blamed on invalid credentials whenever `STEAM_API_KEY` happens to be configured, even though none of them require a key. ([839649d](https://github.com/Grinv/steam-games-mcp/commit/839649d), [09df3cd](https://github.com/Grinv/steam-games-mcp/commit/09df3cd))
+- Fix a 403 from a keyless Web API tool being blamed on bad credentials whenever `STEAM_API_KEY` is configured, even though it doesn't need one. ([839649d](https://github.com/Grinv/steam-games-mcp/commit/839649d), [09df3cd](https://github.com/Grinv/steam-games-mcp/commit/09df3cd))
 - Fix `find_friends_who_own`'s description wrongly crediting its FULL-library comparison to `get_friend_list` instead of `get_owned_games`. ([fc003b5](https://github.com/Grinv/steam-games-mcp/commit/fc003b5))
 - Fix `discover_games`/`get_wishlist`'s `tags` and `get_recommended_games`'s `exclude_tags` not disclosing that a misspelled/unrecognized tag name isn't an error — it just silently matches (or drops) nothing. ([fc003b5](https://github.com/Grinv/steam-games-mcp/commit/fc003b5))
 - Fix `discover_games`'s and `get_recommended_games`'s `count` fields not stating their own max (200 and 25). ([fc003b5](https://github.com/Grinv/steam-games-mcp/commit/fc003b5))
