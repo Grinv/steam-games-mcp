@@ -22,7 +22,7 @@
     "url": "git+https://github.com/Grinv/steam-games-mcp.git"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.9"
   },
   "bin": {
     "steam-games-mcp": "dist/index.js"
