@@ -22,16 +22,25 @@ const distPath = join(process.cwd(), "..", "dist", "index.js");
 
 // Copy the bundle to a dir with no node_modules: if it weren't self-contained,
 // the child would die with ERR_MODULE_NOT_FOUND and connect() would reject.
-function makeSandbox(): string {
-  const sandbox = join(tmpdir(), `steam-mcp-e2e-${process.pid}-${Date.now()}`);
-  mkdirSync(sandbox, { recursive: true });
-  copyFileSync(distPath, join(sandbox, "index.js"));
+// `using`-able (Symbol.dispose removes it) for the call sites that manage
+// just this one resource — the multi-resource tests further down still
+// clean it up via their own try/finally instead.
+function makeSandbox(): { path: string } & Disposable {
+  const path = join(tmpdir(), `steam-mcp-e2e-${process.pid}-${Date.now()}`);
+  mkdirSync(path, { recursive: true });
+  copyFileSync(distPath, join(path, "index.js"));
   // The bundle is ESM; ship the package.json that flags it as such, exactly as
   // the real npm/.mcpb artifact does. Without it a bare `.js` is parsed as CJS
   // on Node < 20.19 (which lacks ESM syntax auto-detection) and the child dies
   // with "Cannot use import statement outside a module".
-  writeFileSync(join(sandbox, "package.json"), JSON.stringify({ type: "module" }));
-  return sandbox;
+  writeFileSync(join(path, "package.json"), JSON.stringify({ type: "module" }));
+  return { path, [Symbol.dispose]: () => rmSync(path, { recursive: true, force: true }) };
+}
+
+// Wraps an already-constructed client as `await using`-able, for the tests
+// below that just need `client.close()` on scope exit alongside the sandbox.
+function disposableClient(client: Client): AsyncDisposable {
+  return { [Symbol.asyncDispose]: () => client.close() };
 }
 
 // Inherit env but force the player credentials unset, to test the key gate.
@@ -49,30 +58,26 @@ describe("e2e (real built bundle over stdio)", () => {
       return;
     }
 
-    const sandbox = makeSandbox();
+    using sandbox = makeSandbox();
     const client = new Client({ name: "e2e", version: "0" });
+    await using _client = disposableClient(client);
     const transport = new StdioClientTransport({
       command: process.execPath,
-      args: [join(sandbox, "index.js")],
+      args: [join(sandbox.path, "index.js")],
       env: envWithoutCredentials(),
     });
 
-    try {
-      await client.connect(transport); // real initialize handshake over a spawned process
+    await client.connect(transport); // real initialize handshake over a spawned process
 
-      const { tools } = await client.listTools();
-      assert.equal(tools.length, 25, "every tool should register in the built bundle");
+    const { tools } = await client.listTools();
+    assert.equal(tools.length, 25, "every tool should register in the built bundle");
 
-      // A player tool without a key must short-circuit with the actionable message
-      // (no network) — proving the key gate works through the real binary.
-      const res = await client.callTool({ name: "get_owned_games", arguments: {} });
-      assert.equal(res.isError, true);
-      const text = textOf(res);
-      assert.match(text, /needs a Steam Web API key/i);
-    } finally {
-      await client.close();
-      rmSync(sandbox, { recursive: true, force: true });
-    }
+    // A player tool without a key must short-circuit with the actionable message
+    // (no network) — proving the key gate works through the real binary.
+    const res = await client.callTool({ name: "get_owned_games", arguments: {} });
+    assert.equal(res.isError, true);
+    const text = textOf(res);
+    assert.match(text, /needs a Steam Web API key/i);
   });
 
   test("negotiates the modern (2026-07-28) era over real stdio (versionNegotiation: 'auto')", async (t) => {
@@ -87,31 +92,27 @@ describe("e2e (real built bundle over stdio)", () => {
       return;
     }
 
-    const sandbox = makeSandbox();
+    using sandbox = makeSandbox();
     const client = new Client(
       { name: "e2e-modern", version: "0" },
       { versionNegotiation: { mode: "auto" } },
     );
+    await using _client = disposableClient(client);
     const transport = new StdioClientTransport({
       command: process.execPath,
-      args: [join(sandbox, "index.js")],
+      args: [join(sandbox.path, "index.js")],
       env: envWithoutCredentials(),
     });
 
-    try {
-      await client.connect(transport);
+    await client.connect(transport);
 
-      const { tools } = await client.listTools();
-      assert.equal(tools.length, 25, "every tool should register under the modern era too");
-      assert.deepEqual(client.getServerVersion(), { name: "steam-games-mcp", version: VERSION });
+    const { tools } = await client.listTools();
+    assert.equal(tools.length, 25, "every tool should register under the modern era too");
+    assert.deepEqual(client.getServerVersion(), { name: "steam-games-mcp", version: VERSION });
 
-      const res = await client.callTool({ name: "get_owned_games", arguments: {} });
-      assert.equal(res.isError, true);
-      assert.match(textOf(res), /needs a Steam Web API key/i);
-    } finally {
-      await client.close();
-      rmSync(sandbox, { recursive: true, force: true });
-    }
+    const res = await client.callTool({ name: "get_owned_games", arguments: {} });
+    assert.equal(res.isError, true);
+    assert.match(textOf(res), /needs a Steam Web API key/i);
   });
 
   // A minimal ResponseCacheStore that just records every write, so a test can
@@ -154,7 +155,7 @@ describe("e2e (real built bundle over stdio)", () => {
         );
         const transport = new StdioClientTransport({
           command: process.execPath,
-          args: [join(sandbox, "index.js")],
+          args: [join(sandbox.path, "index.js")],
           env: envWithoutCredentials(),
         });
         const before = Date.now();
@@ -189,7 +190,7 @@ describe("e2e (real built bundle over stdio)", () => {
         );
         const transport = new StdioClientTransport({
           command: process.execPath,
-          args: [join(sandbox, "index.js")],
+          args: [join(sandbox.path, "index.js")],
           env: envWithoutCredentials(),
         });
         const before = Date.now();
@@ -216,7 +217,7 @@ describe("e2e (real built bundle over stdio)", () => {
         );
       }
     } finally {
-      rmSync(sandbox, { recursive: true, force: true });
+      rmSync(sandbox.path, { recursive: true, force: true });
     }
   });
 
@@ -273,7 +274,7 @@ describe("e2e (real built bundle over stdio)", () => {
         const client = new Client({ name: `e2e-slice-${label}`, version: "0" }, clientOptions);
         const transport = new StdioClientTransport({
           command: process.execPath,
-          args: [join(sandbox, "index.js")],
+          args: [join(sandbox.path, "index.js")],
           env: envWithoutCredentials(),
         });
         try {
@@ -288,7 +289,7 @@ describe("e2e (real built bundle over stdio)", () => {
         }
       }
     } finally {
-      rmSync(sandbox, { recursive: true, force: true });
+      rmSync(sandbox.path, { recursive: true, force: true });
     }
   });
 
@@ -315,7 +316,7 @@ describe("e2e (real built bundle over stdio)", () => {
     const client = new Client({ name: "e2e-shutdown", version: "0" });
     const transport = new StdioClientTransport({
       command: process.execPath,
-      args: [join(sandbox, "index.js")],
+      args: [join(sandbox.path, "index.js")],
       env: envWithoutCredentials(),
     });
 
@@ -340,7 +341,7 @@ describe("e2e (real built bundle over stdio)", () => {
       ]);
       assert.notEqual(result, timedOut, "process did not exit within 5s of SIGTERM");
     } finally {
-      rmSync(sandbox, { recursive: true, force: true });
+      rmSync(sandbox.path, { recursive: true, force: true });
     }
   });
 });

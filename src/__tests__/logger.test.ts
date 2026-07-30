@@ -89,10 +89,6 @@ test("server advertises no logging capability — logging is stderr-only (SEP-25
   // are deprecated as of protocol 2026-07-28 (SEP-2577) in favor of stderr
   // logging for stdio servers, which lib/logger.ts already provides. We
   // deliberately don't declare the capability or push notifications/message.
-  const { client, close } = await connectServer();
-  try {
-    assert.equal(client.getServerCapabilities()?.logging, undefined);
-  } finally {
-    await close();
-  }
+  await using conn = await connectServer();
+  assert.equal(conn.client.getServerCapabilities()?.logging, undefined);
 });

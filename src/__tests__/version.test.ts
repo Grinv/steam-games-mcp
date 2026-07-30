@@ -45,46 +45,34 @@ test("manifest.json version matches package.json", () => {
 // from what the server actually registers. This catches that at test time
 // instead of at .mcpb-install time.
 test("manifest.json's tools list matches every tool the server actually registers", async () => {
-  const { client, close } = await connectServer({});
-  try {
-    const registered = new Set((await client.listTools()).tools.map((t) => t.name));
-    const declared = new Set(manifest.tools.map((t) => t.name));
-    assert.deepEqual(declared, registered);
-  } finally {
-    await close();
-  }
+  await using conn = await connectServer({});
+  const registered = new Set((await conn.client.listTools()).tools.map((t) => t.name));
+  const declared = new Set(manifest.tools.map((t) => t.name));
+  assert.deepEqual(declared, registered);
 });
 
 // AGENTS.md mandates a .describe() on every tool parameter, written for the
 // calling model — this guards that convention going forward instead of relying
 // on review to catch a new undocumented parameter (see the tool-description-check skill).
 test("every tool parameter has a .describe() for the calling model", async () => {
-  const { client, close } = await connectServer({});
-  try {
-    const { tools } = await client.listTools();
-    const missing: string[] = [];
-    for (const tool of tools) {
-      const schema = tool.inputSchema as { properties?: Record<string, { description?: string }> };
-      for (const [param, paramSchema] of Object.entries(schema.properties ?? {})) {
-        if (!paramSchema.description) missing.push(`${tool.name}.${param}`);
-      }
+  await using conn = await connectServer({});
+  const { tools } = await conn.client.listTools();
+  const missing: string[] = [];
+  for (const tool of tools) {
+    const schema = tool.inputSchema as { properties?: Record<string, { description?: string }> };
+    for (const [param, paramSchema] of Object.entries(schema.properties ?? {})) {
+      if (!paramSchema.description) missing.push(`${tool.name}.${param}`);
     }
-    assert.deepEqual(missing, [], `parameters missing a .describe(): ${missing.join(", ")}`);
-  } finally {
-    await close();
   }
+  assert.deepEqual(missing, [], `parameters missing a .describe(): ${missing.join(", ")}`);
 });
 
 // Same drift risk as the tools list above, for manifest.json's `prompts` array.
 test("manifest.json's prompts list matches every prompt the server actually registers", async () => {
-  const { client, close } = await connectServer({});
-  try {
-    const registered = new Set((await client.listPrompts()).prompts.map((p) => p.name));
-    const declared = new Set(manifest.prompts.map((p) => p.name));
-    assert.deepEqual(declared, registered);
-  } finally {
-    await close();
-  }
+  await using conn = await connectServer({});
+  const registered = new Set((await conn.client.listPrompts()).prompts.map((p) => p.name));
+  const declared = new Set(manifest.prompts.map((p) => p.name));
+  assert.deepEqual(declared, registered);
 });
 
 // scripts/sync-version.mjs dates CHANGELOG.md's [Unreleased] section into this

@@ -72,21 +72,22 @@ export function installFetch(t: TestContext, mock: FetchMock): void {
   t.mock.method(globalThis, "fetch", mock.fn);
 }
 
-/** Build the server and connect an in-memory client for end-to-end tool tests. */
+/** Build the server and connect an in-memory client for end-to-end tool tests.
+ *  The return value is itself `await using`-able (Symbol.asyncDispose calls
+ *  `close`), for a call site that isn't already covered by setupServer's own
+ *  t.after(close) — `close` stays exposed too for that existing callers. */
 export async function connectServer(
   env: NodeJS.ProcessEnv = {},
-): Promise<{ client: Client; close: () => Promise<void> }> {
+): Promise<{ client: Client; close: () => Promise<void>; [Symbol.asyncDispose](): Promise<void> }> {
   const server = buildServer(loadConfig(env), silentLogger());
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  return {
-    client,
-    close: async () => {
-      await client.close();
-      await server.close();
-    },
+  const close = async () => {
+    await client.close();
+    await server.close();
   };
+  return { client, close, [Symbol.asyncDispose]: close };
 }
 
 /** The near-universal integration-test setup: mock fetch (if a handler is
