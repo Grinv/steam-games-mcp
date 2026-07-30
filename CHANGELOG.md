@@ -17,6 +17,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Fix a 403 from `get_game_news`, `get_current_players`, `get_followed_games` or `get_wishlist` being blamed on invalid credentials whenever `STEAM_API_KEY` happens to be configured, even though none of these tools require a key. ([839649d](https://github.com/Grinv/steam-games-mcp/commit/839649d))
 - Fix `get_friend_list` leaking a raw 404 error for a syntactically valid but nonexistent SteamID64, instead of the graceful `found:false` every sibling tool already gives the exact same id. ([cd67c0f](https://github.com/Grinv/steam-games-mcp/commit/cd67c0f))
 - Fix `is_it_worth_buying`, `what_should_i_play` and `deals_digest` not trimming whitespace-only optional arguments — a blank `game` defeated `is_it_worth_buying`'s "ask which game" fallback entirely, and blank `tags`/`budget`/`min_discount`/`min_review` were spliced directly into the tool-call instruction instead of falling back to their defaults. ([e4d1160](https://github.com/Grinv/steam-games-mcp/commit/e4d1160))
 - Fix `compare_players` sinking the whole call with a generic error when just one player's own library lookup hit a transient error (rate-limited/network/5xx) — the message now names which player's lookup actually failed. ([2cc0452](https://github.com/Grinv/steam-games-mcp/commit/2cc0452))
