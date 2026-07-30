@@ -16,6 +16,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fix `get_game_news` returning a misleading "resembles an injection attempt" error for a large/unassigned appid instead of a clean empty result. ([d04b623](https://github.com/Grinv/steam-games-mcp/commit/d04b623))
 - Fix `search_games`'s `term` and `get_game`'s `name` accepting a whitespace-only value and running a doomed search instead of failing validation. ([2c9699a](https://github.com/Grinv/steam-games-mcp/commit/2c9699a))
 - Trim a padded `search_games` `term` / `get_game` `name` before searching, instead of running the search unstripped. ([2c9699a](https://github.com/Grinv/steam-games-mcp/commit/2c9699a))
+- Fix `get_game_news`'s and `get_global_achievements`'s descriptions not disclosing that an unknown appid returns an empty list, not an error. ([a91e290](https://github.com/Grinv/steam-games-mcp/commit/a91e290))
+- Fix `get_items`'s description not cross-referencing `discover_games`, for finding new games by filter instead of pricing a list you already have. ([a91e290](https://github.com/Grinv/steam-games-mcp/commit/a91e290))
+- Fix `get_game_achievements` not cross-referencing `get_player_achievements`, for a player's own progress instead of the catalog-wide list. ([a91e290](https://github.com/Grinv/steam-games-mcp/commit/a91e290))
+- Fix `get_owned_games`'s description not cross-referencing `get_recently_played`, for the last two weeks of play instead of the all-time library. ([a91e290](https://github.com/Grinv/steam-games-mcp/commit/a91e290))
+- Fix `get_game`'s `achievements_highlighted` output field missing a description of what it actually contains. ([a91e290](https://github.com/Grinv/steam-games-mcp/commit/a91e290))
 
 ## [0.12.0] - 2026-07-30
 
