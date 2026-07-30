@@ -11,6 +11,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Add a privacy policy (`PRIVACY.md`) covering data handling and caching, linked from README and manifest.json's `privacy_policies`. ([91ee519](https://github.com/Grinv/steam-games-mcp/commit/91ee519))
 - Add an original gamepad icon, in Steam's own color gradient, for the MCPB/Connectors Directory submission. ([f18dc23](https://github.com/Grinv/steam-games-mcp/commit/f18dc23), [3b5d8d0](https://github.com/Grinv/steam-games-mcp/commit/3b5d8d0), [081001f](https://github.com/Grinv/steam-games-mcp/commit/081001f), [4409607](https://github.com/Grinv/steam-games-mcp/commit/4409607))
 
+### Changed
+
+- Raise runtime floor to Node ≥ 20.9 (was ≥ 20) — `__tests__/`'s `context.mock.timers` (20.4+) and `lib/http.ts`'s `AbortSignal.any()` (20.3+) already required more than the old floor stated.
+
 ### Fixed
 
 - Fix `get_friend_list` leaking a raw 404 error for a syntactically valid but nonexistent SteamID64, instead of the graceful `found:false` every sibling tool already gives the exact same id. ([cd67c0f](https://github.com/Grinv/steam-games-mcp/commit/cd67c0f))
