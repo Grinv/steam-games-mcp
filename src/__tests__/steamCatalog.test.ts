@@ -27,16 +27,18 @@ test("get_game_news works without a key", async (t) => {
   assert.equal(s.items[0]!.excerpt, "notes"); // HTML stripped
 });
 
-test("get_game_news: a 403 with a key configured is not blamed on credentials (endpoint is keyless by design)", async (t) => {
-  // Regression: GetNewsForApp is keyless-capable (key sent when present, per
-  // docs/architecture.md's "Keyless caveat") — a 403 here must never be
-  // reported as "the configured credentials are likely invalid" just because
-  // STEAM_API_KEY happens to be set.
+test("get_game_news degrades to a clean empty result for a large/unassigned appid, not a misleading credentials error", async (t) => {
+  // Regression: Steam answers 403 for GetNewsForApp on a large/unassigned
+  // appid (verified live) — never a credentials problem, since this endpoint
+  // is keyless by design (docs/architecture.md's "Keyless caveat"). Used to
+  // surface the generic "resembles an injection attempt" 403 message, which
+  // misled on the single most likely trigger: the appid doesn't exist.
   const { client } = await setupServer(t, ENV, (url) =>
     url.includes("GetNewsForApp") ? jsonResponse({}, { status: 403 }) : router(url),
   );
-  const res = await client.callTool({ name: "get_game_news", arguments: { appid: 620 } });
-  assertToolError(res, /sends no credentials/i);
+  const res = await client.callTool({ name: "get_game_news", arguments: { appid: 99999999 } });
+  assert.equal(res.isError, undefined);
+  assert.deepEqual(res.structuredContent, { items: [] });
 });
 
 test("get_global_achievements parses percentages as numbers", async (t) => {

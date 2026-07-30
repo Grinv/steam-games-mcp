@@ -478,12 +478,24 @@ export class SteamWebClient {
   // ---- keyless-capable (key sent when present) ------------------------------
 
   async getNews(appid: number, count: number): Promise<Record<string, unknown>> {
-    const res = await this.#get<NewsResponse>(
-      "ISteamNews/GetNewsForApp/v2/",
-      { appid, count, maxlength: 400 },
-      { hasCredentials: false },
-    );
-    return summarizeNews(res);
+    try {
+      const res = await this.#get<NewsResponse>(
+        "ISteamNews/GetNewsForApp/v2/",
+        { appid, count, maxlength: 400 },
+        { hasCredentials: false },
+      );
+      return summarizeNews(res);
+    } catch (e) {
+      // Same keyless-appid quirk as getGlobalAchievements below: Steam answers
+      // 403 for a large/unassigned appid — verified live — never because of
+      // credentials, so degrade to a clean empty result instead of surfacing
+      // the generic "resembles an injection attempt" 403 message for what's
+      // actually the single most likely trigger (a nonexistent appid).
+      if (e instanceof ApiError && e.code === "forbidden") {
+        return summarizeNews({});
+      }
+      throw e;
+    }
   }
 
   async getGlobalAchievements(appid: number): Promise<Record<string, unknown>> {
