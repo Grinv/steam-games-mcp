@@ -13,7 +13,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Raise runtime floor to Node ≥ 20.11 (was ≥ 20) — `__tests__/`'s `context.mock.timers` (20.4+), `lib/http.ts`'s `AbortSignal.any()` (20.3+) and `scripts/*.mjs`'s `import.meta.dirname` (20.11+) already required more than the old floor stated.
+- Raise runtime floor to Node ≥ 20.11 (was ≥ 20).
 
 ### Fixed
 
@@ -22,7 +22,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fix `discover_games`/`get_wishlist`'s `tags` and `get_recommended_games`'s `exclude_tags` not disclosing that a misspelled/unrecognized tag name isn't an error — it just silently matches (or drops) nothing. ([fc003b5](https://github.com/Grinv/steam-games-mcp/commit/fc003b5))
 - Fix `discover_games`'s and `get_recommended_games`'s `count` fields not stating their own max (200 and 25). ([fc003b5](https://github.com/Grinv/steam-games-mcp/commit/fc003b5))
 - Fix `get_friend_list` leaking a raw 404 error for a syntactically valid but nonexistent SteamID64, instead of the graceful `found:false` every sibling tool already gives the exact same id. ([cd67c0f](https://github.com/Grinv/steam-games-mcp/commit/cd67c0f))
-- Fix `is_it_worth_buying`, `what_should_i_play` and `deals_digest` not trimming whitespace-only optional arguments — a blank `game` defeated `is_it_worth_buying`'s "ask which game" fallback entirely, and blank `tags`/`budget`/`min_discount`/`min_review` were spliced directly into the tool-call instruction instead of falling back to their defaults. ([e4d1160](https://github.com/Grinv/steam-games-mcp/commit/e4d1160))
+- Fix `is_it_worth_buying`, `what_should_i_play` and `deals_digest` not trimming whitespace-only optional arguments, defeating their blank-value fallbacks and defaults. ([e4d1160](https://github.com/Grinv/steam-games-mcp/commit/e4d1160))
 - Fix `compare_players` sinking the whole call with a generic error when just one player's own library lookup hit a transient error (rate-limited/network/5xx) — the message now names which player's lookup actually failed. ([2cc0452](https://github.com/Grinv/steam-games-mcp/commit/2cc0452))
 - Fix the shipped `.mcpb` bundle including dev-only files (skill docs tripled via symlinks, contributor-only docs, tooling configs) instead of just the ~9 files actually needed at runtime. ([49a9959](https://github.com/Grinv/steam-games-mcp/commit/49a9959))
 - Fix README's links to dev/contributor docs excluded from the bundle (`docs/`, `AGENTS.md`, `SECURITY.md`) breaking when read from an installed extension instead of GitHub. ([37154c9](https://github.com/Grinv/steam-games-mcp/commit/37154c9))
@@ -45,9 +45,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fix every tool silently dropping an unrecognized parameter name and running with defaults instead of rejecting it — every tool's input schema is now `.strict()`. ([e86eb29](https://github.com/Grinv/steam-games-mcp/commit/e86eb29))
 - Fix `resolve_vanity_url`/`STEAM_ID` silently resolving to "not found" instead of the intended profile when the vanity name/SteamID carries stray whitespace (Steam's vanity lookup is an exact match). ([e86eb29](https://github.com/Grinv/steam-games-mcp/commit/e86eb29))
 - Fix a padded per-call `country`/`language` override (e.g. `country: " RU "`) failing validation outright instead of being accepted like the trimmed value. ([61fe40a](https://github.com/Grinv/steam-games-mcp/commit/61fe40a))
-- Fix `compare_players`/`find_friends_who_own` silently missing a played free-to-play game (e.g. Path of Exile, Warframe) — neither call set `include_played_free_games`, so Steam omitted it from the response entirely instead of reporting it as owned/shared. ([465b302](https://github.com/Grinv/steam-games-mcp/commit/465b302))
+- Fix `compare_players`/`find_friends_who_own` silently missing a played free-to-play game (e.g. Path of Exile, Warframe) instead of reporting it as owned/shared. ([465b302](https://github.com/Grinv/steam-games-mcp/commit/465b302))
 - Fix HTTP 420 responses from Steam (observed live under rate limiting) being classified as a generic non-retryable error instead of the same retryable rate limit as HTTP 429. ([63e7893](https://github.com/Grinv/steam-games-mcp/commit/63e7893))
-- Fix `get_recently_played` reporting `found:false` ("profile is private") for a public profile that simply hasn't played anything in the last 2 weeks — it checked the wrong upstream field (`game_count`, from `GetOwnedGames`) instead of `GetRecentlyPlayedGames`'s own `total_count`. ([80dc459](https://github.com/Grinv/steam-games-mcp/commit/80dc459), fixes [#2](https://github.com/Grinv/steam-games-mcp/issues/2))
+- Fix `get_recently_played` reporting `found:false` ("profile is private") for a public profile that simply hasn't played anything in the last 2 weeks. ([80dc459](https://github.com/Grinv/steam-games-mcp/commit/80dc459), fixes [#2](https://github.com/Grinv/steam-games-mcp/issues/2))
 
 ## [0.10.5] - 2026-07-28
 
