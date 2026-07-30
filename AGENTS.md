@@ -68,10 +68,10 @@ npm run inspector      # run under the MCP Inspector
   surface (commit messages, GitHub issue/PR comments and bodies), regardless of
   what language the working conversation happens to be in.
 - Runtime floor is **Node ≥ 20.9** (global `fetch`, stable `node:test`,
-  `context.mock.timers` used throughout `__tests__/` — needs 20.4+, so `>=20`
-  alone would understate the real requirement); tsup targets `node20`
-  (esbuild's Node targets are major-version-only, so this doesn't need to
-  track the patch floor).
+  `context.mock.timers` used throughout `__tests__/` and `AbortSignal.any()`
+  in `lib/http.ts` — need 20.4+/20.3+, so `>=20` alone would understate the
+  real requirement); tsup targets `node20` (esbuild's Node targets are
+  major-version-only, so this doesn't need to track the patch floor).
 - **Never write to stdout** — it is the MCP protocol channel. Use the logger,
   which writes to **stderr only** and redacts credentials (the Web API key
   travels as a `key` query param). There is no MCP `logging` capability and no

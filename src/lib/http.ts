@@ -68,10 +68,18 @@ export class HttpClient {
   }
 
   async #once<T>(url: string, options: RequestOptions, timeoutMs: number): Promise<T> {
+    // AbortSignal.any bridges the caller's own signal (if given) into our
+    // timeout controller's, so fetch aborts on whichever fires first — no
+    // manual addEventListener/removeEventListener needed to forward it.
+    // Deliberately NOT AbortSignal.timeout(): its internal timer is unref'd
+    // by design (won't keep the event loop alive on its own) — confirmed by
+    // a test whose mocked fetch has no other pending I/O, which hung forever
+    // instead of firing. A plain (ref'd) setTimeout doesn't have that risk.
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const onAbort = () => controller.abort();
-    options.signal?.addEventListener("abort", onAbort, { once: true });
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, controller.signal])
+      : controller.signal;
 
     let res: Response;
     try {
@@ -84,7 +92,7 @@ export class HttpClient {
           ...options.headers,
         },
         ...(options.body === undefined ? {} : { body: options.body }),
-        signal: controller.signal,
+        signal,
       });
     } catch (err) {
       if (options.signal?.aborted) {
@@ -102,7 +110,6 @@ export class HttpClient {
       throw toNetworkError(err);
     } finally {
       clearTimeout(timer);
-      options.signal?.removeEventListener("abort", onAbort);
     }
 
     if (!res.ok) throw await toHttpError(res, this.#opts.hasCredentials);
