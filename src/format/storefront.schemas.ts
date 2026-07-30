@@ -66,7 +66,12 @@ export const getGameOutput = z.strictObject({
   required_age: z.union([z.number(), z.string()]).nullable(),
   controller_support: z.string().nullable(),
   achievements_total: z.number().nullable(),
-  achievements_highlighted: z.array(z.string()),
+  achievements_highlighted: z
+    .array(z.string())
+    .describe(
+      "A small keyless sample of named achievements Steam highlights for this game, not the full " +
+        "list — for every achievement with rarity and a hidden flag, use get_game_achievements instead.",
+    ),
   supported_languages: z.string().nullable(),
   dlc: z.array(z.number()),
   demos: z.array(z.number()),

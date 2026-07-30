@@ -54,7 +54,8 @@ export function registerStoreWebTools(
       title: "Get game news",
       description:
         "Get recent news / patch notes for a game by appid (title, date, author, excerpt, link). " +
-        "Get the appid from search_games. Works without an API key.",
+        "An unknown/unassigned appid comes back as an empty list rather than an error, the same as " +
+        "get_global_achievements. Get the appid from search_games. Works without an API key.",
       inputSchema: z.strictObject({
         appid,
         limit: z
@@ -79,7 +80,9 @@ export function registerStoreWebTools(
         "achievement is across all players. Returns each achievement's internal name and its unlock " +
         "percent (no display names/descriptions — for those, use get_game_achievements), most-common " +
         `first, capped at the first ${ACHIEVEMENTS_MAX} (check ` +
-        "`returned` vs `count` — most games have far fewer). " +
+        "`returned` vs `count` — most games have far fewer). An unknown appid, or one with no " +
+        "achievement schema (e.g. a DLC/soundtrack), comes back as an empty list rather than an " +
+        "error, the same as get_game_news. " +
         "Get the appid from search_games. Works without a key.",
       inputSchema: z.strictObject({ appid }),
       outputSchema: getGlobalAchievementsOutput,
@@ -106,7 +109,9 @@ export function registerStoreWebTools(
         "rating, not whether the game itself has a VR mode); a `tags` list (top user tags like 'Roguelike', " +
         "'Souls-like', most-relevant first); a clickable `store_url` to the game's Steam page; and, " +
         "when on sale, `discount_end` (ISO UTC time the discount expires — for 'how long is this deal " +
-        "valid'). Get appids from search_games / get_wishlist / get_owned_games.",
+        "valid'). To find NEW games by filter (discount, rating, tags, compat) instead of pricing a " +
+        "list you already have, use discover_games instead. Get appids from search_games / " +
+        "get_wishlist / get_owned_games.",
       inputSchema: z.strictObject({
         appids: z.array(z.int().positive()).nonempty().max(100).describe("Steam appids (1-100)."),
         country,

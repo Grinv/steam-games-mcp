@@ -51,8 +51,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         `global unlock % (rarity), in the game's own definition order (capped at the first ${ACHIEVEMENTS_MAX}; ` +
         "check `returned` vs `total` — most games have far fewer). Requires STEAM_API_KEY (the " +
         "achievement schema needs a key). For just the rarity by internal id without a key, use " +
-        "get_global_achievements; for a few named highlights, see get_game's achievements_highlighted. " +
-        "Get the appid from search_games.",
+        "get_global_achievements; for a few named highlights, see get_game's achievements_highlighted; " +
+        "for a specific player's own unlock progress instead of the catalog-wide list, use " +
+        "get_player_achievements. Get the appid from search_games.",
       inputSchema: z.strictObject({
         appid,
         language: z
@@ -214,7 +215,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "capped to the top 50 by playtime — a lightly-played or unplayed game may not appear there). " +
         "To reliably check whether the player owns one or more SPECIFIC appids regardless of that " +
         "cap — 'do I own game X' — pass check_appids; the `owns` field then checks the FULL, uncapped " +
-        "library, with each result's own playtime_hours (null if not owned). For checking a FRIEND's " +
+        "library, with each result's own playtime_hours (null if not owned). For the last two weeks " +
+        "of play instead of the all-time library, use get_recently_played. For checking a FRIEND's " +
         "ownership instead of the player's own, use find_friends_who_own. Requires STEAM_API_KEY and " +
         "a public profile + game-details visibility. Get the SteamID64 from resolve_vanity_url.",
       inputSchema: z.strictObject({
