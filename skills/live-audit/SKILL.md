@@ -310,7 +310,13 @@ there) for:
   Confirmed one sibling in that exact group (`getGlobalAchievements`) already
   had a fix; four others (`getNews`, `getCurrentPlayers`, `getFollowedGames`,
   `#getWishlistLight`) didn't, until this pass added the same override to all
-  five — diff every method under that comment block, not just one.
+  five — diff every method under that comment block, not just one. Then check
+  every OTHER client class sharing the same underlying `#get`/`HttpClient`
+  binding, not just the same file: `StoreServiceClient` (`storeService.ts`)
+  binds `SteamWebClient#get` too but has its own `Get` type, and that type
+  initially had no `opts` param at all — so `get_items`/`discover_games`/
+  `get_recommended_games`/`get_wishlist`'s detailed path kept the bug live
+  through a whole extra release after the `web.ts` methods were fixed.
 - Tool failures that don't go through `guard()`/`result.ts` — AGENTS.md
   requires every tool failure return `{ isError: true }`, never a raw throw.
 - `.clients/` files doing any response-shaping themselves instead of leaving
