@@ -178,8 +178,9 @@ export function registerStoreWebTools(
             .min(1)
             .describe(
               "Keep only games carrying ALL of these user tags (case-insensitive), e.g. " +
-                "['Roguelike','Deckbuilding']. Use exact Steam tag names. Applied over the scanned " +
-                "popularity window, so raise `count` when combining niche tags.",
+                "['Roguelike','Deckbuilding']. Use exact Steam tag names — a misspelled/unrecognized " +
+                "one isn't an error, it just matches nothing. Applied over the scanned popularity " +
+                "window, so raise `count` when combining niche tags.",
             )
             .optional(),
           min_review: z
@@ -210,7 +211,9 @@ export function registerStoreWebTools(
             .int()
             .min(1)
             .max(200)
-            .describe("How many catalog entries to scan (default 50). Raise for stricter filters.")
+            .describe(
+              "How many catalog entries to scan (1-200). Default 50. Raise for stricter filters.",
+            )
             .default(50),
           start: z
             .number()
@@ -339,7 +342,8 @@ export function registerStoreWebTools(
             .min(1)
             .describe(
               "Keep only wishlist items carrying ALL of these user tags (case-insensitive), e.g. " +
-                "['Metroidvania']. Implies include_details.",
+                "['Metroidvania']. Use exact Steam tag names — a misspelled/unrecognized one isn't " +
+                "an error, it just matches nothing. Implies include_details.",
             )
             .optional(),
           min_review: z

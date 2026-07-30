@@ -122,9 +122,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       description:
         "Check which of a player's Steam friends own one or more games by appid, with each owner's " +
         "playtime_hours — 'which of my friends have Portal 2 and how long have they played'. Checks " +
-        "each friend's FULL library, unlike get_friend_list which caps at the top 50 games by " +
-        "playtime — so a friend's rarely-played or unplayed copy is never missed (its playtime_hours " +
-        "may still be low or 0). For the PLAYER'S OWN ownership instead of a friend's, use " +
+        "each friend's FULL library, unlike get_owned_games which caps its own list at the top 50 " +
+        "games by playtime — so a friend's rarely-played or unplayed copy is never missed (its " +
+        "playtime_hours may still be low or 0). For the PLAYER'S OWN ownership instead of a friend's, use " +
         "get_owned_games's check_appids. Requires STEAM_API_KEY and the player's OWN friends list " +
         "to be public — otherwise the whole call returns found:false. A friend's individually private " +
         "library is a different, per-friend case: that friend is listed in private_friends (can't be " +
@@ -292,14 +292,15 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
             .int()
             .min(1)
             .max(25)
-            .describe("How many recommendations to return (default 10).")
+            .describe("How many recommendations to return (1-25). Default 10.")
             .default(10),
           exclude_tags: z
             .array(z.string().min(1))
             .min(1)
             .describe(
               "Drop any candidate carrying ANY of these tags (case-insensitive), e.g. " +
-                "['Souls-like'] for 'recommend me something except Souls-like'.",
+                "['Souls-like'] for 'recommend me something except Souls-like'. Use exact Steam tag " +
+                "names — a misspelled/unrecognized one isn't an error, it just drops nothing.",
             )
             .optional(),
           min_discount: z
