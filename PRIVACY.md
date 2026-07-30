@@ -35,14 +35,17 @@ Valve/Steam hosts, carrying only what that specific call needs:
 
 - **Steam Storefront API** (`store.steampowered.com`) — needs no key. Carries
   only the search term/appid(s) and the `cc`/`l` (country/language) query
-  parameters. Backs every game/store tool (`search_games`, `get_game`,
-  `get_game_reviews`, `get_prices`, `discover_games`, …).
+  parameters. Backs the classic store tools (`search_games`, `get_game`,
+  `get_game_reviews`, `get_review_histogram`, `get_prices`, `get_specials`,
+  `get_featured`).
 - **Steam Web API** (`api.steampowered.com`) — used for player data
-  (profiles, libraries, achievements, friends) and a couple of keyless
-  endpoints (news, global achievement rates). When `STEAM_API_KEY` is set, it
-  travels as a `key` query parameter on every request to this host, per
-  Valve's own API convention — never as a header, never logged (see
-  Storage and retention below).
+  (profiles, libraries, achievements, friends) and several keyless endpoints:
+  news, global achievement rates, current player counts, a player's wishlist
+  and followed games, and the modern store-card services behind `get_items`,
+  `discover_games` and `get_wishlist`'s detailed cards. When `STEAM_API_KEY`
+  is set, it travels as a `key` query parameter on every request to this
+  host, per Valve's own API convention — never as a header, never logged
+  (see Storage and retention below).
 
 Both hosts are operated by Valve Corporation and governed by
 [Steam's own Privacy Policy](https://store.steampowered.com/privacy_agreement/)

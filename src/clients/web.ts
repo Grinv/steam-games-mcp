@@ -1,8 +1,10 @@
 // Read-only client for the official Steam Web API (api.steampowered.com).
 // Valve states that all Web API use requires a free key
 // (https://steamcommunity.com/dev/apikey), so player tools require STEAM_API_KEY.
-// A couple of endpoints (news, global achievement %) currently also answer
-// without a key; we send the key when present and let them work either way.
+// Several endpoints (news, global achievement %, current players, wishlist,
+// followed games — see docs/architecture.md's "Keyless caveat") currently
+// also answer without a key; we send the key when present and let them work
+// either way.
 // Reference: https://developer.valvesoftware.com/wiki/Steam_Web_API
 import { HttpClient } from "../lib/http.js";
 import { RateLimiter } from "../lib/rateLimit.js";

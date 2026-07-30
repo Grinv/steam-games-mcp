@@ -31,7 +31,7 @@ import {
 type Query = Record<string, string | number | boolean | undefined>;
 // The parent's authenticated `#get` (bakes in the key, sent when present per
 // AGENTS.md's keyless caveat — these endpoints answer without one too).
-type Get = <T>(path: string, query: Query) => Promise<T>;
+type Get = <T>(path: string, query: Query, opts?: { hasCredentials?: boolean }) => Promise<T>;
 
 // The include_* flags every store-service card call needs (basic info, reviews,
 // release, native platforms + compat, popular tags). tagCount varies: fewer for
@@ -76,9 +76,11 @@ export class StoreServiceClient {
   async #tagNames(language: string): Promise<TagMap | null> {
     try {
       return await this.#cache.wrapStaleOnError(`tags:${language}`, async () => {
-        const res = await this.#get<GetTagListResponse>("IStoreService/GetTagList/v1/", {
-          language,
-        });
+        const res = await this.#get<GetTagListResponse>(
+          "IStoreService/GetTagList/v1/",
+          { language },
+          { hasCredentials: false },
+        );
         return summarizeTagList(res);
       });
     } catch {
@@ -113,7 +115,10 @@ export class StoreServiceClient {
     language: string,
     tagsBeingFiltered?: string[],
   ): Promise<{ res: T; tagMap: TagMap | undefined }> {
-    const [res, tagMap] = await Promise.all([this.#get<T>(path, query), this.#tagNames(language)]);
+    const [res, tagMap] = await Promise.all([
+      this.#get<T>(path, query, { hasCredentials: false }),
+      this.#tagNames(language),
+    ]);
     return { res, tagMap: this.#requireTagMapIfFiltering(tagsBeingFiltered, tagMap) };
   }
 
@@ -180,13 +185,17 @@ export class StoreServiceClient {
       .slice()
       .sort((a, b) => b.playtimeMinutes - a.playtimeMinutes)
       .slice(0, FAVORITE_TAG_SAMPLE_SIZE);
-    const sampleRes = await this.#get<StoreItemsResponse>("IStoreBrowseService/GetItems/v1/", {
-      input_json: JSON.stringify({
-        ids: sample.map((g) => ({ appid: g.appid })),
-        context: { language: l, country_code: cc },
-        data_request: storeCardDataRequest(20),
-      }),
-    });
+    const sampleRes = await this.#get<StoreItemsResponse>(
+      "IStoreBrowseService/GetItems/v1/",
+      {
+        input_json: JSON.stringify({
+          ids: sample.map((g) => ({ appid: g.appid })),
+          context: { language: l, country_code: cc },
+          data_request: storeCardDataRequest(20),
+        }),
+      },
+      { hasCredentials: false },
+    );
     const tagWeights = computeFavoriteTagWeights(
       sampleRes.response?.store_items ?? [],
       new Map(sample.map((g) => [g.appid, g.playtimeMinutes])),
@@ -209,13 +218,17 @@ export class StoreServiceClient {
     const filters: Record<string, unknown> = {};
     if (typeof opts.minDiscount === "number")
       filters.price_filters = { min_discount_percent: opts.minDiscount };
-    const poolRes = await this.#get<StoreQueryResponse>("IStoreQueryService/Query/v1/", {
-      input_json: JSON.stringify({
-        query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
-        context: { language: l, country_code: cc, steam_realm: 1 },
-        data_request: storeCardDataRequest(20),
-      }),
-    });
+    const poolRes = await this.#get<StoreQueryResponse>(
+      "IStoreQueryService/Query/v1/",
+      {
+        input_json: JSON.stringify({
+          query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
+          context: { language: l, country_code: cc, steam_realm: 1 },
+          data_request: storeCardDataRequest(20),
+        }),
+      },
+      { hasCredentials: false },
+    );
     const ownedAppids = new Set(ownedGames.map((g) => g.appid));
     return summarizeRecommendations(
       poolRes.response?.store_items ?? [],

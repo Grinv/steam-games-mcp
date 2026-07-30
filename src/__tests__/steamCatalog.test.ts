@@ -460,6 +460,20 @@ describe("get_items", () => {
     assert.equal(s.items.find((i) => i.appid === 999)!.available, false);
   });
 
+  test("get_items: a 403 with a key configured is not blamed on credentials (endpoint is keyless by design)", async (t) => {
+    // Regression: IStoreBrowseService/GetItems is keyless-capable, same as the
+    // SteamWebClient methods above — but backed by StoreServiceClient
+    // (clients/storeService.ts), a separate code path that initially missed
+    // the hasCredentials override applied to the others.
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("IStoreBrowseService/GetItems")
+        ? jsonResponse({}, { status: 403 })
+        : router(url),
+    );
+    const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
+    assertToolError(res, /sends no credentials/i);
+  });
+
   test("get_items: still succeeds when GetTagList is unavailable (tags are display-only there)", async (t) => {
     const { client } = await setupServer(
       t,
