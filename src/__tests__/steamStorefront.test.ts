@@ -57,6 +57,23 @@ describe("search_games", () => {
     assert.match(u, /cc=RU/);
     assert.match(u, /l=russian/);
   });
+
+  // Regression: a whitespace-only term used to pass .nonempty() (non-zero
+  // length) and trigger a live, doomed search instead of a clean validation
+  // error; a padded-but-real term used to run the search unstripped.
+  test("search_games rejects a whitespace-only term and trims a padded one", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    const empty = await client.callTool({ name: "search_games", arguments: { term: "   " } });
+    assertToolError(empty, /at least 1 character|too small/i);
+
+    const padded = await client.callTool({
+      name: "search_games",
+      arguments: { term: "  portal  " },
+    });
+    assert.equal(padded.isError, undefined);
+    const u = mock.calls.find((c) => c.url.includes("/api/storesearch"))!.url;
+    assert.match(u, /term=portal(?!%20)/);
+  });
 });
 
 describe("get_game", () => {
@@ -145,6 +162,20 @@ describe("get_game", () => {
     assert.equal(s.appid, 620); // resolved via storesearch (top match)
     assert.equal(s.price.final, "$1.99");
     assert.ok(mock.calls.some((c) => c.url.includes("/api/storesearch")));
+  });
+
+  // Regression: a whitespace-only name used to pass .nonempty() (non-zero
+  // length) and trigger a live, doomed search instead of a clean validation
+  // error; a padded-but-real name used to run the search unstripped.
+  test("get_game rejects a whitespace-only name and trims a padded one", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    const empty = await client.callTool({ name: "get_game", arguments: { name: "   " } });
+    assertToolError(empty, /too small/i);
+
+    const padded = await client.callTool({ name: "get_game", arguments: { name: "  portal  " } });
+    assert.equal(padded.isError, undefined);
+    const u = mock.calls.find((c) => c.url.includes("/api/storesearch"))!.url;
+    assert.match(u, /term=portal(?!%20)/);
   });
 
   test("get_game errors when neither appid nor name is given", async (t) => {

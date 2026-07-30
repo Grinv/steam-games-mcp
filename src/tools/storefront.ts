@@ -28,7 +28,7 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "returns matches with their appid (needed by the other game tools), price, Metacritic score " +
         "and platforms. No API key required.",
       inputSchema: z.strictObject({
-        term: z.string().nonempty().describe("Game title to search for."),
+        term: z.string().trim().nonempty().describe("Game title to search for."),
         country,
         language,
       }),
@@ -54,6 +54,7 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
             .optional(),
           name: z
             .string()
+            .trim()
             .nonempty()
             .describe(
               "Game title to look up instead of an appid — resolved to the closest store match. " +
