@@ -21,10 +21,13 @@ src/
   config.ts       # env → validated Config (zod)
   version.ts      # VERSION/USER_AGENT, kept in sync with package.json by a test
   format/         # raw Steam payloads → trimmed, agent-facing shapes: storefront.ts,
-                  #   web.ts (official Web API: player data), store.ts (keyless store
-                  #   services: GetItems/Query/tags/enriched wishlist), shared.ts (helpers).
-                  #   Each has a co-located *.schemas.ts (schema-first: the shaper builds
-                  #   its return value via `schema.parse({...})`, see Conventions below)
+                  #   web.ts + webAchievements.ts (official Web API: player data /
+                  #   achievement lists), store.ts (keyless store-service summarizers:
+                  #   GetItems/Query/wishlist/recommendations) over storeCard.ts (their
+                  #   shared StoreItem/tag/compat/card/filter toolkit), shared.ts (helpers).
+                  #   Each shaper has a co-located *.schemas.ts (schema-first: the shaper
+                  #   builds its return value via `schema.parse({...})`, see Conventions);
+                  #   storeCard.ts shares store.schemas.ts with store.ts
   lib/            # GENERIC carcass: http, rateLimit, cache, errors, logger, result
   clients/        # storefront.ts (keyless store), web.ts (official Web API; key
                   #   optional; builds storeService.ts, exposed via `.store` for
@@ -85,7 +88,8 @@ npm run inspector      # run under the MCP Inspector
 - Tool failures return `{ isError: true }` results (via `guard()` / `result.ts`),
   never thrown — the agent should get an actionable message.
 - Keep clients fetch+cache only; all raw→agent-facing shaping lives in
-  `src/format/` (`storefront.ts` / `web.ts` / `store.ts`, generic helpers in
+  `src/format/` (`storefront.ts` / `web.ts` / `webAchievements.ts` / `store.ts`
+  over the `storeCard.ts` toolkit, generic helpers in
   `shared.ts`). Every exported summarizer builds its return value via its
   co-located schema's `schema.parse({...})` (schema-first: the schema is the
   single source of truth, so the shaper and its `outputSchema` can't drift

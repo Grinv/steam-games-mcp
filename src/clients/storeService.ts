@@ -18,15 +18,17 @@ import {
   summarizeDiscover,
   summarizeItems,
   summarizeRecommendations,
-  summarizeTagList,
   summarizeWishlistDetailed,
+  type StoreQueryResponse,
+  type WishlistDetailedResponse,
+} from "../format/store.js";
+import {
+  summarizeTagList,
   type CompatFilters,
   type GetTagListResponse,
   type StoreItemsResponse,
-  type StoreQueryResponse,
   type TagMap,
-  type WishlistDetailedResponse,
-} from "../format/store.js";
+} from "../format/storeCard.js";
 
 type Query = Record<string, string | number | boolean | undefined>;
 // The parent's authenticated `#get` (bakes in the key, sent when present per

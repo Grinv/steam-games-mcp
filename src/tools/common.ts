@@ -4,7 +4,7 @@
 // a guarded ToolResult. Kept here so the two registration files stay DRY.
 import { z } from "zod";
 import { jsonResult, type ToolResult } from "../lib/result.js";
-import type { CompatFilters } from "../format/store.js";
+import type { CompatFilters } from "../format/storeCard.js";
 import { compatFilterSchema } from "../format/store.schemas.js";
 import { guard } from "./guard.js";
 

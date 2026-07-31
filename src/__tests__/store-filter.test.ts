@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { storeItemFilter, type StoreItem } from "../format/store.js";
+import { storeItemFilter, type StoreItem } from "../format/storeCard.js";
 
 // Focused unit tests for the shared predicate behind discover_games and the
 // wishlist detailed view. Each test isolates one filter dimension on minimal
