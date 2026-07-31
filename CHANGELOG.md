@@ -6,6 +6,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Reject a non-digit `min_discount`/`min_review` in the `deals_digest` prompt instead of interpolating a free-form value into the agent's instructions. ([8ec0dc7](https://github.com/Grinv/steam-games-mcp/commit/8ec0dc7))
+
+### Fixed
+
+- Fix `steamid`/`other_steamid` failing on a value with stray whitespace instead of trimming it first, matching `vanity`/`STEAM_ID`. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))
+- Fix a 17-digit `steamid`/`other_steamid` below the individual-account base (e.g. all zeros) being sent upstream instead of rejected up front. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))
+- Fix `get_game_reviews`'s `positive_pct` reporting `null` instead of `0` for an all-negative game, no longer conflating 0% positive with no data. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))
+- Fix `get_game_achievements`'s `game` field not warning it may be Valve's internal codename (e.g. 'Fiber' for Persona 5 Royal), not the store title. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))
+- Fix `get_global_achievements`/`get_game_achievements` throwing on a non-numeric upstream percent instead of falling back to a safe default. ([8ec0dc7](https://github.com/Grinv/steam-games-mcp/commit/8ec0dc7))
+- Fix `get_wishlist` not disclosing that its platform/Deck/OS/Machine/Frame filters also imply `include_details`, same as country/language. ([61c7ae7](https://github.com/Grinv/steam-games-mcp/commit/61c7ae7))
+- Fix `get_game`'s description missing its highlighted-achievements sample (`achievements_highlighted`) from the category list. ([61c7ae7](https://github.com/Grinv/steam-games-mcp/commit/61c7ae7))
+
 ## [0.12.1] - 2026-07-30
 
 ### Changed
