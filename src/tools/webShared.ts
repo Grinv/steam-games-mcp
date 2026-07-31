@@ -5,6 +5,7 @@
 // too) — `steamid` and the steamid-resolving helper below are Web-API-specific.
 import { z } from "zod";
 import { errorResult, type ToolResult } from "../lib/result.js";
+import { STEAMID64_RE } from "../format/shared.js";
 import { reply } from "./common.js";
 
 // Gates every key-required player tool on STEAM_API_KEY being set; one clear
@@ -34,7 +35,6 @@ export const requireKey =
 // BigInt keeps the comparison exact (the value exceeds Number.MAX_SAFE_INTEGER);
 // the refine is runtime-only and drops out of the generated JSON Schema, so it
 // never trips z.toJSONSchema()'s unrepresentable guard (see AGENTS.md).
-const STEAMID64_RE = /^\d{17}$/;
 const STEAMID64_MIN = 76561197960265728n;
 const STEAMID64_MSG =
   "A SteamID64 is a 17-digit number starting at 76561197960265728. " +

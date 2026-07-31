@@ -11,7 +11,7 @@ import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
 import { ApiError, type ApiErrorCode, withFallbackOn } from "../lib/errors.js";
 import { messageFor } from "../lib/result.js";
-import { notFound, PRIVATE_PROFILE_REASON } from "../format/shared.js";
+import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.js";
 import {
   summarizeComparePlayers,
   summarizeCurrentPlayers,
@@ -130,7 +130,7 @@ export class SteamWebClient {
           "STEAM_ID (a SteamID64 or vanity name) in the server config.",
       });
     }
-    if (/^\d{17}$/.test(raw)) return raw;
+    if (STEAMID64_RE.test(raw)) return raw;
     if (this.#resolvedDefault) return this.#resolvedDefault;
     if (!this.configured) {
       throw new ApiError({

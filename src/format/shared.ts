@@ -20,6 +20,13 @@ export const PRIVATE_PROFILE_REASON =
   "Profile or game-details are private. Ask the owner to set Steam → Privacy → " +
   "Game details = Public, or this data can't be read.";
 
+// The 17-digit SteamID64 shape. Single source for both the steamid tool-input
+// validation (tools/webShared.ts) and the SteamID64-vs-vanity discrimination in
+// the client's requireSteamId (clients/web.ts) — same pattern, two purposes.
+// Homed here (a leaf both the tools and clients layers already import from) so
+// the regex can't drift between the two.
+export const STEAMID64_RE = /^\d{17}$/;
+
 export function names(list: { description?: string; name?: string }[] | undefined): string[] {
   // Dedup: Steam repeats entries in some lists (e.g. a game's `categories`
   // carries "Steam Workshop"/controller-support labels twice), which would
