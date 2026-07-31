@@ -25,6 +25,7 @@ import {
   summarizeRecentlyPlayed,
   summarizeVanity,
   summarizeWishlist,
+  RESULT_OK,
   type CurrentPlayersResponse,
   type FollowedGamesCountResponse,
   type FollowedGamesResponse,
@@ -143,7 +144,7 @@ export class SteamWebClient {
       vanityurl: raw,
     });
     const steamid = res.response?.steamid;
-    if (res.response?.success !== 1 || !steamid) {
+    if (res.response?.success !== RESULT_OK || !steamid) {
       throw new ApiError({
         code: "bad_request",
         message: `could not resolve the STEAM_ID vanity name "${raw}" to a SteamID64.`,

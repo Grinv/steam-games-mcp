@@ -62,6 +62,13 @@ export interface SteamLevelResponse {
   response?: { player_level?: number };
 }
 
+// ECommunityVisibilityState. Without auth (which is how this server calls it),
+// GetPlayerSummaries only ever returns 1 (not visible to us) or 3 (public) —
+// the full 1-5 enum's finer friends/friends-of-friends states all collapse to
+// "not visible" from an anonymous request's point of view, so 3 vs. not-3 is
+// the only distinction the payload actually carries.
+const VISIBILITY_PUBLIC = 3;
+
 export function summarizePlayer(
   r: PlayerSummariesResponse,
   level?: number | null,
@@ -74,7 +81,7 @@ export function summarizePlayer(
     name: p.personaname ?? null,
     real_name: p.realname || null,
     state: personaStates[p.personastate ?? 0] ?? "offline",
-    visibility: p.communityvisibilitystate === 3 ? "public" : "private",
+    visibility: p.communityvisibilitystate === VISIBILITY_PUBLIC ? "public" : "private",
     country: p.loccountrycode || null,
     level: level ?? null,
     created: isoDay(p.timecreated),
@@ -269,11 +276,17 @@ export interface VanityResponse {
   response?: { success?: number; steamid?: string; message?: string };
 }
 
+// EResult.OK. ResolveVanityURL reports EResult in `response.success`: 1 (OK) on
+// a hit, 42 (EResult.NoMatch) when the name resolves to nothing — so
+// success === RESULT_OK is the only "found" case.
+export const RESULT_OK = 1;
+
 export function summarizeVanity(
   r: VanityResponse,
 ): z.infer<typeof vanityFound> | z.infer<typeof notFoundReason> {
   const v = r.response;
-  if (v?.success === 1 && v.steamid) return vanityFound.parse({ found: true, steamid: v.steamid });
+  if (v?.success === RESULT_OK && v.steamid)
+    return vanityFound.parse({ found: true, steamid: v.steamid });
   return notFound(v?.message ?? "No match for that vanity name");
 }
 
