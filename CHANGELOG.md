@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-07-31
+
 ### Security
 
 - Reject a non-digit `min_discount`/`min_review` in the `deals_digest` prompt, so it can't smuggle directives into the interpolated agent instructions. ([8ec0dc7](https://github.com/Grinv/steam-games-mcp/commit/8ec0dc7))
