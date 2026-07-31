@@ -10,7 +10,8 @@ import { READ_ONLY, appid } from "./common.js";
 import { requireKey as makeRequireKey, otherSteamid, steamid, steamIdTool } from "./webShared.js";
 import { notFoundReason, withNotFound } from "../format/shared.schemas.js";
 import { recommendedGamesFound } from "../format/store.schemas.js";
-import { ACHIEVEMENTS_MAX, FRIENDS_MAX, FRIENDS_WHO_OWN_MAX } from "../format/web.js";
+import { FRIENDS_MAX, FRIENDS_WHO_OWN_MAX } from "../format/web.js";
+import { ACHIEVEMENTS_MAX } from "../format/webAchievements.js";
 import {
   comparePlayersFound,
   findFriendsWhoOwnFound,

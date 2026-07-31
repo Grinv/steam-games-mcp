@@ -24,7 +24,8 @@ import {
 import { steamid, steamIdTool } from "./webShared.js";
 import { wishlistNotFound, withNotFound } from "../format/shared.schemas.js";
 import { WISHLIST_DETAIL_MAX } from "../format/store.js";
-import { ACHIEVEMENTS_MAX, FOLLOWED_MAX, WISHLIST_LIGHT_MAX } from "../format/web.js";
+import { FOLLOWED_MAX, WISHLIST_LIGHT_MAX } from "../format/web.js";
+import { ACHIEVEMENTS_MAX } from "../format/webAchievements.js";
 import {
   discoverGamesOutput,
   getItemsOutput,

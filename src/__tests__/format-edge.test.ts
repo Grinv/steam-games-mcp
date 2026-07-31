@@ -8,14 +8,16 @@ import {
 } from "../format/storefront.js";
 import {
   summarizePlayer,
-  summarizeGlobalAchievements,
-  summarizeGameSchema,
-  summarizePlayerAchievements,
   summarizeOwnedGames,
   summarizeFriendsWhoOwn,
   summarizeNews,
-  ACHIEVEMENTS_MAX,
 } from "../format/web.js";
+import {
+  summarizeGlobalAchievements,
+  summarizeGameSchema,
+  summarizePlayerAchievements,
+  ACHIEVEMENTS_MAX,
+} from "../format/webAchievements.js";
 
 // Steam frequently omits optional fields; these exercise the sparse-payload
 // fallbacks (?? null / || null / ?? []) so a thin upstream response degrades

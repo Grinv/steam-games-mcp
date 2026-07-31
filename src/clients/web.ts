@@ -18,12 +18,9 @@ import {
   summarizeFollowedGames,
   summarizeFriendList,
   summarizeFriendsWhoOwn,
-  summarizeGameSchema,
-  summarizeGlobalAchievements,
   summarizeNews,
   summarizeOwnedGames,
   summarizePlayer,
-  summarizePlayerAchievements,
   summarizePlayerBans,
   summarizeRecentlyPlayed,
   summarizeVanity,
@@ -32,11 +29,8 @@ import {
   type FollowedGamesCountResponse,
   type FollowedGamesResponse,
   type FriendListResponse,
-  type GameSchemaResponse,
-  type GlobalAchievementsResponse,
   type NewsResponse,
   type OwnedGamesResponse,
-  type PlayerAchievementsResponse,
   type PlayerBansResponse,
   type PlayerSummariesResponse,
   type RecentlyPlayedResponse,
@@ -44,6 +38,14 @@ import {
   type VanityResponse,
   type WishlistResponse,
 } from "../format/web.js";
+import {
+  summarizeGameSchema,
+  summarizeGlobalAchievements,
+  summarizePlayerAchievements,
+  type GameSchemaResponse,
+  type GlobalAchievementsResponse,
+  type PlayerAchievementsResponse,
+} from "../format/webAchievements.js";
 import { StoreServiceClient } from "./storeService.js";
 import type { Logger } from "../lib/logger.js";
 import type { Config } from "../config.js";
