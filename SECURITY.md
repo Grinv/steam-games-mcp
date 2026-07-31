@@ -9,14 +9,14 @@
   anything to Steam beyond a GET request.
 - **Only two hosts, both fixed at startup.** Requests go to the configured
   `STEAM_API_BASE_URL` (default `api.steampowered.com`) or
-  `STEAM_STORE_BASE_URL` (default `store.steampowered.com`) — there is no tool
+  `STEAM_STORE_BASE_URL` (default `store.steampowered.com`). There is no tool
   parameter that lets a caller redirect a request to an arbitrary host.
 - **Your key stays yours.** `STEAM_API_KEY` is read once from the environment
   at startup, sent only as a query parameter on requests to the Steam Web API,
   and never written to disk, cached, or included in a tool result. Logging
   redacts it (and any `Bearer`/OAuth-style token) before a line reaches stderr
   or the client (see `src/lib/errors.ts`'s `redact`).
-- **No data kept between requests beyond a small TTL cache** (`CACHE_TTL_MS`,
+- **No data is kept between requests beyond a small TTL cache** (`CACHE_TTL_MS`,
   default 5 minutes) of non-personal store/catalog responses (game details,
   review histogram, tag dictionary). Player-specific responses (profile,
   library, achievements, friends) are never cached, with one exception:

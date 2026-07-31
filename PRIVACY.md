@@ -3,7 +3,7 @@
 `steam-games-mcp` is a local [Model Context Protocol](https://modelcontextprotocol.io)
 server: it runs as a process on your own machine (via `npx` or a local clone),
 speaking stdio to your MCP client (Claude Desktop, Claude Code, etc.). It has
-no server component of its own, no telemetry, and no analytics — this policy
+no server component of its own, no telemetry, and no analytics. This policy
 covers exactly what it does with data, in full, because there isn't more to
 say beyond it.
 
@@ -17,9 +17,9 @@ The only inputs it handles are:
 
 - **Credentials/preferences you supply**, via environment variables in your
   MCP client's own config (e.g. `claude_desktop_config.json`):
-  `STEAM_API_KEY` (optional — a free key from
+  `STEAM_API_KEY` (optional, a free key from
   [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey) that
-  unlocks the player-data tools), `STEAM_ID` (optional — your own SteamID64 or
+  unlocks the player-data tools), `STEAM_ID` (optional, your own SteamID64 or
   vanity name, so player tools can default to you), and non-secret store
   preferences `STEAM_COUNTRY`/`STEAM_LANGUAGE`. These stay in your client's
   local config file; `steam-games-mcp` never transmits them anywhere except
@@ -33,24 +33,24 @@ The only inputs it handles are:
 Each tool call results in an outbound HTTPS request to exactly one of two
 Valve/Steam hosts, carrying only what that specific call needs:
 
-- **Steam Storefront API** (`store.steampowered.com`) — needs no key. Carries
+- **Steam Storefront API** (`store.steampowered.com`), needs no key. Carries
   only the search term/appid(s) and the `cc`/`l` (country/language) query
   parameters. Backs the classic store tools (`search_games`, `get_game`,
   `get_game_reviews`, `get_review_histogram`, `get_prices`, `get_specials`,
   `get_featured`).
-- **Steam Web API** (`api.steampowered.com`) — used for player data
+- **Steam Web API** (`api.steampowered.com`), used for player data
   (profiles, libraries, achievements, friends) and several keyless endpoints:
   news, global achievement rates, current player counts, a player's wishlist
   and followed games, and the modern store-card services behind `get_items`,
   `discover_games` and `get_wishlist`'s detailed cards. When `STEAM_API_KEY`
   is set, it travels as a `key` query parameter on every request to this
-  host, per Valve's own API convention — never as a header, never logged
+  host, per Valve's own API convention, never as a header, never logged
   (see Storage and retention below).
 
 Both hosts are operated by Valve Corporation and governed by
 [Steam's own Privacy Policy](https://store.steampowered.com/privacy_agreement/)
 once your request reaches them. `steam-games-mcp` sends data to no other
-destination — no analytics vendor, no logging service, no server operated by
+destination: no analytics vendor, no logging service, no server operated by
 its maintainer.
 
 **Public-profile caveat:** several player tools (`get_wishlist`,
@@ -58,7 +58,7 @@ its maintainer.
 `get_recently_played`, `get_player_achievements`, `find_friends_who_own`,
 `compare_players`, `get_recommended_games`) only return data for a Steam
 profile whose relevant visibility setting (profile / game details / friends
-list) is set to **Public** — this is enforced by Steam itself, not by this
+list) is set to **Public**. This is enforced by Steam itself, not by this
 server. A private profile makes the tool report a clear "private" reason
 instead of the requested data; it never bypasses Steam's own privacy
 settings.
@@ -70,13 +70,13 @@ settings.
   (`CACHE_TTL_MS`, default 5 minutes) to cut latency and avoid hammering the
   Storefront/Web APIs. Not every endpoint is cached (e.g. reviews, batch
   prices and live player counts are always fetched fresh); player-specific
-  data is never cached, with one exception — `get_player_summary`'s numeric
+  data is never cached, with one exception: `get_player_summary`'s numeric
   Steam level is cached for up to `CACHE_TTL_MS`, keyed by SteamID, since
   it's non-sensitive and rarely changes. The cache is cleared entirely when
   the process exits and is never shared across machines or users.
 - **Logging**: operational logs go to stderr only (never a file, never a
   remote endpoint, and there is no MCP `logging` capability wired up), with
-  credentials redacted before anything is written — `STEAM_API_KEY` is
+  credentials redacted before anything is written: `STEAM_API_KEY` is
   stripped from any logged URL or error message even though it travels as a
   plain query parameter on the wire. Log verbosity is controlled by
   `LOG_LEVEL` (default `info`); logs live only as long as your MCP client
