@@ -6,30 +6,36 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- Reject a non-digit `min_discount`/`min_review` in the `deals_digest` prompt, so it can't smuggle directives into the interpolated agent instructions. ([8ec0dc7](https://github.com/Grinv/steam-games-mcp/commit/8ec0dc7))
+- Redact credentials from every tool's error message as a final backstop, so a future change can't leak the Web API key through a thrown error. ([8ec0dc7](https://github.com/Grinv/steam-games-mcp/commit/8ec0dc7))
+- Stop the retry debug log from including request query strings (which can carry a player's `steamid`); log the endpoint path only. ([ff68425](https://github.com/Grinv/steam-games-mcp/commit/ff68425))
+
 ### Changed
 
-- Reject a non-digit `min_discount`/`min_review` in the `deals_digest` prompt instead of interpolating a free-form value into the agent's instructions. ([8ec0dc7](https://github.com/Grinv/steam-games-mcp/commit/8ec0dc7))
-- Remove the inert `allowScripts` field from `package.json`: npm has no such install-script allowlist (it is a pnpm-only feature), so it granted no supply-chain protection while implying otherwise.
-- Trim repeated compat-field prose and redundant examples from the `discover_games`, `get_wishlist` and `get_recommended_games` descriptions, and note that `search_games` also returns `store_url` and `type`.
+- Standardize the keyless-tool disclosure to one phrasing ("No API key required.") across six Web API tools, replacing five inconsistent phrasings. ([61c7ae7](https://github.com/Grinv/steam-games-mcp/commit/61c7ae7))
+- Remove the inert `allowScripts` field from `package.json` (a pnpm-only feature, no-op under npm) that implied protection it never gave. ([ff68425](https://github.com/Grinv/steam-games-mcp/commit/ff68425))
+- Disclose that `get_recommended_games`'s `min_discount` is re-checked client-side, matching `discover_games`. ([dbde08d](https://github.com/Grinv/steam-games-mcp/commit/dbde08d))
+- Note in `get_wishlist`/`get_followed_games` that `resolve_vanity_url` needs `STEAM_API_KEY`, even though both tools are otherwise keyless. ([dbde08d](https://github.com/Grinv/steam-games-mcp/commit/dbde08d))
+- Name `get_recommended_games`'s fixed scan sizes (30 played games sampled, 300-entry pool) instead of a vague "fixed-size scan". ([86a459d](https://github.com/Grinv/steam-games-mcp/commit/86a459d))
+- Disclose `get_recommended_games`'s second `found:false` case: too few played games with resolvable tags. ([86a459d](https://github.com/Grinv/steam-games-mcp/commit/86a459d))
 
 ### Fixed
 
-- Fix `discover_games` and `get_recommended_games` returning the full, unfiltered catalog for `min_discount: 100`: Steam's server-side discount filter silently no-ops at exactly 100, so a client-side discount re-check now backstops it.
-- Fix `get_player_bans`'s `days_since_last_ban` reporting `0` (which reads as "banned today") for a player who has never been banned, instead of `null`.
-- Fix `discover_games` `min_review: 0` excluding games that carry no review summary yet, instead of treating 0 as "no minimum".
-- Fix `get_game` emitting duplicate `genres`/`categories` entries that Steam repeats in its store payload.
-- Stop the retry debug log from including request query strings (which carry player `steamid`/`vanity`); it now logs the endpoint path only.
+- Fix `discover_games`/`get_recommended_games` returning the full catalog at `min_discount: 100` (Steam's filter no-ops there); backstop it client-side. ([ff68425](https://github.com/Grinv/steam-games-mcp/commit/ff68425))
+- Fix `get_global_achievements`/`get_game_achievements` throwing on a non-numeric upstream percent instead of falling back to a safe default. ([8ec0dc7](https://github.com/Grinv/steam-games-mcp/commit/8ec0dc7))
+- Fix `get_player_bans`'s `days_since_last_ban` reporting `0` ("banned today") for a never-banned player, instead of `null`. ([ff68425](https://github.com/Grinv/steam-games-mcp/commit/ff68425))
+- Fix `discover_games`'s `min_review: 0` excluding games that carry no review summary yet, instead of treating 0 as "no minimum". ([ff68425](https://github.com/Grinv/steam-games-mcp/commit/ff68425))
+- Fix `get_game_reviews`'s `positive_pct` reporting `null` instead of `0` for an all-negative game, no longer conflating 0% positive with no data. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))
+- Fix `get_game` emitting duplicate `genres`/`categories` entries that Steam repeats in its store payload. ([ff68425](https://github.com/Grinv/steam-games-mcp/commit/ff68425))
 - Fix `steamid`/`other_steamid` failing on a value with stray whitespace instead of trimming it first, matching `vanity`/`STEAM_ID`. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))
 - Fix a 17-digit `steamid`/`other_steamid` below the individual-account base (e.g. all zeros) being sent upstream instead of rejected up front. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))
-- Fix `get_game_reviews`'s `positive_pct` reporting `null` instead of `0` for an all-negative game, no longer conflating 0% positive with no data. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))
 - Fix `get_game_achievements`'s `game` field not warning it may be Valve's internal codename (e.g. 'Fiber' for Persona 5 Royal), not the store title. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))
-- Fix `get_global_achievements`/`get_game_achievements` throwing on a non-numeric upstream percent instead of falling back to a safe default. ([8ec0dc7](https://github.com/Grinv/steam-games-mcp/commit/8ec0dc7))
 - Fix `get_wishlist` not disclosing that its platform/Deck/OS/Machine/Frame filters also imply `include_details`, same as country/language. ([61c7ae7](https://github.com/Grinv/steam-games-mcp/commit/61c7ae7))
 - Fix `get_game`'s description missing its highlighted-achievements sample (`achievements_highlighted`) from the category list. ([61c7ae7](https://github.com/Grinv/steam-games-mcp/commit/61c7ae7))
-- Fix `search_games`'s description not disclosing that Steam returns only its first page of matches (~10, no pagination), so `total` is not the full catalog match count.
-- Fix `get_recommended_games`'s description not naming the fixed scan sizes (30 most-played games sampled, 300-entry catalog pool) behind "can return fewer than `count`", nor its second `found:false` case (too few played games with resolvable tags).
-- Disclose in `get_recommended_games`'s `min_discount` that it is re-checked client-side (so it holds at any value, including 100), matching `discover_games`.
-- Note in `get_wishlist`/`get_followed_games` that `resolve_vanity_url` itself needs `STEAM_API_KEY`, even though those two tools are otherwise keyless.
+- Fix `search_games`'s description omitting that it also returns `store_url` and `type` in its output. ([ff68425](https://github.com/Grinv/steam-games-mcp/commit/ff68425))
+- Fix `search_games` not disclosing it returns only Steam's first page of matches (~10, no pagination), so `total` isn't the full match count. ([86a459d](https://github.com/Grinv/steam-games-mcp/commit/86a459d))
 
 ## [0.12.1] - 2026-07-30
 
