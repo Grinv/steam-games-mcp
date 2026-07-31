@@ -8,7 +8,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 
 /** A secondary log destination. Receives the level and the already-redacted
  *  message, gated by the same threshold as stderr. Must never throw. */
-export type LogSink = (level: Exclude<LogLevel, "silent">, message: string) => void;
+type LogSink = (level: Exclude<LogLevel, "silent">, message: string) => void;
 
 const ORDER: Record<LogLevel, number> = {
   debug: 10,

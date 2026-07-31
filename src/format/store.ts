@@ -184,12 +184,12 @@ function vrSupport(p: StoreItem["platforms"]): "none" | "supported" | "required"
 }
 // Map a user-facing compat filter to the minimum acceptable category: "verified"
 // keeps only Verified; "playable" keeps Playable or Verified (i.e. "runs on it").
-export const COMPAT_MIN: Record<string, number> = { verified: 3, playable: 2 };
+const COMPAT_MIN: Record<string, number> = { verified: 3, playable: 2 };
 
 // User-facing native-platform name → the raw platforms.* boolean flag. "linux"
 // maps to steamos_linux (a native Linux/SteamOS build), NOT the SteamOS Proton
 // compat rating (steam_os_compat_category) — those are deliberately separate.
-export const PLATFORM_FIELD = {
+const PLATFORM_FIELD = {
   windows: "windows",
   mac: "mac",
   linux: "steamos_linux",
@@ -424,7 +424,7 @@ export interface WishlistDetailedResponse {
     items?: { appid?: number; priority?: number; date_added?: number; store_item?: StoreItem }[];
   };
 }
-const WISHLIST_DETAIL_MAX = 60;
+export const WISHLIST_DETAIL_MAX = 60;
 export function summarizeWishlistDetailed(
   r: WishlistDetailedResponse,
   tagMap?: TagMap,

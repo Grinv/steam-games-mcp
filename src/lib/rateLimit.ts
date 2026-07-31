@@ -8,7 +8,7 @@
 // time and the window bookkeeping stays consistent. In-flight network time still
 // overlaps because acquire() resolves before the request itself runs.
 
-export interface RateRule {
+interface RateRule {
   /** Max granted acquisitions allowed within any `windowMs` span. */
   limit: number;
   windowMs: number;

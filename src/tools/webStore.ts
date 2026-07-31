@@ -23,7 +23,7 @@ import {
 } from "./common.js";
 import { steamid, steamIdTool } from "./webShared.js";
 import { wishlistNotFound, withNotFound } from "../format/shared.schemas.js";
-import { ACHIEVEMENTS_MAX } from "../format/web.js";
+import { ACHIEVEMENTS_MAX, FOLLOWED_MAX } from "../format/web.js";
 import {
   discoverGamesOutput,
   getItemsOutput,
@@ -276,7 +276,7 @@ export function registerStoreWebTools(
         "(get sale/update notifications) that's separate from the wishlist; many players follow more " +
         "games than they wishlist. Works without a key, but only if that player's follows/profile are " +
         "public — otherwise it returns found:false. Returns appids + store_url only (no price/name), " +
-        "capped at the first 200 (check `returned` vs `total`); pass the appids to get_items for " +
+        `capped at the first ${FOLLOWED_MAX} (check \`returned\` vs \`total\`); pass the appids to get_items for ` +
         "price, review % and compat. Convert a vanity name with resolve_vanity_url first.",
       inputSchema: z.strictObject({ steamid }),
       outputSchema: getFollowedGamesOutput,

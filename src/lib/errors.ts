@@ -14,7 +14,7 @@ export type ApiErrorCode =
   | "bad_request" // 400/405/422 — malformed or unsupported request
   | "unknown";
 
-export interface ApiErrorOptions {
+interface ApiErrorOptions {
   code: ApiErrorCode;
   message: string;
   status?: number;

@@ -10,7 +10,7 @@ import { READ_ONLY, appid } from "./common.js";
 import { requireKey as makeRequireKey, otherSteamid, steamid, steamIdTool } from "./webShared.js";
 import { notFoundReason, withNotFound } from "../format/shared.schemas.js";
 import { recommendedGamesFound } from "../format/store.schemas.js";
-import { ACHIEVEMENTS_MAX } from "../format/web.js";
+import { ACHIEVEMENTS_MAX, FRIENDS_MAX, FRIENDS_WHO_OWN_MAX } from "../format/web.js";
 import {
   comparePlayersFound,
   findFriendsWhoOwnFound,
@@ -100,8 +100,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       title: "Get a player's friend list",
       description:
         "List a player's Steam friends by SteamID64: name, online state, current game and how " +
-        "long they've been friends, most-recently-added first (capped at the 100 most-recently-" +
-        "added; check `returned` vs `total`). Requires STEAM_API_KEY and the friends list to be " +
+        "long they've been friends, most-recently-added first (capped at the " +
+        `${FRIENDS_MAX} most-recently-added; check \`returned\` vs \`total\`). Requires STEAM_API_KEY ` +
+        "and the friends list to be " +
         "public — otherwise it returns found:false. For 'which of my friends own game X', use " +
         "find_friends_who_own instead — it checks each friend's full library, not just this list. " +
         "Get the SteamID64 from resolve_vanity_url.",
@@ -128,7 +129,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "checked) rather than silently counted as a non-owner. Likewise, a friend whose own library " +
         "lookup failed (e.g. rate-limited) lands in unavailable_friends with a reason instead of " +
         "failing the whole call — every other friend's result still comes through. Each of owners, " +
-        "private_friends and unavailable_friends is capped at 100 entries (a sibling _total field " +
+        `private_friends and unavailable_friends is capped at ${FRIENDS_WHO_OWN_MAX} entries (a sibling _total field ` +
         "appears only when it was actually truncated). Get appids from search_games.",
       inputSchema: z.strictObject({
         appids: z

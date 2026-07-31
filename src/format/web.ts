@@ -41,7 +41,7 @@ import {
 
 // ---- Web API: player summary ------------------------------------------------
 
-export interface PlayerSummary {
+interface PlayerSummary {
   steamid?: string;
   personaname?: string;
   profileurl?: string;
@@ -435,9 +435,10 @@ export interface WishlistResponse {
 
 // A wishlist can hold tens of thousands of items; sort by priority (1 = top of
 // the list) and cap. Names aren't included — use get_game per appid for details.
+export const WISHLIST_LIGHT_MAX = 100;
 export function summarizeWishlist(
   r: WishlistResponse,
-  max = 100,
+  max = WISHLIST_LIGHT_MAX,
 ): z.infer<typeof wishlistNotFound> | z.infer<typeof wishlistLightFound> {
   const items = r.response?.items ?? [];
   if (items.length === 0) {
@@ -504,7 +505,7 @@ export interface FollowedGamesCountResponse {
 // A player can follow far more games than they wishlist; cap like the other
 // list tools. total comes from the dedicated count endpoint (independent of
 // any cap on the appid list), same pattern as summarizeWishlist.
-const FOLLOWED_MAX = 200;
+export const FOLLOWED_MAX = 200;
 export function summarizeFollowedGames(
   r: FollowedGamesResponse,
   countRes: FollowedGamesCountResponse,
@@ -537,10 +538,11 @@ export interface FriendListResponse {
 // GetFriendList only returns steamid/friend_since — no names — so this merges
 // in a GetPlayerSummaries batch (fetched alongside) for name/state/avatar.
 // Sorted most-recent-friend-first, capped like the other list tools.
+export const FRIENDS_MAX = 100;
 export function summarizeFriendList(
   r: FriendListResponse,
   players: PlayerSummariesResponse,
-  max = 100,
+  max = FRIENDS_MAX,
 ): z.infer<typeof friendListFound> {
   const friends = r.friendslist?.friends ?? [];
   if (friends.length === 0) {
@@ -578,12 +580,13 @@ export function summarizeFriendList(
 // Both are kept separate from "doesn't own" so an agent never reports either
 // case as a confirmed non-owner, and separate from each other since only one
 // of them (unavailable) is worth a retry.
+export const FRIENDS_WHO_OWN_MAX = 100;
 export function summarizeFriendsWhoOwn(
   appids: number[],
   friendIds: string[],
   ownership: (Map<number, number> | null | { error: string })[],
   players: PlayerSummariesResponse,
-  max = 100,
+  max = FRIENDS_WHO_OWN_MAX,
 ): z.infer<typeof findFriendsWhoOwnFound> {
   const byId = new Map<string, PlayerSummary>();
   for (const p of players.response?.players ?? []) if (p.steamid) byId.set(p.steamid, p);

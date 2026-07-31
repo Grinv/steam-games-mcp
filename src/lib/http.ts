@@ -5,7 +5,7 @@ import { ApiError, classifyStatus } from "./errors.js";
 import type { Logger } from "./logger.js";
 import { USER_AGENT } from "../version.js";
 
-export interface RequestOptions {
+interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
   /** Already-serialized request body (e.g. URLSearchParams string or JSON). */
@@ -23,7 +23,7 @@ export interface RequestOptions {
   hasCredentials?: boolean;
 }
 
-export interface HttpClientOptions {
+interface HttpClientOptions {
   baseUrl: string;
   logger: Logger;
   defaultHeaders?: Record<string, string>;
