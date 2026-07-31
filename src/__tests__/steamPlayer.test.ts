@@ -5,7 +5,7 @@
 // (keyless-capable Web API store tools).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { setupServer, jsonResponse, htmlResponse, assertToolError } from "./helpers.js";
+import { setupServer, jsonResponse, htmlResponse, assertToolError, textOf } from "./helpers.js";
 import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.js";
 
 // Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
@@ -100,6 +100,20 @@ describe("get_owned_games", () => {
       arguments: { steamid: "00000000000000000" },
     });
     assert.equal(res.isError, true);
+  });
+
+  // Regression: the range-check .refine() runs even after the \d{17} .regex()
+  // already failed, so a non-digit value (e.g. a vanity name passed by mistake)
+  // must not throw a raw "Cannot convert X to a BigInt" — it fails with the
+  // actionable message pointing at resolve_vanity_url instead.
+  test("rejects a non-digit steamid with the actionable message, not a raw BigInt error", async (t) => {
+    const { client } = await setupServer(t, ENV, router);
+    const res = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "grinv" },
+    });
+    assertToolError(res, /resolve_vanity_url/);
+    assert.doesNotMatch(textOf(res), /BigInt/i);
   });
 
   test("get_owned_games: check_appids on a private profile reports unknown, not a false owned:false", async (t) => {

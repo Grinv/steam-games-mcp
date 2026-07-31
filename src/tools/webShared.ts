@@ -34,6 +34,7 @@ export const requireKey =
 // BigInt keeps the comparison exact (the value exceeds Number.MAX_SAFE_INTEGER);
 // the refine is runtime-only and drops out of the generated JSON Schema, so it
 // never trips z.toJSONSchema()'s unrepresentable guard (see AGENTS.md).
+const STEAMID64_RE = /^\d{17}$/;
 const STEAMID64_MIN = 76561197960265728n;
 const STEAMID64_MSG =
   "A SteamID64 is a 17-digit number starting at 76561197960265728. " +
@@ -41,8 +42,13 @@ const STEAMID64_MSG =
 const steamId64Base = z
   .string()
   .trim()
-  .regex(/^\d{17}$/, STEAMID64_MSG)
-  .refine((s) => BigInt(s) >= STEAMID64_MIN, STEAMID64_MSG);
+  .regex(STEAMID64_RE, STEAMID64_MSG)
+  // zod runs .refine() even when .regex() above already failed, so the range
+  // check must itself be safe on any string: BigInt() THROWS on a non-digit
+  // value (e.g. a vanity name passed by mistake) instead of returning false.
+  // When the value isn't 17 digits, defer to the regex issue (pass here) so its
+  // message wins; only BigInt-compare a value that is actually all digits.
+  .refine((s) => !STEAMID64_RE.test(s) || BigInt(s) >= STEAMID64_MIN, STEAMID64_MSG);
 
 export const steamid = steamId64Base
   .describe(
