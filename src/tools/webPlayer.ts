@@ -295,7 +295,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
           .positive()
           .max(100)
           .describe(
-            "Minimum discount %, e.g. 30 for '30%+ off'. Omit to include full-price games too.",
+            "Minimum discount %, e.g. 30 for '30%+ off'. Omit to include full-price games too. " +
+              "Filtered server-side and re-checked client-side, so it holds at any value including 100.",
           )
           .optional(),
       }),

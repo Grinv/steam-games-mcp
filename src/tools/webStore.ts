@@ -277,7 +277,8 @@ export function registerStoreWebTools(
         "games than they wishlist. No API key required, but the follows/profile must be public — " +
         "otherwise it returns found:false. Returns appids + store_url only (no price/name), " +
         `capped at the first ${FOLLOWED_MAX} (check \`returned\` vs \`total\`); pass the appids to get_items for ` +
-        "price, review % and compat. Convert a vanity name with resolve_vanity_url first.",
+        "price, review % and compat. Convert a vanity name with resolve_vanity_url " +
+        "first (that conversion itself needs STEAM_API_KEY, even though this tool doesn't).",
       inputSchema: z.strictObject({ steamid }),
       outputSchema: getFollowedGamesOutput,
       annotations: READ_ONLY,
@@ -307,7 +308,8 @@ export function registerStoreWebTools(
         "pre-cap count. Steam itself only attaches store data to roughly the first 100 wishlist entries " +
         "per call — on a bigger wishlist, `enriched` reports how many of `total` got checked, and `note` " +
         "explains when some were skipped (their filter/price data isn't available at all, not that they " +
-        "don't match). Convert a vanity name with resolve_vanity_url first.",
+        "don't match). Convert a vanity name with resolve_vanity_url " +
+        "first (that conversion itself needs STEAM_API_KEY, even though this tool doesn't).",
       inputSchema: z.strictObject({
         steamid,
         include_details: z

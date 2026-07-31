@@ -28,6 +28,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fix `get_game`'s description missing its highlighted-achievements sample (`achievements_highlighted`) from the category list. ([61c7ae7](https://github.com/Grinv/steam-games-mcp/commit/61c7ae7))
 - Fix `search_games`'s description not disclosing that Steam returns only its first page of matches (~10, no pagination), so `total` is not the full catalog match count.
 - Fix `get_recommended_games`'s description not naming the fixed scan sizes (30 most-played games sampled, 300-entry catalog pool) behind "can return fewer than `count`", nor its second `found:false` case (too few played games with resolvable tags).
+- Disclose in `get_recommended_games`'s `min_discount` that it is re-checked client-side (so it holds at any value, including 100), matching `discover_games`.
+- Note in `get_wishlist`/`get_followed_games` that `resolve_vanity_url` itself needs `STEAM_API_KEY`, even though those two tools are otherwise keyless.
 
 ## [0.12.1] - 2026-07-30
 
