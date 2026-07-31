@@ -90,7 +90,7 @@ credentials**; player tools need a free Steam Web API key.
 ### One-click install (Claude Desktop)
 
 Download [**`steam-games-mcp.mcpb`**](https://github.com/Grinv/steam-games-mcp/releases/latest/download/steam-games-mcp.mcpb)
-(always the latest release) and open it in Claude Desktop — **Settings → Extensions** — then
+(always the latest release) and open it in Claude Desktop (**Settings → Extensions**), then
 fill the optional fields (API key, Steam ID, country, language) in the install form. No JSON editing.
 
 Also listed in the [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.Grinv/steam-games-mcp&version=latest)
@@ -98,7 +98,7 @@ as `io.github.Grinv/steam-games-mcp`.
 
 ## Getting your credentials
 
-Store, search and discovery tools need **nothing** — skip this section if that's
+Store, search and discovery tools need **nothing**; skip this section if that's
 all you want. The **player** tools (profile, library, achievements, your wishlist)
 need a free API key and a public profile. Three short steps:
 
@@ -106,19 +106,19 @@ need a free API key and a public profile. Three short steps:
    <https://steamcommunity.com/dev/apikey>, enter any domain (e.g. `localhost`),
    and copy the key into `STEAM_API_KEY`.
 2. **Find your Steam ID.** Set `STEAM_ID` to either:
-   - your **vanity name** — the custom part of your profile URL
+   - your **vanity name**: the custom part of your profile URL
      `steamcommunity.com/id/YOUR_NAME` → `YOUR_NAME` (resolved automatically), or
    - your **17-digit SteamID64** (`steamcommunity.com/profiles/7656…`; or look it
      up at <https://steamid.io>).
 
-   With `STEAM_ID` set you can just ask "_my_ wishlist / library" — without it,
+   With `STEAM_ID` set you can just ask "_my_ wishlist / library"; without it,
    give the agent a SteamID64 each time (use `resolve_vanity_url` to convert a name).
 
 3. **Make your profile public** (for your own library/achievements): Steam →
    profile → **Edit Profile** → **Privacy Settings** → set **My profile** and
    **Game details** to **Public**.
 
-> The key and Steam ID go in your MCP client config (the `env` block above) — see
+> The key and Steam ID go in your MCP client config (the `env` block above). See
 > [docs/clients.md](https://github.com/Grinv/steam-games-mcp/blob/main/docs/clients.md) for per-client examples. Never commit them.
 
 ## Tools
@@ -168,14 +168,14 @@ default to you, so "my wishlist / library" works without passing an ID each time
 
 ## Prompts
 
-Guided one-shot prompts that orchestrate several tools for a common question —
-use these when your client exposes MCP prompts, instead of describing the steps yourself:
+Guided one-shot prompts that orchestrate several tools for a common question.
+Use these when your client exposes MCP prompts, instead of describing the steps yourself:
 
-| Prompt               | Args                                                               | What it does                                                               |
-| -------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| `what_should_i_play` | `steamid`, `budget`, `tags` (all optional)                         | Recommends catalog games from your library/taste, excluding what you own   |
-| `is_it_worth_buying` | `game` (title or appid, optional — autocompletes; asks if omitted) | Price, review trend and Steam Deck compatibility → a buy/wait/skip verdict |
-| `deals_digest`       | `min_discount`, `min_review`, `tags` (all optional)                | A curated list of well-reviewed discounted games                           |
+| Prompt               | Args                                                              | What it does                                                               |
+| -------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `what_should_i_play` | `steamid`, `budget`, `tags` (all optional)                        | Recommends catalog games from your library/taste, excluding what you own   |
+| `is_it_worth_buying` | `game` (title or appid, optional, autocompletes; asks if omitted) | Price, review trend and Steam Deck compatibility → a buy/wait/skip verdict |
+| `deals_digest`       | `min_discount`, `min_review`, `tags` (all optional)               | A curated list of well-reviewed discounted games                           |
 
 ## Develop
 
@@ -204,7 +204,7 @@ Per-client config and all tunables:
 ## Privacy Policy
 
 `steam-games-mcp` runs entirely on your own machine and collects no data of
-its own — see [PRIVACY.md](PRIVACY.md) for exactly what it sends to Steam and
+its own. See [PRIVACY.md](PRIVACY.md) for exactly what it sends to Steam and
 what (if anything) it stores locally.
 
 ## License
