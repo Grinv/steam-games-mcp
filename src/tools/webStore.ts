@@ -23,7 +23,8 @@ import {
 } from "./common.js";
 import { steamid, steamIdTool } from "./webShared.js";
 import { wishlistNotFound, withNotFound } from "../format/shared.schemas.js";
-import { ACHIEVEMENTS_MAX, FOLLOWED_MAX } from "../format/web.js";
+import { WISHLIST_DETAIL_MAX } from "../format/store.js";
+import { ACHIEVEMENTS_MAX, FOLLOWED_MAX, WISHLIST_LIGHT_MAX } from "../format/web.js";
 import {
   discoverGamesOutput,
   getItemsOutput,
@@ -55,7 +56,7 @@ export function registerStoreWebTools(
       description:
         "Get recent news / patch notes for a game by appid (title, date, author, excerpt, link). " +
         "An unknown/unassigned appid comes back as an empty list rather than an error, the same as " +
-        "get_global_achievements. Get the appid from search_games. Works without an API key.",
+        "get_global_achievements. Get the appid from search_games. No API key required.",
       inputSchema: z.strictObject({
         appid,
         limit: z
@@ -83,7 +84,7 @@ export function registerStoreWebTools(
         "`returned` vs `count` — most games have far fewer). An unknown appid, or one with no " +
         "achievement schema (e.g. a DLC/soundtrack), comes back as an empty list rather than an " +
         "error, the same as get_game_news. " +
-        "Get the appid from search_games. Works without a key.",
+        "Get the appid from search_games. No API key required.",
       inputSchema: z.strictObject({ appid }),
       outputSchema: getGlobalAchievementsOutput,
       annotations: READ_ONLY,
@@ -258,8 +259,8 @@ export function registerStoreWebTools(
       title: "Get current player count",
       description:
         "Get how many people are playing a game right now (live concurrent player count) by appid. " +
-        "Get the appid from search_games. Works without a key. Errors clearly if the appid is unknown/invalid " +
-        "rather than returning a null count.",
+        "Get the appid from search_games. No API key required. Errors clearly if the appid is " +
+        "unknown/invalid rather than returning a null count.",
       inputSchema: z.strictObject({ appid }),
       outputSchema: getCurrentPlayersOutput,
       annotations: READ_ONLY,
@@ -274,8 +275,8 @@ export function registerStoreWebTools(
       description:
         "List the games a player 'follows' on the Steam store, by SteamID64 — a lighter opt-in " +
         "(get sale/update notifications) that's separate from the wishlist; many players follow more " +
-        "games than they wishlist. Works without a key, but only if that player's follows/profile are " +
-        "public — otherwise it returns found:false. Returns appids + store_url only (no price/name), " +
+        "games than they wishlist. No API key required, but the follows/profile must be public — " +
+        "otherwise it returns found:false. Returns appids + store_url only (no price/name), " +
         `capped at the first ${FOLLOWED_MAX} (check \`returned\` vs \`total\`); pass the appids to get_items for ` +
         "price, review % and compat. Convert a vanity name with resolve_vanity_url first.",
       inputSchema: z.strictObject({ steamid }),
@@ -290,25 +291,24 @@ export function registerStoreWebTools(
     {
       title: "Get a player's wishlist",
       description:
-        "List a player's Steam wishlist by SteamID64. Works without a key, but only if that player's " +
-        "wishlist/profile is public — otherwise it returns found:false. By default returns a light " +
-        "list of appids (sorted by priority, no names), capped at the first 100 (check `returned` vs " +
-        "`total`). Set include_details for full store cards in " +
-        "ONE call (name, price/discount, review %, Deck/SteamOS/Machine/Frame compat, vr_support, tags, release) — " +
-        "no need to follow up with get_items. Narrow it in the SAME call with tags (e.g. " +
-        "['Metroidvania']), platform (NATIVE windows/mac/linux build), steam_deck / steam_os / " +
-        "steam_machine / steam_frame (Proton compatibility — distinct from a native build), min_review and " +
-        "min_discount / on_sale_only, or country / language (the light appid list carries no price, " +
-        "so setting either implies include_details too) — these are applied before the output cap " +
-        "(the detailed card list returns at most 60 items), so a deeply-discounted niche match past " +
-        "the display cap is never hidden by it (e.g. 'top " +
-        "metroidvanias on my wishlist with a good discount and reviews' → tags:['Metroidvania'] + " +
-        "min_discount + min_review). Results ranked by discount when a discount filter is set, else " +
-        "by wishlist priority; `matched` reports the pre-cap count. Steam itself only attaches store " +
-        "data to roughly the first 100 wishlist entries per call — on a bigger wishlist, `enriched` " +
-        "reports how many of `total` got checked, and `note` explains when some were skipped (their " +
-        "filter/price data isn't available at all, not that they don't match). Convert a vanity name " +
-        "with resolve_vanity_url first.",
+        "List a player's Steam wishlist by SteamID64. No API key required, but the wishlist/profile " +
+        "must be public — otherwise it returns found:false. By default returns a light list of appids " +
+        `(sorted by priority, no names), capped at the first ${WISHLIST_LIGHT_MAX} (check \`returned\` vs \`total\`). ` +
+        "Set include_details for full store cards in ONE call (name, price/discount, review %, " +
+        "Deck/SteamOS/Machine/Frame compat, vr_support, tags, release) — no need to follow up with " +
+        "get_items. Narrow it in the SAME call with tags (e.g. ['Metroidvania']), platform (NATIVE " +
+        "windows/mac/linux build), steam_deck / steam_os / steam_machine / steam_frame (Proton " +
+        "compatibility, distinct from a native build), min_review, min_discount / on_sale_only, or " +
+        "country / language. Any of these filters switches to the detailed card view, since the light " +
+        "appid list has no price/tags/compat to filter on. Filters apply before the output cap " +
+        `(the detailed card list returns at most ${WISHLIST_DETAIL_MAX} items), so a deeply-discounted niche match ` +
+        "past the display cap is never hidden by it (e.g. 'top metroidvanias on my wishlist with a good " +
+        "discount and reviews' → tags:['Metroidvania'] + min_discount + min_review). Results ranked by " +
+        "discount when a discount filter is set, else by wishlist priority; `matched` reports the " +
+        "pre-cap count. Steam itself only attaches store data to roughly the first 100 wishlist entries " +
+        "per call — on a bigger wishlist, `enriched` reports how many of `total` got checked, and `note` " +
+        "explains when some were skipped (their filter/price data isn't available at all, not that they " +
+        "don't match). Convert a vanity name with resolve_vanity_url first.",
       inputSchema: z.strictObject({
         steamid,
         include_details: z
@@ -355,12 +355,10 @@ export function registerStoreWebTools(
         steam_machine: steamMachine,
         steam_frame: steamFrame,
         country: country.describe(
-          "Country (cc) for prices; overrides STEAM_COUNTRY. Only meaningful for store cards, so " +
-            "setting it implies include_details — the light appid list carries no price.",
+          "Country (cc) for prices; overrides STEAM_COUNTRY. Implies include_details.",
         ),
         language: language.describe(
-          "Store language; overrides STEAM_LANGUAGE. Only meaningful for store cards, so setting it " +
-            "implies include_details — the light appid list carries no price.",
+          "Store language; overrides STEAM_LANGUAGE. Implies include_details.",
         ),
       }),
       outputSchema: getWishlistOutput,

@@ -44,7 +44,8 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Get game details",
       description:
         "Get full store details for one game: description, price/discount, genres, platforms, " +
-        "release date, developers/publishers, Metacritic, age rating, DLC and PC requirements. " +
+        "release date, developers/publishers, Metacritic, age rating, DLC, PC requirements and a " +
+        "small highlighted-achievements sample (achievements_highlighted). " +
         "Identify the game by appid (from search_games) OR by name — a title is resolved to the " +
         "closest store match. No API key required.",
       inputSchema: z
@@ -132,7 +133,7 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "recent 30 days), each with positive/negative counts and positive %. Good " +
         "for 'are reviews improving / did an update hurt reception'. For a current summary and " +
         "example review text instead of a trend, use get_game_reviews. Get the appid from " +
-        "search_games. No key.",
+        "search_games. No API key required.",
       inputSchema: z.strictObject({ appid }),
       outputSchema: getReviewHistogramOutput,
       annotations: READ_ONLY,
