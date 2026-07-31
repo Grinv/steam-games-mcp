@@ -250,10 +250,12 @@ export function summarizeReviews(
     total_reviews: q.total_reviews ?? null,
     total_positive: q.total_positive ?? null,
     total_negative: q.total_negative ?? null,
-    positive_pct:
-      q.total_reviews && q.total_positive
-        ? Math.round((q.total_positive / q.total_reviews) * 100)
-        : null,
+    // Guard on the denominator only: an all-negative game (total_positive 0,
+    // total_reviews > 0) is genuinely 0%, not unknown — guarding on
+    // total_positive too would report null and conflate it with "no data".
+    positive_pct: q.total_reviews
+      ? Math.round(((q.total_positive ?? 0) / q.total_reviews) * 100)
+      : null,
     reviews: (r.reviews ?? []).slice(0, max).map((x) => ({
       voted_up: x.voted_up ?? null,
       votes_up: x.votes_up ?? 0,

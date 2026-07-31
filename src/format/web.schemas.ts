@@ -119,7 +119,14 @@ export const getGlobalAchievementsOutput = z.strictObject({
 });
 
 export const getGameAchievementsOutput = z.strictObject({
-  game: z.string().nullable(),
+  game: z
+    .string()
+    .nullable()
+    .describe(
+      "The game's name from Valve's achievement schema — occasionally an internal dev " +
+        "codename rather than the store title (e.g. 'Fiber' for Persona 5 Royal). Treat the " +
+        "appid you passed as the reliable identifier, or get the store title from get_game.",
+    ),
   total: z.number(),
   returned: z.number(),
   achievements: z.array(

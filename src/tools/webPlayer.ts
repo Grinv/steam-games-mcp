@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
 import { READ_ONLY, appid } from "./common.js";
-import { requireKey as makeRequireKey, steamid, steamIdTool } from "./webShared.js";
+import { requireKey as makeRequireKey, otherSteamid, steamid, steamIdTool } from "./webShared.js";
 import { notFoundReason, withNotFound } from "../format/shared.schemas.js";
 import { recommendedGamesFound } from "../format/store.schemas.js";
 import { ACHIEVEMENTS_MAX } from "../format/web.js";
@@ -158,13 +158,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "compare against yourself (STEAM_ID).",
       inputSchema: z.strictObject({
         steamid,
-        other_steamid: z
-          .string()
-          .regex(
-            /^\d{17}$/,
-            "A SteamID64 is 17 digits. Use resolve_vanity_url to convert a custom profile name.",
-          )
-          .describe("The other player's 17-digit SteamID64 to compare against."),
+        other_steamid: otherSteamid,
       }),
       outputSchema: comparePlayersOutput,
       annotations: READ_ONLY,

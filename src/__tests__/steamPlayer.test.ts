@@ -73,6 +73,35 @@ describe("get_owned_games", () => {
     assert.match(s.reason, /private/i);
   });
 
+  // Regression: a steamid pasted with surrounding whitespace (e.g. copied from a
+  // profile URL or with a trailing newline) is trimmed before validation and
+  // before the upstream call — matching the vanity field and the STEAM_ID env
+  // var (commit e86eb29) — instead of hard-failing the \d{17} schema.
+  test("trims surrounding whitespace from a padded steamid", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    const res = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "  76561197960287930  " },
+    });
+    assert.equal(res.isError, undefined);
+    assert.equal((res.structuredContent as { game_count: number }).game_count, 2);
+    assert.ok(
+      mock.calls.some((c) => c.url.includes("steamid=76561197960287930") && !c.url.includes("%20")),
+    );
+  });
+
+  // The \d{17} shape alone isn't enough: an all-zeros id is below the
+  // individual-account base (76561197960265728) and can never be a real
+  // profile, so it's rejected at the schema boundary, never sent upstream.
+  test("rejects a 17-digit steamid below the individual-account base", async (t) => {
+    const { client } = await setupServer(t, ENV, router);
+    const res = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "00000000000000000" },
+    });
+    assert.equal(res.isError, true);
+  });
+
   test("get_owned_games: check_appids on a private profile reports unknown, not a false owned:false", async (t) => {
     // Regression: ownership is genuinely unknown when the profile is private —
     // the old behavior claimed owned:false for every checked appid, which
