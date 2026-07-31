@@ -41,9 +41,9 @@ Purpose Clarity — double-check those two first on any new or edited tool.
      review, with the actual response observed;
    - direct reading of the exact function implementing the behavior, when
      it's deterministic code logic rather than an upstream API's quirk (e.g.
-     `format/store.ts`'s `summarizeItems`/`getPrices` marking an unknown
-     appid `available:false` instead of erroring — that's this repo's own
-     code, not Valve's).
+     `format/store.ts`'s `summarizeItems` and `format/storefront.ts`'s
+     `summarizePrices` marking an unknown appid `available:false` instead of
+     erroring — that's this repo's own code, not Valve's).
 
    If you can't tick one of these, don't write the claim. "This is probably
    how it works by analogy with a similar field" is exactly how a sibling
@@ -58,14 +58,13 @@ Purpose Clarity — double-check those two first on any new or edited tool.
    behavior must match what B actually says and does — and if A and B share
    the exact same underlying behavior, both should disclose it, not just
    whichever one you happened to edit first. Concretely in this repo:
-   `get_prices`'s description already states unavailable appids come back
-   `available:false` rather than being dropped; `get_items` hits the exact
-   same "unknown appid → `available:false`" path in `format/store.ts`
-   (`summarizeItems`) but its own description in `tools/webStore.ts` doesn't
-   say so yet — that's a real, currently-open gap this rubric would catch.
-   Named examples like this one in this file are live checklist items, not
-   historical color — verify each is still open and close it, don't read
-   past it as background while auditing something else.
+   `get_prices` and `get_items` hit the same "unknown appid →
+   `available:false`" path (`summarizePrices` in `format/storefront.ts` /
+   `summarizeItems` in `format/store.ts`), so both descriptions must disclose
+   it — a fix that updated only one is exactly the inconsistency this rubric
+   catches (that gap existed here once and is now closed). Treat any named
+   example in this file as a live checklist item, not historical color:
+   re-verify it's still open before citing it, and close it if it isn't.
    When you edit one description, re-read every sibling description that
    cross-references it or shares its underlying data — fixing A while
    leaving a now-stale or now-inconsistent claim in B is still a bug you

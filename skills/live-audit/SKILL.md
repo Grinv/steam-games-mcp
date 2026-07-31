@@ -303,23 +303,16 @@ there) for:
   cleanly through the shared key-check helper when `STEAM_API_KEY` is unset,
   or a keyless-capable tool in `src/tools/webStore.ts`/`storefront.ts` that
   accidentally requires the key when it shouldn't (re-check against AGENTS.md's
-  "Keyless caveat" list of methods that work without one). Also check the
-  _error-message_ side of the same list: `HttpClient`'s `hasCredentials` is
-  fixed per client instance (`lib/http.ts`), not per request — a
-  keyless-capable method that sends the key when present (`web.ts`'s
-  "keyless-capable" group) needs its own call site to override
-  `hasCredentials: false`, or a 403 there gets misattributed to "the
-  configured credentials are likely invalid" whenever any key is configured.
-  Confirmed one sibling in that exact group (`getGlobalAchievements`) already
-  had a fix; four others (`getNews`, `getCurrentPlayers`, `getFollowedGames`,
-  `#getWishlistLight`) didn't, until this pass added the same override to all
-  five — diff every method under that comment block, not just one. Then check
-  every OTHER client class sharing the same underlying `#get`/`HttpClient`
-  binding, not just the same file: `StoreServiceClient` (`storeService.ts`)
-  binds `SteamWebClient#get` too but has its own `Get` type, and that type
-  initially had no `opts` param at all — so `get_items`/`discover_games`/
-  `get_recommended_games`/`get_wishlist`'s detailed path kept the bug live
-  through a whole extra release after the `web.ts` methods were fixed.
+  "Keyless caveat" list). Also check the _error-message_ side: `HttpClient`'s
+  `hasCredentials` is fixed per client instance (`lib/http.ts`), not per
+  request, so every keyless-capable method must override `hasCredentials:
+false` at its own call site — otherwise a 403 there gets misattributed to
+  "the configured credentials are likely invalid" whenever any key is set.
+  Diff every method under `web.ts`'s "keyless-capable" comment block, not just
+  one (a past pass fixed one of five and missed four), and every OTHER client
+  sharing the same `#get`/`HttpClient` binding: `StoreServiceClient`
+  (`storeService.ts`) has its own `Get` type that once lacked an `opts` param,
+  keeping the bug live a whole release past the `web.ts` fix.
 - Tool failures that don't go through `guard()`/`result.ts` — AGENTS.md
   requires every tool failure return `{ isError: true }`, never a raw throw.
 - `.clients/` files doing any response-shaping themselves instead of leaving
@@ -330,22 +323,16 @@ there) for:
   (reserved for the MCP protocol channel).
 - **A `Promise.allSettled`/try-catch newly added so one item's failure doesn't
   sink an entire batch call (e.g. `find_friends_who_own`'s per-friend
-  ownership lookup)** — this bug class needs a source-level trace, not a live
-  call, because you can't reliably make one specific sub-request fail on cue
-  against the real API. Check two things: (1) does the rejection's raw
-  `.message` reach agent-facing output unsanitized (route it through
-  `messageFor()`/an equivalent sanitizer the same way a top-level tool
-  failure does — never embed `r.reason.message` directly, since an
-  `ApiError.message` can carry up to 500 raw characters of an upstream error
-  body per `lib/http.ts`'s `toHttpError`, e.g. an HTML error page); (2) is
-  that `Promise.allSettled` call itself still wrapped in an _outer_
-  `Promise.all` alongside another call that can reject (e.g. a sibling
-  batch/chunk-fetch helper like `#playerSummaries`) — if so, the outer
-  `Promise.all` silently defeats the entire fix the moment that other call
-  fails. Grep every sibling function in the same file doing similar
-  batching/chunking for the identical un-fixed bug — a resilience fix applied
-  to one `Promise.all` site often has an identical, still-broken twin call
-  one function away that was never touched.
+  lookup)** — this bug class needs a source-level trace, not a live call (you
+  can't make one specific sub-request fail on cue). Check two things: (1) the
+  rejection's raw `.message` must route through `messageFor()` (or an
+  equivalent sanitizer), never embedded as `r.reason.message` directly — an
+  `ApiError.message` can carry up to 500 raw chars of an upstream body per
+  `lib/http.ts`'s `toHttpError` (e.g. an HTML error page); (2) the `allSettled`
+  must not sit inside an _outer_ `Promise.all` alongside another call that can
+  reject (e.g. `#playerSummaries`), which silently defeats the whole fix the
+  moment that call fails. Grep every sibling batching/chunking function in the
+  same file for the identical un-fixed twin.
 
 ## 5. Docs/metadata consistency
 

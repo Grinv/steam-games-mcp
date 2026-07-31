@@ -72,8 +72,17 @@ second states it and stops.
    - _Borderline_: a refactor or internal fix that changes real behavior (e.g.
      a rate-limiter edge case, a cache-dedup bug) still gets an entry — describe
      the user-visible effect, not the refactor.
-3. **Group**: commits belonging to the same logical change collapse into one
-   bullet — don't enumerate every commit separately.
+3. **Group, but also split**: commits belonging to the same logical change
+   collapse into one bullet — don't enumerate every commit separately. The
+   opposite mistake is just as common and easier to miss: **one commit can
+   still contain two distinct user-facing facts** (e.g. "relax title/body to
+   required-only-on-create" _and_ "disclose mediaCategories is a full
+   replace" in the same commit). Summarizing "what this commit did" as a
+   single sentence joined with "also"/";" is exactly how the ~150-char gut-check
+   above gets blown past — it feels natural because it mirrors the commit
+   message, not because it's one fact. Give each distinct fact its own bullet,
+   linking the same commit from both. Confirmed live: an entry built this way
+   measured 262 chars against the ~150 target.
 4. **Rewrite**: don't copy the commit title verbatim; restate the surviving
    change as one imperative, self-describing sentence per the Style rules above.
 5. **Link**: append each backing commit as a short-hash link
