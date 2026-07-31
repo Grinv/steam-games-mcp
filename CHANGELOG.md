@@ -26,6 +26,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fix `get_global_achievements`/`get_game_achievements` throwing on a non-numeric upstream percent instead of falling back to a safe default. ([8ec0dc7](https://github.com/Grinv/steam-games-mcp/commit/8ec0dc7))
 - Fix `get_wishlist` not disclosing that its platform/Deck/OS/Machine/Frame filters also imply `include_details`, same as country/language. ([61c7ae7](https://github.com/Grinv/steam-games-mcp/commit/61c7ae7))
 - Fix `get_game`'s description missing its highlighted-achievements sample (`achievements_highlighted`) from the category list. ([61c7ae7](https://github.com/Grinv/steam-games-mcp/commit/61c7ae7))
+- Fix `search_games`'s description not disclosing that Steam returns only its first page of matches (~10, no pagination), so `total` is not the full catalog match count.
+- Fix `get_recommended_games`'s description not naming the fixed scan sizes (30 most-played games sampled, 300-entry catalog pool) behind "can return fewer than `count`", nor its second `found:false` case (too few played games with resolvable tags).
 
 ## [0.12.1] - 2026-07-30
 

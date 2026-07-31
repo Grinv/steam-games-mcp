@@ -47,9 +47,9 @@ const storeCardDataRequest = (tagCount: number) => ({
 // getRecommendedGames tuning: how many of the player's most-played owned games
 // feed the tag-weighting step, how many of the resulting top tags are surfaced
 // as `based_on_tags`, and how big a catalog page is scored against them.
-const FAVORITE_TAG_SAMPLE_SIZE = 30;
+export const FAVORITE_TAG_SAMPLE_SIZE = 30;
 const BASED_ON_TAGS_LIMIT = 6;
-const RECOMMENDATION_POOL_SIZE = 300;
+export const RECOMMENDATION_POOL_SIZE = 300;
 
 export class StoreServiceClient {
   readonly #get: Get;

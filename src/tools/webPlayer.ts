@@ -6,10 +6,11 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
-import { READ_ONLY, appid } from "./common.js";
+import { READ_ONLY, appid, language } from "./common.js";
 import { requireKey as makeRequireKey, otherSteamid, steamid, steamIdTool } from "./webShared.js";
 import { notFoundReason, withNotFound } from "../format/shared.schemas.js";
 import { recommendedGamesFound } from "../format/store.schemas.js";
+import { FAVORITE_TAG_SAMPLE_SIZE, RECOMMENDATION_POOL_SIZE } from "../clients/storeService.js";
 import { FRIENDS_MAX, FRIENDS_WHO_OWN_MAX } from "../format/web.js";
 import { ACHIEVEMENTS_MAX } from "../format/webAchievements.js";
 import {
@@ -59,12 +60,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "get_player_achievements. Get the appid from search_games.",
       inputSchema: z.strictObject({
         appid,
-        language: z
-          .string()
-          .trim()
-          .min(2)
-          .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
-          .optional(),
+        language: language.describe(
+          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE.",
+        ),
       }),
       outputSchema: getGameAchievementsOutput,
       annotations: READ_ONLY,
@@ -268,11 +266,13 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "needs YOU to name the filters) — this infers taste from the player's WHOLE library instead, " +
         "for 'what should I play next' / 'recommend me something'. For 'something like THIS ONE " +
         "game' (a single named title), get its tags via get_items and call discover_games with them " +
-        "instead. Note: candidates are scored from a large but fixed-size catalog scan, so a heavy " +
-        "exclude_tags/min_discount combination can return fewer than `count` — there's no larger scan " +
-        "to fall back to. Requires STEAM_API_KEY and a public profile with game-details visible " +
-        "(same requirement as get_owned_games) — found:false is also returned if the player owns " +
-        "no games at all to base recommendations on.",
+        "instead. Note: taste is weighted from only the player's " +
+        `${FAVORITE_TAG_SAMPLE_SIZE} most-played owned games, and candidates come from a fixed ` +
+        `${RECOMMENDATION_POOL_SIZE}-entry catalog scan, so a heavy exclude_tags/min_discount ` +
+        "combination can return fewer than `count` — there's no larger scan to fall back to. " +
+        "Requires STEAM_API_KEY and a public profile with game-details visible (same requirement as " +
+        "get_owned_games) — found:false is also returned if the player owns no games at all, or if too " +
+        "few of their played games have resolvable tags to build a taste profile.",
       inputSchema: z.strictObject({
         steamid,
         count: z
@@ -324,12 +324,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       inputSchema: z.strictObject({
         steamid,
         appid,
-        language: z
-          .string()
-          .trim()
-          .min(2)
-          .describe("Language for achievement names/descriptions; overrides STEAM_LANGUAGE.")
-          .optional(),
+        language: language.describe(
+          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE.",
+        ),
       }),
       outputSchema: getPlayerAchievementsOutput,
       annotations: READ_ONLY,

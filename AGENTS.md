@@ -72,7 +72,10 @@ npm run inspector      # run under the MCP Inspector
   `lib/http.ts`, and `import.meta.dirname` in the `scripts/*.mjs` helpers —
   need 20.4+/20.3+/20.11+ respectively, so `>=20` alone would understate the
   real requirement); tsup targets `node20` (esbuild's Node targets are
-  major-version-only, so this doesn't need to track the patch floor).
+  major-version-only, so this doesn't need to track the patch floor). `.nvmrc`
+  pins the maintainer's local dev version (currently `22`) for convenience, not
+  the supported floor — CI's `node: [20, 22, 24]` matrix is what actually
+  enforces `>=20.11`.
 - **Never write to stdout** — it is the MCP protocol channel. Use the logger,
   which writes to **stderr only** and redacts credentials (the Web API key
   travels as a `key` query param). There is no MCP `logging` capability and no
