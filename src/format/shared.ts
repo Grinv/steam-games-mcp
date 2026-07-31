@@ -21,7 +21,14 @@ export const PRIVATE_PROFILE_REASON =
   "Game details = Public, or this data can't be read.";
 
 export function names(list: { description?: string; name?: string }[] | undefined): string[] {
-  return (list ?? []).map((x) => x.description ?? x.name).filter((n): n is string => Boolean(n));
+  // Dedup: Steam repeats entries in some lists (e.g. a game's `categories`
+  // carries "Steam Workshop"/controller-support labels twice), which would
+  // otherwise leak duplicates into get_game's genres/categories.
+  return [
+    ...new Set(
+      (list ?? []).map((x) => x.description ?? x.name).filter((n): n is string => Boolean(n)),
+    ),
+  ];
 }
 
 // Steam stores playtime in minutes; expose hours (1dp) which agents reason about.

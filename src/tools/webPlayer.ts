@@ -16,14 +16,16 @@ import {
   comparePlayersFound,
   findFriendsWhoOwnFound,
   friendListFound,
-  getGameAchievementsOutput,
   getOwnedGamesOutput,
   getPlayerBansOutput,
   getPlayerSummaryOutput,
   getRecentlyPlayedOutput,
-  playerAchievementsFound,
   vanityFound,
 } from "../format/web.schemas.js";
+import {
+  getGameAchievementsOutput,
+  playerAchievementsFound,
+} from "../format/webAchievements.schemas.js";
 
 // Each of these tools has a found:false shape parsed against the generic
 // `notFoundReason` fragment — the union with the summarizer's own found:true
@@ -260,9 +262,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "doesn't outrank a better one, then ranked against a broad catalog page, excluding anything " +
         "already owned. `based_on_tags` shows which of the player's own top tags drove the ranking; " +
         "each result carries `matched_tags` and `match_score` alongside the usual price/review/compat " +
-        "card. Set exclude_tags to steer away from a genre despite it matching by playtime (e.g. " +
-        "'recommend me something except Souls-like'), or min_discount for 'recommend something on a " +
-        "good discount' (e.g. 'suggest games on sale, not RPGs or shooters' → " +
+        "card. Set exclude_tags to steer away from a genre despite it matching by playtime, and/or " +
+        "min_discount for a minimum deal size (e.g. 'suggest games on sale, not RPGs or shooters' → " +
         "exclude_tags:['RPG','Shooter','FPS'], min_discount:30). Different from discover_games (which " +
         "needs YOU to name the filters) — this infers taste from the player's WHOLE library instead, " +
         "for 'what should I play next' / 'recommend me something'. For 'something like THIS ONE " +

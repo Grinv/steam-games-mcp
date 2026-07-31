@@ -118,6 +118,14 @@ test("minReview / minReviews compare on the raw summary (missing = excluded)", (
   assert.ok(!byCount(item()));
 });
 
+test("minReview: 0 is a no-op — it must NOT drop games with no review summary", () => {
+  // A 0 threshold means "no minimum". The missing-data (-1) sentinel would
+  // fail `-1 < 0`, so a brand-new game with no reviews must still pass.
+  const keep = storeItemFilter({ minReview: 0 });
+  assert.ok(keep(item())); // no reviews at all → still kept
+  assert.ok(keep(item({ reviews: { summary_filtered: { percent_positive: 0 } } }))); // all-negative → kept
+});
+
 test("minDiscount / onSaleOnly filter on discount, and minDiscount overrides onSaleOnly", () => {
   const disc = (discount_pct: number) => item({ best_purchase_option: { discount_pct } });
   const min = storeItemFilter({ minDiscount: 50 });

@@ -20,6 +20,7 @@ import {
   getItemsOutput,
   recommendedGamesFound,
   storeCardSchema,
+  vrSupportSchema,
   wishlistDetailedFound,
 } from "./store.schemas.js";
 
@@ -177,10 +178,10 @@ function compat(cat?: number): z.infer<typeof compatBadgeSchema> {
 // with a VR headset but also playable flatscreen; "required": VR-only, no
 // flatscreen mode. Steam omits vr_support (or its sub-fields) entirely rather
 // than sending explicit false, hence the `?? false` defaults below.
-function vrSupport(p: StoreItem["platforms"]): "none" | "supported" | "required" {
+function vrSupport(p: StoreItem["platforms"]): z.infer<typeof vrSupportSchema> {
   const vr = p?.vr_support;
-  if (!vr?.vrhmd) return "none";
-  return vr.vrhmd_only ? "required" : "supported";
+  if (!vr?.vrhmd) return vrSupportSchema.enum.none;
+  return vr.vrhmd_only ? vrSupportSchema.enum.required : vrSupportSchema.enum.supported;
 }
 // Map a user-facing compat filter to the minimum acceptable category: "verified"
 // keeps only Verified; "playable" keeps Playable or Verified (i.e. "runs on it").
@@ -331,7 +332,14 @@ export function storeItemFilter(f: StoreFilters): (it: StoreItem) => boolean {
       return false;
     if (wantTags && !matchesAllTags(it.tags, f.tagMap, wantTags)) return false;
     const rev = it.reviews?.summary_filtered;
-    if (typeof f.minReview === "number" && (rev?.percent_positive ?? -1) < f.minReview)
+    // minReview > 0 guard: a 0 threshold means "no minimum", so it must NOT
+    // drop games that carry no review summary yet (the -1 missing-data sentinel
+    // would otherwise fail 0). Mirrors minReviews' ?? 0 no-op-at-zero behavior.
+    if (
+      typeof f.minReview === "number" &&
+      f.minReview > 0 &&
+      (rev?.percent_positive ?? -1) < f.minReview
+    )
       return false;
     if (typeof f.minReviews === "number" && (rev?.review_count ?? 0) < f.minReviews) return false;
     const disc = it.best_purchase_option?.discount_pct ?? 0;
@@ -448,7 +456,7 @@ export function summarizeWishlistDetailed(
     (i): i is typeof i & { store_item: StoreItem } => i.store_item !== undefined,
   );
   const keep = storeItemFilter({ ...opts, tagMap });
-  const cards: Record<string, unknown>[] = enriched
+  const cards = enriched
     .filter(
       (i): i is typeof i & { store_item: StoreItemWithAppid } =>
         typeof i.store_item.appid === "number" && keep(i.store_item),
@@ -461,9 +469,7 @@ export function summarizeWishlistDetailed(
   // Rank by discount when a discount filter is active; else keep wishlist priority.
   const byDiscount = opts.onSaleOnly || typeof opts.minDiscount === "number";
   cards.sort((a, b) =>
-    byDiscount
-      ? (b.discount_pct as number) - (a.discount_pct as number)
-      : ((a.priority as number | null) ?? 1e9) - ((b.priority as number | null) ?? 1e9),
+    byDiscount ? b.discount_pct - a.discount_pct : (a.priority ?? 1e9) - (b.priority ?? 1e9),
   );
   const { included, returned } = capList(cards, WISHLIST_DETAIL_MAX);
   return wishlistDetailedFound.parse({
@@ -519,6 +525,7 @@ export function summarizeRecommendations(
   max: number,
   basedOnTags: string[],
   excludeTags: string[] = [],
+  minDiscount?: number,
 ): z.infer<typeof recommendedGamesFound> {
   const excludeLower = excludeTags.map((t) => t.toLowerCase());
   const scored = candidates
@@ -528,7 +535,10 @@ export function summarizeRecommendations(
         typeof it.appid === "number" &&
         isBaseGame(it) &&
         !ownedAppids.has(it.appid) &&
-        !(excludeLower.length && matchesAnyTag(it.tags, tagMap, excludeLower)),
+        !(excludeLower.length && matchesAnyTag(it.tags, tagMap, excludeLower)) &&
+        // Client-side discount backstop: like summarizeDiscover, Steam's
+        // server-side min_discount_percent no-ops at 100, so re-check here.
+        (minDiscount === undefined || (it.best_purchase_option?.discount_pct ?? 0) >= minDiscount),
     )
     .map((it) => {
       const tags = resolveTags(it.tags, tagMap);

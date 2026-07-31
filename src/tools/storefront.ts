@@ -25,8 +25,8 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Search games",
       description:
         "Search the Steam store by title — term can be partial or approximate, not an exact match; " +
-        "returns matches with their appid (needed by the other game tools), price, Metacritic score " +
-        "and platforms. No API key required.",
+        "returns matches with their appid (needed by the other game tools), price, Metacritic score, " +
+        "platforms, type (game/dlc/…) and a clickable store_url. No API key required.",
       inputSchema: z.strictObject({
         term: z.string().trim().nonempty().describe("Game title to search for."),
         country,

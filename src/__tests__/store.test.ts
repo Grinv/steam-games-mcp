@@ -169,6 +169,23 @@ test("summarizeDiscover drops DLC/soundtracks (related_items.parent_appid set), 
   );
 });
 
+test("summarizeDiscover re-checks minDiscount client-side (backstop for Steam's server-side no-op at 100)", () => {
+  // Steam's server-side min_discount_percent filter silently returns the full
+  // catalog at exactly 100, so summarizeDiscover must re-filter on discount_pct
+  // itself — otherwise full-price games leak through as "deals".
+  const items: StoreItem[] = [
+    { appid: 1, name: "Full price", best_purchase_option: { discount_pct: 0 } },
+    { appid: 2, name: "Real deal", best_purchase_option: { discount_pct: 80 } },
+  ];
+  const s = summarizeDiscover({ response: { store_items: items } }, { minDiscount: 50 }) as {
+    deals: { appid: number }[];
+  };
+  assert.deepEqual(
+    s.deals.map((d) => d.appid),
+    [2],
+  );
+});
+
 describe("summarizeWishlistDetailed", () => {
   test("empty wishlist → found:false with a private/empty reason", () => {
     const s = summarizeWishlistDetailed({ response: { items: [] } }) as {
@@ -355,6 +372,40 @@ describe("summarizeRecommendations", () => {
     assert.deepEqual(
       s.recommendations.map((r) => r.appid),
       [600],
+    );
+  });
+
+  test("min_discount re-checks discount client-side (backstop for Steam's server-side no-op at 100)", () => {
+    // Same class as the discover_games fix: Steam's server-side price filter
+    // no-ops at 100, so a full-price candidate must be dropped here too.
+    const candidates: StoreItem[] = [
+      {
+        appid: 910,
+        name: "Full price roguelike",
+        tags: [{ tagid: 1, weight: 900 }],
+        best_purchase_option: { discount_pct: 0 },
+      },
+      {
+        appid: 920,
+        name: "Discounted roguelike",
+        tags: [{ tagid: 1, weight: 900 }],
+        best_purchase_option: { discount_pct: 60 },
+      },
+    ];
+    const tagWeights = new Map([["Roguelike", 10]]);
+    const s = summarizeRecommendations(
+      candidates,
+      tagWeights,
+      new Set(),
+      RECO_TAG_MAP,
+      10,
+      ["Roguelike"],
+      [], // excludeTags
+      50, // minDiscount
+    ) as { recommendations: { appid: number }[] };
+    assert.deepEqual(
+      s.recommendations.map((r) => r.appid),
+      [920],
     );
   });
 

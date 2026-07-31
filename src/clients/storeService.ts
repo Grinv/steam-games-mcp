@@ -238,6 +238,7 @@ export class StoreServiceClient {
       count,
       basedOnTags,
       opts.excludeTags,
+      opts.minDiscount,
     );
   }
 
@@ -287,6 +288,11 @@ export class StoreServiceClient {
       p.tags,
     );
     return summarizeDiscover(res, {
+      // Passed through so summarizeDiscover's storeItemFilter re-checks the
+      // discount client-side: Steam's server-side min_discount_percent filter
+      // silently no-ops at exactly 100 (returns the full catalog), so without
+      // this backstop min_discount:100 would leak full-price games.
+      minDiscount: p.minDiscount,
       minReview: p.minReview,
       minReviews: p.minReviews,
       steamDeck: p.steamDeck,

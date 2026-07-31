@@ -1240,6 +1240,7 @@ test("get_player_bans reports ban status by steamid", async (t) => {
     game_ban_count: number;
     community_banned: boolean;
     economy_ban: string | null;
+    days_since_last_ban: number | null;
   };
   assert.equal(s.found, true);
   assert.equal(s.vac_banned, true);
@@ -1247,4 +1248,34 @@ test("get_player_bans reports ban status by steamid", async (t) => {
   assert.equal(s.game_ban_count, 0);
   assert.equal(s.community_banned, false);
   assert.equal(s.economy_ban, null); // EconomyBan "none" → null
+  assert.equal(s.days_since_last_ban, 100); // a real ban exists → surfaced
+});
+
+test("get_player_bans: days_since_last_ban is null for a never-banned player", async (t) => {
+  // Steam returns DaysSinceLastBan: 0 for players with no ban history; surfacing
+  // it verbatim reads as "banned today", so a clean record must report null.
+  const cleanRouter = (url: string) =>
+    url.includes("GetPlayerBans")
+      ? jsonResponse({
+          players: [
+            {
+              SteamId: "76561197960287930",
+              CommunityBanned: false,
+              VACBanned: false,
+              NumberOfVACBans: 0,
+              NumberOfGameBans: 0,
+              DaysSinceLastBan: 0,
+              EconomyBan: "none",
+            },
+          ],
+        })
+      : router(url);
+  const { client } = await setupServer(t, ENV, cleanRouter);
+  const res = await client.callTool({
+    name: "get_player_bans",
+    arguments: { steamid: "76561197960287930" },
+  });
+  const s = res.structuredContent as { days_since_last_ban: number | null; vac_banned: boolean };
+  assert.equal(s.vac_banned, false);
+  assert.equal(s.days_since_last_ban, null);
 });

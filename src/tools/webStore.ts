@@ -35,9 +35,9 @@ import {
   getCurrentPlayersOutput,
   getFollowedGamesOutput,
   getGameNewsOutput,
-  getGlobalAchievementsOutput,
   wishlistLightFound,
 } from "../format/web.schemas.js";
+import { getGlobalAchievementsOutput } from "../format/webAchievements.schemas.js";
 
 // get_wishlist dispatches to the light summarizer (format/web.ts) or the
 // detailed one (format/store.ts) depending on the given filters — this union
@@ -132,9 +132,8 @@ export function registerStoreWebTools(
       description:
         "Find games across the whole Steam catalog (keyless), filtered by ANY combination of: " +
         "discount (min_discount — for 'what's on sale'), release recency (released_after / " +
-        "released_within_days — for 'new games'), hardware compatibility (steam_deck for Steam Deck, " +
-        "steam_os for SteamOS in general, steam_machine for the Steam Machine console specifically, " +
-        "steam_frame for the Steam Frame VR headset), " +
+        "released_within_days — for 'new games'), hardware compatibility " +
+        "(steam_deck/steam_os/steam_machine/steam_frame — see each field's own description), " +
         "native OS build (platform — windows/mac/linux), review quality (min_review / min_reviews), " +
         "and user tags (tags — e.g. ['Roguelike', " +
         "'Deckbuilding'] for 'games like X'). Each result returns price/discount, review %, all four " +
@@ -142,17 +141,16 @@ export function registerStoreWebTools(
         "store_url, discount_end (when a deal expires) and release date in one call. Examples: '>80% off with 90%+ " +
         "reviews' → set min_discount + min_review; 'recent well-reviewed games that run on Steam Deck' " +
         "→ set released_within_days + steam_deck + min_review; 'roguelike deckbuilders on sale' → " +
-        "tags:['Roguelike','Deckbuilding'] + min_discount; 'games that run on the Steam Machine' → " +
-        "steam_machine; 'games that run on SteamOS' → steam_os. " +
+        "tags:['Roguelike','Deckbuilding'] + min_discount. " +
         "No appids needed — unlike get_items, which prices a list you already have. For 'games like " +
         "X' from a SINGLE named title, get its tags via get_items and pass them here; for taste " +
         "inferred from the player's WHOLE library instead, use get_recommended_games (key-gated). " +
-        "Note: min_discount is filtered server-side, and setting released_after/released_within_days " +
-        "also excludes not-yet-released games server-side — but the actual date cutoff, plus compat, " +
-        "platform, review and tag filtering, have no server-side support in the Steam catalog API, so " +
-        "those are scanned popularity-first and applied afterward over that same window — great for " +
-        "popular titles; a niche match may fall outside the top `count` (raise count for stricter " +
-        "filters).",
+        "Note: min_discount is filtered server-side and re-checked client-side (so it holds at any " +
+        "value); setting released_after/released_within_days excludes not-yet-released games " +
+        "server-side, but the exact date cutoff — plus compat, platform, review and tag filtering — " +
+        "has no server-side support in the Steam catalog API, so those are scanned popularity-first " +
+        "and applied afterward over that same window — great for popular titles; a niche match may " +
+        "fall outside the top `count` (raise count for stricter filters).",
       inputSchema: z.strictObject({
         released_after: z
           .string()
@@ -298,8 +296,8 @@ export function registerStoreWebTools(
         "Set include_details for full store cards in ONE call (name, price/discount, review %, " +
         "Deck/SteamOS/Machine/Frame compat, vr_support, tags, release) — no need to follow up with " +
         "get_items. Narrow it in the SAME call with tags (e.g. ['Metroidvania']), platform (NATIVE " +
-        "windows/mac/linux build), steam_deck / steam_os / steam_machine / steam_frame (Proton " +
-        "compatibility, distinct from a native build), min_review, min_discount / on_sale_only, or " +
+        "windows/mac/linux build), steam_deck/steam_os/steam_machine/steam_frame (Proton " +
+        "compatibility — see each field), min_review, min_discount / on_sale_only, or " +
         "country / language. Any of these filters switches to the detailed card view, since the light " +
         "appid list has no price/tags/compat to filter on. Filters apply before the output cap " +
         `(the detailed card list returns at most ${WISHLIST_DETAIL_MAX} items), so a deeply-discounted niche match ` +

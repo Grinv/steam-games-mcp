@@ -13,7 +13,7 @@ import {
   getGameAchievementsOutput,
   getGlobalAchievementsOutput,
   playerAchievementsFound,
-} from "./web.schemas.js";
+} from "./webAchievements.schemas.js";
 
 // ---- Web API: player achievements -------------------------------------------
 

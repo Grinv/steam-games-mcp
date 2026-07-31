@@ -9,9 +9,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Reject a non-digit `min_discount`/`min_review` in the `deals_digest` prompt instead of interpolating a free-form value into the agent's instructions. ([8ec0dc7](https://github.com/Grinv/steam-games-mcp/commit/8ec0dc7))
+- Remove the inert `allowScripts` field from `package.json`: npm has no such install-script allowlist (it is a pnpm-only feature), so it granted no supply-chain protection while implying otherwise.
+- Trim repeated compat-field prose and redundant examples from the `discover_games`, `get_wishlist` and `get_recommended_games` descriptions, and note that `search_games` also returns `store_url` and `type`.
 
 ### Fixed
 
+- Fix `discover_games` and `get_recommended_games` returning the full, unfiltered catalog for `min_discount: 100`: Steam's server-side discount filter silently no-ops at exactly 100, so a client-side discount re-check now backstops it.
+- Fix `get_player_bans`'s `days_since_last_ban` reporting `0` (which reads as "banned today") for a player who has never been banned, instead of `null`.
+- Fix `discover_games` `min_review: 0` excluding games that carry no review summary yet, instead of treating 0 as "no minimum".
+- Fix `get_game` emitting duplicate `genres`/`categories` entries that Steam repeats in its store payload.
+- Stop the retry debug log from including request query strings (which carry player `steamid`/`vanity`); it now logs the endpoint path only.
 - Fix `steamid`/`other_steamid` failing on a value with stray whitespace instead of trimming it first, matching `vanity`/`STEAM_ID`. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))
 - Fix a 17-digit `steamid`/`other_steamid` below the individual-account base (e.g. all zeros) being sent upstream instead of rejected up front. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))
 - Fix `get_game_reviews`'s `positive_pct` reporting `null` instead of `0` for an all-negative game, no longer conflating 0% positive with no data. ([b97a91a](https://github.com/Grinv/steam-games-mcp/commit/b97a91a))

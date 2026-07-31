@@ -1,7 +1,9 @@
 // Zod schemas for format/web.ts's summarizers. Each exported summarizer builds
 // its return value via `schema.parse({...})` (see web.ts), so the schema is
 // the single source of truth for its shape — see storefront.schemas.ts for the
-// full rationale. `z.strictObject()` throughout. Several tools' `found:false` branches
+// full rationale. (The three achievement-list schemas live in their own
+// co-located webAchievements.schemas.ts alongside format/webAchievements.ts.)
+// `z.strictObject()` throughout. Several tools' `found:false` branches
 // are actually thrown by the CLIENT layer (clients/web.ts, clients/storeService.ts)
 // before a summarizer ever runs (a private profile/friends list, an empty
 // owned-library, ...) — those parse against the shared `notFoundReason`
@@ -22,6 +24,10 @@ export const personaStates = [
   "looking to play",
 ] as const;
 
+// format/web.ts's summarizePlayer maps communityvisibilitystate to one of these
+// via this same schema's .enum, so the label set lives in one place.
+export const visibilitySchema = z.enum(["public", "private"]);
+
 export const getPlayerSummaryOutput = z.discriminatedUnion("found", [
   z.strictObject({ found: z.literal(false) }),
   z.strictObject({
@@ -30,7 +36,7 @@ export const getPlayerSummaryOutput = z.discriminatedUnion("found", [
     name: z.string().nullable(),
     real_name: z.string().nullable(),
     state: z.enum(personaStates),
-    visibility: z.enum(["public", "private"]),
+    visibility: visibilitySchema,
     country: z.string().nullable(),
     level: z.number().nullable(),
     created: z.string().nullable(),
@@ -93,52 +99,6 @@ export const getRecentlyPlayedOutput = z.discriminatedUnion("found", [
     games: z.array(ownedGame),
   }),
 ]);
-
-export const playerAchievementsFound = z.strictObject({
-  found: z.literal(true),
-  game: z.string().nullable(),
-  total: z.number(),
-  unlocked: z.number(),
-  completion_pct: z.number().nullable(),
-  returned: z.number(),
-  achievements: z.array(
-    z.strictObject({
-      name: z.string().optional(),
-      achieved: z.boolean(),
-      unlocked_at: z.string().nullable(),
-    }),
-  ),
-});
-
-export const getGlobalAchievementsOutput = z.strictObject({
-  count: z.number(),
-  returned: z.number(),
-  achievements: z.array(
-    z.strictObject({ name: z.string().optional(), percent: z.number().nullable() }),
-  ),
-});
-
-export const getGameAchievementsOutput = z.strictObject({
-  game: z
-    .string()
-    .nullable()
-    .describe(
-      "The game's name from Valve's achievement schema — occasionally an internal dev " +
-        "codename rather than the store title (e.g. 'Fiber' for Persona 5 Royal). Treat the " +
-        "appid you passed as the reliable identifier, or get the store title from get_game.",
-    ),
-  total: z.number(),
-  returned: z.number(),
-  achievements: z.array(
-    z.strictObject({
-      api_name: z.string().optional(),
-      name: z.string().nullable(),
-      description: z.string().nullable(),
-      hidden: z.boolean(),
-      global_unlock_pct: z.number().nullable(),
-    }),
-  ),
-});
 
 export const getGameNewsOutput = z.strictObject({
   items: z.array(

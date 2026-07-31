@@ -33,6 +33,7 @@ import {
   getRecentlyPlayedOutput,
   personaStates,
   vanityFound,
+  visibilitySchema,
   wishlistLightFound,
 } from "./web.schemas.js";
 
@@ -81,7 +82,10 @@ export function summarizePlayer(
     name: p.personaname ?? null,
     real_name: p.realname || null,
     state: personaStates[p.personastate ?? 0] ?? "offline",
-    visibility: p.communityvisibilitystate === VISIBILITY_PUBLIC ? "public" : "private",
+    visibility:
+      p.communityvisibilitystate === VISIBILITY_PUBLIC
+        ? visibilitySchema.enum.public
+        : visibilitySchema.enum.private,
     country: p.loccountrycode || null,
     level: level ?? null,
     created: isoDay(p.timecreated),
@@ -357,15 +361,24 @@ export interface PlayerBansResponse {
 export function summarizePlayerBans(r: PlayerBansResponse): z.infer<typeof getPlayerBansOutput> {
   const p = r.players?.[0];
   if (!p) return getPlayerBansOutput.parse({ found: false });
+  const vacBanned = p.VACBanned ?? false;
+  const vacBanCount = p.NumberOfVACBans ?? 0;
+  const gameBanCount = p.NumberOfGameBans ?? 0;
+  const communityBanned = p.CommunityBanned ?? false;
+  const economyBan = p.EconomyBan && p.EconomyBan !== "none" ? p.EconomyBan : null;
+  // Steam returns DaysSinceLastBan: 0 for players who have NEVER been banned,
+  // which reads as "banned today". Only surface it when a ban actually exists.
+  const everBanned =
+    vacBanned || vacBanCount > 0 || gameBanCount > 0 || communityBanned || economyBan !== null;
   return getPlayerBansOutput.parse({
     found: true,
     steamid: p.SteamId,
-    vac_banned: p.VACBanned ?? false,
-    vac_ban_count: p.NumberOfVACBans ?? 0,
-    game_ban_count: p.NumberOfGameBans ?? 0,
-    community_banned: p.CommunityBanned ?? false,
-    economy_ban: p.EconomyBan && p.EconomyBan !== "none" ? p.EconomyBan : null,
-    days_since_last_ban: p.DaysSinceLastBan ?? null,
+    vac_banned: vacBanned,
+    vac_ban_count: vacBanCount,
+    game_ban_count: gameBanCount,
+    community_banned: communityBanned,
+    economy_ban: economyBan,
+    days_since_last_ban: everBanned ? (p.DaysSinceLastBan ?? null) : null,
   });
 }
 

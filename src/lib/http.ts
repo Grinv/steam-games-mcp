@@ -64,8 +64,11 @@ export class HttpClient {
         const apiErr = err instanceof ApiError ? err : toNetworkError(err);
         if (!apiErr.retryable || attempt >= retries) throw apiErr;
         const backoff = backoffMs(attempt, apiErr);
+        // Log the path only, never the query string — it can carry player
+        // identifiers (steamid/vanity) that redact() (credentials-only) leaves
+        // untouched. The endpoint alone is enough to debug a retry.
         this.#opts.logger.debug(
-          `retrying ${url} after ${backoff}ms (attempt ${attempt + 1}/${retries}, ${apiErr.code})`,
+          `retrying ${url.split("?")[0]} after ${backoff}ms (attempt ${attempt + 1}/${retries}, ${apiErr.code})`,
         );
         await delay(backoff);
         attempt += 1;

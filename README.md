@@ -31,7 +31,7 @@ Once it's connected, just ask your agent in natural language.
 "Which recent, well-reviewed games run on Steam Deck?"
 "What well-reviewed games run on SteamOS?"
 "Any games verified for the Steam Machine on sale?"
-"Any Steam Frame–Verified VR games on sale?"
+"Any Steam Frame-Verified VR games on sale?"
 "What's discounted on Steam's front page right now?"
 "Show me Steam's top sellers and newest releases."
 "Any recent patch notes for No Man's Sky?"

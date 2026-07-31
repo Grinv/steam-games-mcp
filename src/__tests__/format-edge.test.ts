@@ -37,6 +37,21 @@ describe("detailApp", () => {
     assert.deepEqual(d.content_descriptors, { ids: [], notes: null });
   });
 
+  test("categories/genres are deduplicated — Steam repeats some entries", () => {
+    // Steam's store payload lists e.g. "Steam Workshop" and controller-support
+    // labels twice; names() must collapse them so get_game doesn't ship dupes.
+    const d = detailApp({
+      categories: [
+        { description: "Steam Workshop" },
+        { description: "Steam Workshop" },
+        { description: "Co-op" },
+      ],
+      genres: [{ description: "Action" }, { description: "Action" }],
+    }) as Record<string, unknown>;
+    assert.deepEqual(d.categories, ["Steam Workshop", "Co-op"]);
+    assert.deepEqual(d.genres, ["Action"]);
+  });
+
   test("free DLC populates is_free price, base_game and stripped requirements", () => {
     const d = detailApp({
       steam_appid: 5,

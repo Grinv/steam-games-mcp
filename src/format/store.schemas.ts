@@ -12,6 +12,11 @@ import { z } from "zod";
 // steam_deck/steam_os/steam_machine/steam_frame field below.
 export const compatBadgeSchema = z.enum(["unknown", "unsupported", "playable", "verified"]);
 
+// store.ts's vrSupport() — single source of truth for the vr_support labels,
+// so the shaper's return type (z.infer) and values (.enum) can't drift from
+// what this output field accepts.
+export const vrSupportSchema = z.enum(["none", "supported", "required"]);
+
 // store.ts's baseCard() — fields common to every store card, independent of
 // how price is shaped (get_items, discover_games, get_wishlist's detailed
 // cards, get_recommended_games).
@@ -27,7 +32,7 @@ export const baseCardSchema = z.strictObject({
   steam_os: compatBadgeSchema,
   steam_machine: compatBadgeSchema,
   steam_frame: compatBadgeSchema,
-  vr_support: z.enum(["none", "supported", "required"]),
+  vr_support: vrSupportSchema,
   tags: z.array(z.string()),
   release_date: z.string().nullable(),
 });
