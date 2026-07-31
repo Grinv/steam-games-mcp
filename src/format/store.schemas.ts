@@ -12,6 +12,12 @@ import { z } from "zod";
 // steam_deck/steam_os/steam_machine/steam_frame field below.
 export const compatBadgeSchema = z.enum(["unknown", "unsupported", "playable", "verified"]);
 
+// The compat levels a user can FILTER by (discover_games / get_wishlist inputs
+// in tools/common.ts, and COMPAT_MIN in store.ts) — the badge set minus the two
+// levels there's no point filtering for. Derived from compatBadgeSchema so the
+// filter vocabulary and the badge vocabulary stay one source.
+export const compatFilterSchema = compatBadgeSchema.exclude(["unknown", "unsupported"]);
+
 // store.ts's vrSupport() — single source of truth for the vr_support labels,
 // so the shaper's return type (z.infer) and values (.enum) can't drift from
 // what this output field accepts.

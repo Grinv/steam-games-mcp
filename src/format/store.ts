@@ -16,6 +16,7 @@ import { wishlistNotFound } from "./shared.schemas.js";
 import {
   baseCardSchema,
   compatBadgeSchema,
+  compatFilterSchema,
   discoverGamesOutput,
   getItemsOutput,
   recommendedGamesFound,
@@ -185,7 +186,7 @@ function vrSupport(p: StoreItem["platforms"]): z.infer<typeof vrSupportSchema> {
 }
 // Map a user-facing compat filter to the minimum acceptable category: "verified"
 // keeps only Verified; "playable" keeps Playable or Verified (i.e. "runs on it").
-const COMPAT_MIN: Record<string, number> = { verified: 3, playable: 2 };
+const COMPAT_MIN: Record<z.infer<typeof compatFilterSchema>, number> = { verified: 3, playable: 2 };
 
 // User-facing native-platform name → the raw platforms.* boolean flag. "linux"
 // maps to steamos_linux (a native Linux/SteamOS build), NOT the SteamOS Proton
@@ -279,10 +280,10 @@ function storeCard(it: StoreItemWithAppid, tagMap?: TagMap): z.infer<typeof stor
 // getWishlistDetailed) — one place to add a 5th Valve compat dimension instead of
 // three copy-pasted signatures.
 export interface CompatFilters {
-  steamDeck?: string;
-  steamOs?: string;
-  steamMachine?: string;
-  steamFrame?: string;
+  steamDeck?: z.infer<typeof compatFilterSchema>;
+  steamOs?: z.infer<typeof compatFilterSchema>;
+  steamMachine?: z.infer<typeof compatFilterSchema>;
+  steamFrame?: z.infer<typeof compatFilterSchema>;
 }
 
 // Every filter discover_games and the wishlist detailed view apply, client-side,

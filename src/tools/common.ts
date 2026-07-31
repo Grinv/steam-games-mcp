@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { jsonResult, type ToolResult } from "../lib/result.js";
 import type { CompatFilters } from "../format/store.js";
+import { compatFilterSchema } from "../format/store.schemas.js";
 import { guard } from "./guard.js";
 
 export const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
@@ -44,30 +45,26 @@ export const platform = z
 // Compat (Proton) filters shared by discover_games and get_wishlist. These are
 // Valve's compatibility RATINGS (Proton/verification), distinct from `platform`
 // (a native build). 'verified' = that rating only; 'playable' = Playable or Verified.
-export const steamDeck = z
-  .enum(["playable", "verified"])
+export const steamDeck = compatFilterSchema
   .describe(
     "Steam Deck compatibility (runs via Proton): 'verified' = Deck-Verified only; " +
       "'playable' = Playable or Verified. Not a native Linux build — see `platform` for that.",
   )
   .optional();
-export const steamOs = z
-  .enum(["playable", "verified"])
+export const steamOs = compatFilterSchema
   .describe(
     "SteamOS compatibility — how well it runs on SteamOS in general (via Proton): 'verified' = " +
       "SteamOS-Verified only; 'playable' = Playable or Verified. For a NATIVE Linux build instead, " +
       "use platform:'linux'; for the Steam Machine console specifically, use steam_machine.",
   )
   .optional();
-export const steamMachine = z
-  .enum(["playable", "verified"])
+export const steamMachine = compatFilterSchema
   .describe(
     "Steam Machine (Valve's console) compatibility (via Proton): 'verified' = Steam-Machine-Verified " +
       "only; 'playable' = Playable or Verified. Its own rating, distinct from the general steam_os one.",
   )
   .optional();
-export const steamFrame = z
-  .enum(["playable", "verified"])
+export const steamFrame = compatFilterSchema
   .describe(
     "Steam Frame (VR headset) compatibility: 'verified' = Frame-Verified only; " +
       "'playable' = Playable or Verified.",
