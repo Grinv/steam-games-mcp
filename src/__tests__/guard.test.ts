@@ -19,6 +19,18 @@ test("guard converts a plain Error into an 'Unexpected error: <message>' result"
   assert.equal(r.content[0]!.text, "Unexpected error: boom");
 });
 
+test("guard redacts a credential that leaks into an unexpected error message", async () => {
+  // Invariant backstop: if a future change ever folds a key-bearing request URL
+  // into a thrown message, errorResult()'s redact() must strip it before it
+  // reaches the agent.
+  const r = await guard(() => {
+    throw new Error("fetch failed: https://api.steampowered.com/x?key=DEADBEEF&steamid=1");
+  });
+  assert.equal(r.isError, true);
+  assert.doesNotMatch(r.content[0]!.text, /DEADBEEF/);
+  assert.match(r.content[0]!.text, /key=\*\*\*/);
+});
+
 test("guard converts a thrown non-Error value (string/object) without crashing", async () => {
   const fromString = await guard(() => {
     throw "just a string";

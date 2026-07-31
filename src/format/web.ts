@@ -297,6 +297,17 @@ export interface GlobalAchievementsResponse {
   achievementpercentages?: { achievements?: { name?: string; percent?: number | string }[] };
 }
 
+// Steam sends `percent` as a JSON float, but the string-coercion branch below
+// means a non-numeric value would become NaN — and z.number() rejects NaN
+// (which is typeof "number"), throwing the whole summarizer. Coerce, then fall
+// back to `fallback` when the result isn't a finite number.
+function finitePercent(v: number | string | undefined, fallback: number): number;
+function finitePercent(v: number | string | undefined, fallback: null): number | null;
+function finitePercent(v: number | string | undefined, fallback: number | null): number | null {
+  const n = typeof v === "string" ? Number(v) : v;
+  return typeof n === "number" && Number.isFinite(n) ? n : fallback;
+}
+
 export function summarizeGlobalAchievements(
   r: GlobalAchievementsResponse,
   max = ACHIEVEMENTS_MAX,
@@ -312,7 +323,7 @@ export function summarizeGlobalAchievements(
     returned,
     achievements: included.map((x) => ({
       name: x.name,
-      percent: typeof x.percent === "string" ? Number(x.percent) : (x.percent ?? null),
+      percent: finitePercent(x.percent, null),
     })),
   });
 }
@@ -344,7 +355,7 @@ export function summarizeGameSchema(
   const pct = new Map<string, number>();
   for (const x of global.achievementpercentages?.achievements ?? []) {
     if (x.name != null) {
-      pct.set(x.name, typeof x.percent === "string" ? Number(x.percent) : (x.percent ?? 0));
+      pct.set(x.name, finitePercent(x.percent, 0));
     }
   }
   const list = schema.game?.availableGameStats?.achievements ?? [];

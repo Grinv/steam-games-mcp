@@ -119,11 +119,16 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
         min_discount: z
           .string()
           .trim()
+          // Digits only (or blank → default): these values are interpolated
+          // into the calling agent's instructions, so a free-form string could
+          // smuggle extra directives; a whole percentage can't.
+          .regex(/^\d{0,3}$/, "A whole percentage like '50', or blank for the default.")
           .describe("Minimum discount %, e.g. '50'. Default 50.")
           .optional(),
         min_review: z
           .string()
           .trim()
+          .regex(/^\d{0,3}$/, "A whole percentage like '85', or blank for the default.")
           .describe("Minimum positive-review %, e.g. '85'. Default 80.")
           .optional(),
         tags: z

@@ -1,7 +1,7 @@
 // Helpers that build MCP tool results. Tool handlers return these objects;
 // failures become { isError: true } results (never thrown) so the agent
 // receives an actionable message instead of a protocol error.
-import type { ApiError } from "./errors.js";
+import { redact, type ApiError } from "./errors.js";
 
 export interface ToolResult {
   content: { type: "text"; text: string }[];
@@ -24,7 +24,11 @@ export function jsonResult(structured: Record<string, unknown>): ToolResult {
 }
 
 export function errorResult(message: string): ToolResult {
-  return { content: [{ type: "text", text: message }], isError: true };
+  // Defense-in-depth: no current path puts the API key into an error string (it
+  // only ever lives in request URLs, redacted at the single URL-logging site in
+  // lib/http.ts), but redacting here too means a future change that folds a URL
+  // into a thrown message can't leak the key straight to the agent.
+  return { content: [{ type: "text", text: redact(message) }], isError: true };
 }
 
 /** Translate an upstream ApiError into a friendly, actionable tool error. */
