@@ -1,5 +1,7 @@
 # Steam MCP Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/pulsemcp%2Fgrinv-steam-games.svg)](https://mcptoplist.com/server/pulsemcp%2Fgrinv-steam-games)
+
 [![npm version](https://img.shields.io/npm/v/steam-games-mcp.svg)](https://www.npmjs.com/package/steam-games-mcp)
 [![CI](https://github.com/Grinv/steam-games-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Grinv/steam-games-mcp/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/npm/l/steam-games-mcp.svg)](LICENSE)
