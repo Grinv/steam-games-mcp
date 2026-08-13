@@ -83,7 +83,20 @@ export class StoreServiceClient {
           { language },
           { hasCredentials: false },
         );
-        return summarizeTagList(res);
+        const map = summarizeTagList(res);
+        // GetTagList answers an unrecognized `language` (an ISO code like "ru"
+        // instead of Steam's "russian") with 200 and an empty body rather than
+        // an error, so an empty dictionary means the fetch failed — no language
+        // legitimately has zero tags. Throw so it never reaches the cache and
+        // the catch below reports it as unavailable, which is what makes the
+        // filter path above fail loudly instead of matching nothing.
+        if (Object.keys(map).length === 0)
+          throw new ApiError({
+            code: "unknown",
+            message: `Steam returned an empty tag dictionary for language "${language}".`,
+            retryable: true,
+          });
+        return map;
       });
     } catch {
       return null;
@@ -92,7 +105,11 @@ export class StoreServiceClient {
 
   // Throws when a tags filter was requested but the tag dictionary is
   // unavailable — never silently treats that as "nothing matched".
-  #requireTagMapIfFiltering(tags: string[] | undefined, tagMap: TagMap | null): TagMap | undefined {
+  #requireTagMapIfFiltering(
+    tags: string[] | undefined,
+    tagMap: TagMap | null,
+    language: string,
+  ): TagMap | undefined {
     if (tagMap !== null) return tagMap;
     if (!tags?.length) return undefined;
     // "unknown" is the one ApiErrorCode whose mapped message (lib/result.ts)
@@ -102,7 +119,9 @@ export class StoreServiceClient {
       code: "unknown",
       message:
         "could not fetch Steam's tag dictionary right now, so the `tags` filter can't be " +
-        "reliably applied. Retry, or drop `tags` to see unfiltered results.",
+        `reliably applied. Check that language "${language}" is one of Steam's full language ` +
+        "names (english, russian, schinese — not an ISO code like en/ru/zh), then retry, or " +
+        "drop `tags` to see unfiltered results.",
       retryable: true,
     });
   }
@@ -121,7 +140,7 @@ export class StoreServiceClient {
       this.#get<T>(path, query, { hasCredentials: false }),
       this.#tagNames(language),
     ]);
-    return { res, tagMap: this.#requireTagMapIfFiltering(tagsBeingFiltered, tagMap) };
+    return { res, tagMap: this.#requireTagMapIfFiltering(tagsBeingFiltered, tagMap, language) };
   }
 
   // Batch store card (price+discount, review %, compat, popular tags, release) for

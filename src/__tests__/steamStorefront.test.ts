@@ -7,6 +7,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { setupServer, jsonResponse, assertToolError } from "./helpers.js";
 import { APP, ENV, router } from "./steamFixtures.js";
+import { PRICES_MAX } from "../tools/common.js";
 
 test("the server advertises store and player tools", async (t) => {
   const { client } = await setupServer(t, ENV, router);
@@ -359,11 +360,11 @@ describe("get_prices", () => {
     assert.equal(s.prices[0]!.available, false);
   });
 
-  test("get_prices rejects appids outside the 1-500 bound before calling the upstream", async (t) => {
+  test(`get_prices rejects appids outside the 1-${PRICES_MAX} bound before calling the upstream`, async (t) => {
     const { client, mock } = await setupServer(t, ENV, router);
     const tooMany = await client.callTool({
       name: "get_prices",
-      arguments: { appids: Array.from({ length: 501 }, (_, i) => i + 1) },
+      arguments: { appids: Array.from({ length: PRICES_MAX + 1 }, (_, i) => i + 1) },
     });
     assert.equal(tooMany.isError, true);
     const empty = await client.callTool({ name: "get_prices", arguments: { appids: [] } });

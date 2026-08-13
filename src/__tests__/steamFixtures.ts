@@ -377,3 +377,12 @@ export function routerWithBrokenTagList(url: string) {
   if (url.includes("IStoreService/GetTagList")) return jsonResponse({}, { status: 500 });
   return router(url);
 }
+
+// The quieter half of the same outage: GetTagList answers an unrecognized
+// `language` (an ISO code like "ru" instead of Steam's "russian") with HTTP 200
+// and an empty body rather than an error, which used to yield an empty-but-
+// non-null dictionary and make every tag filter match nothing (steamCatalog.test.ts).
+export function routerWithEmptyTagList(url: string) {
+  if (url.includes("IStoreService/GetTagList")) return jsonResponse({ response: {} });
+  return router(url);
+}

@@ -7,7 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import type { StorefrontClient } from "../clients/storefront.js";
 import { errorResult, jsonResult } from "../lib/result.js";
 import { guard } from "./guard.js";
-import { READ_ONLY, appid, country, language, reply } from "./common.js";
+import { ITEMS_MAX, PRICES_MAX, READ_ONLY, appid, country, language, reply } from "./common.js";
 import {
   getFeaturedOutput,
   getGameOutput,
@@ -149,8 +149,8 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Get prices for many games",
       description:
         "Get current price and discount for a batch of games by appid in one call — efficient for " +
-        "checking a whole list (e.g. a wishlist) for deals. Handles up to 500 appids; if you also " +
-        "need review %, hardware compatibility or tags, use get_items instead (max 100 appids). Rows " +
+        `checking a whole list (e.g. a wishlist) for deals. Handles up to ${PRICES_MAX} appids; if you also ` +
+        `need review %, hardware compatibility or tags, use get_items instead (max ${ITEMS_MAX} appids). Rows ` +
         "come back in the same order as the given appids, one per id (unavailable ones marked " +
         "available:false, never dropped). Each row has the final/initial price and discount_percent " +
         "(or is_free). No API key required. Get appids from search_games or get_wishlist.",
@@ -158,8 +158,8 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         appids: z
           .array(z.int().positive())
           .nonempty()
-          .max(500)
-          .describe("Steam appids to price (1-500)."),
+          .max(PRICES_MAX)
+          .describe(`Steam appids to price (1-${PRICES_MAX}). Split a longer list across calls.`),
         country,
       }),
       outputSchema: getPricesOutput,

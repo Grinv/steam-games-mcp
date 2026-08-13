@@ -10,6 +10,16 @@ import { guard } from "./guard.js";
 
 export const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
 
+// Batch-size ceilings for the two "price a list of appids" tools. These are
+// payload budgets, not upstream limits: a full get_items card measures ~565
+// chars and a get_prices row ~112, so the previous 100/500 caps produced ~56 KB
+// responses that MCP clients reject outright for exceeding their per-result
+// token limit — the caller got nothing at all rather than a trimmed list. Both
+// caps are halved to land near 28 KB. Exported so the schema, the tool
+// descriptions and the tests all read the same number.
+export const ITEMS_MAX = 50;
+export const PRICES_MAX = 250;
+
 export const appid = z
   .int()
   .positive()

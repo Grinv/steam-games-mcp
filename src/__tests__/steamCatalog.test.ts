@@ -6,7 +6,14 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { setupServer, jsonResponse, htmlResponse, assertToolError } from "./helpers.js";
-import { ENV, FOLLOWED, router, routerWithBrokenTagList } from "./steamFixtures.js";
+import {
+  ENV,
+  FOLLOWED,
+  router,
+  routerWithBrokenTagList,
+  routerWithEmptyTagList,
+} from "./steamFixtures.js";
+import { ITEMS_MAX } from "../tools/common.js";
 
 // Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant
@@ -386,6 +393,36 @@ describe("get_wishlist", () => {
     assertToolError(res, /tag dictionary/i);
   });
 
+  test("get_wishlist: an empty tag dictionary fails loudly instead of matching nothing", async (t) => {
+    // GetTagList answers an unrecognized language with 200 + {} rather than an
+    // error, so the dictionary came back empty-but-not-null and slipped past the
+    // null guard — every tag filter then rejected every item, which reads as an
+    // honest "no games matched" to the agent.
+    const { client } = await setupServer(
+      t,
+      { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
+      routerWithEmptyTagList,
+    );
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353", tags: ["Metroidvania"], language: "ru" },
+    });
+    assertToolError(res, /tag dictionary/i);
+  });
+
+  test("discover_games: an empty tag dictionary fails loudly instead of matching nothing", async (t) => {
+    const { client } = await setupServer(
+      t,
+      { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
+      routerWithEmptyTagList,
+    );
+    const res = await client.callTool({
+      name: "discover_games",
+      arguments: { tags: ["Puzzle"], language: "ru" },
+    });
+    assertToolError(res, /tag dictionary/i);
+  });
+
   test("get_wishlist: country/language alone switch to detailed mode (not silently ignored)", async (t) => {
     const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
@@ -485,6 +522,33 @@ describe("get_items", () => {
     const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
     const s = res.structuredContent as { items: { appid: number; tags: string[] }[] };
     assert.equal(s.items[0]!.tags.length, 0);
+  });
+
+  test("get_items: an empty tag dictionary still degrades to empty tags (display-only, never filtered)", async (t) => {
+    // The sibling of the broken-GetTagList case above: get_items never filters
+    // by tags, so an unavailable dictionary must stay a graceful degrade here
+    // even though it's now a loud error on the filtering tools.
+    const { client } = await setupServer(
+      t,
+      { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
+      routerWithEmptyTagList,
+    );
+    const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
+    const s = res.structuredContent as { items: { appid: number; tags: string[] }[] };
+    assert.notEqual(res.isError, true);
+    assert.equal(s.items[0]!.tags.length, 0);
+  });
+
+  test(`get_items rejects appids outside the 1-${ITEMS_MAX} bound before calling the upstream`, async (t) => {
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    const tooMany = await client.callTool({
+      name: "get_items",
+      arguments: { appids: Array.from({ length: ITEMS_MAX + 1 }, (_, i) => i + 1) },
+    });
+    assert.equal(tooMany.isError, true);
+    const empty = await client.callTool({ name: "get_items", arguments: { appids: [] } });
+    assert.equal(empty.isError, true);
+    assert.equal(mock.calls.filter((c) => c.url.includes("IStoreBrowseService")).length, 0);
   });
 });
 
@@ -634,6 +698,26 @@ describe("discover_games", () => {
       arguments: { released_within_days: 365 * 20 },
     });
     assert.ok((wide.structuredContent as { deals: { appid: number }[] }).deals.length >= 1);
+  });
+
+  test("discover_games rejects a well-formed date that isn't a real calendar date", async (t) => {
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    // Both pass the YYYY-MM-DD regex. "2026-13-45" made Date.parse return NaN,
+    // and every `< NaN` comparison is false, so the cutoff matched EVERYTHING
+    // while releasedOnly was still sent upstream — the response looked filtered.
+    // "2026-02-31" silently rolled over to 2026-03-03, moving the cutoff.
+    for (const released_after of ["2026-13-45", "2026-02-31", "0000-00-00"]) {
+      const res = await client.callTool({ name: "discover_games", arguments: { released_after } });
+      assert.equal(res.isError, true, released_after);
+    }
+    // Rejected by the schema, so nothing reached the catalog.
+    assert.equal(mock.calls.filter((c) => c.url.includes("IStoreQueryService")).length, 0);
+
+    const ok = await client.callTool({
+      name: "discover_games",
+      arguments: { released_after: "2011-01-01" },
+    });
+    assert.notEqual(ok.isError, true);
   });
 
   test("discover_games: an explicit released_after wins over released_within_days when both are given", async (t) => {

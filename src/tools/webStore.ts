@@ -9,6 +9,8 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
 import type { StoreServiceClient } from "../clients/storeService.js";
 import {
+  ITEMS_MAX,
+  PRICES_MAX,
   READ_ONLY,
   appid,
   country,
@@ -44,6 +46,19 @@ import { getGlobalAchievementsOutput } from "../format/webAchievements.schemas.j
 // is assembled here (not in either format/*.schemas.ts) since this is the one
 // layer that knows about both paths.
 const getWishlistOutput = withNotFound(wishlistNotFound, wishlistLightFound, wishlistDetailedFound);
+
+// A YYYY-MM-DD regex only checks the SHAPE of a date, and both ways it can be
+// well-formed nonsense produced a wrong answer rather than an error:
+// Date.parse("2026-13-45") is NaN, and every `< NaN` comparison is false, so the
+// cutoff in format/storeCard.ts matched EVERYTHING while `releasedOnly` was
+// still sent upstream (NaN !== undefined) — the response looked filtered;
+// Date.parse("2026-02-31") silently rolls over to 2026-03-03, quietly moving the
+// cutoff. Requiring the date to round-trip rejects both. zod runs a .refine()
+// even after an earlier check failed, so this must never throw on garbage.
+function isRealCalendarDate(v: string): boolean {
+  const t = Date.parse(v);
+  return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === v;
+}
 
 export function registerStoreWebTools(
   server: McpServer,
@@ -101,7 +116,7 @@ export function registerStoreWebTools(
         "Get price/discount, review % (positive), hardware compatibility, popular user tags and " +
         "release date for a LIST of games by appid in ONE keyless call. The efficient way to price-, " +
         "rating-, tag- and compat-check a wishlist or library without a request per game. For a bigger " +
-        "batch (up to 500 appids) when you only need price, use get_prices instead. An unknown/invalid " +
+        `batch (up to ${PRICES_MAX} appids) when you only need price, use get_prices instead. An unknown/invalid ` +
         "appid comes back as its own row marked available:false (never dropped from the list), same " +
         "as get_prices. Each item " +
         "carries four compatibility fields, each verified/playable/unsupported/unknown: steam_deck " +
@@ -115,7 +130,11 @@ export function registerStoreWebTools(
         "list you already have, use discover_games instead. Get appids from search_games / " +
         "get_wishlist / get_owned_games.",
       inputSchema: z.strictObject({
-        appids: z.array(z.int().positive()).nonempty().max(100).describe("Steam appids (1-100)."),
+        appids: z
+          .array(z.int().positive())
+          .nonempty()
+          .max(ITEMS_MAX)
+          .describe(`Steam appids (1-${ITEMS_MAX}). Split a longer list across calls.`),
         country,
         language,
       }),
@@ -155,6 +174,7 @@ export function registerStoreWebTools(
         released_after: z
           .string()
           .regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date, e.g. 2026-03-01.")
+          .refine(isRealCalendarDate, "Not a real calendar date, e.g. 2026-03-01.")
           .describe("Keep only games released on/after this date (YYYY-MM-DD).")
           .optional(),
         released_within_days: z
