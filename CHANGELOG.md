@@ -6,15 +6,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-08-13
+
 ### Changed
 
-- Cap `discover_games` at 60 results per call, best discount first, and report the pre-cap count as `matched` — at its own advertised `count: 200` the response was ~104 KB, which MCP clients reject outright.
+- Cap `discover_games` at 60 results per call, best discount first, and report the pre-cap count as `matched` — at its own advertised `count: 200` the response was ~104 KB, which MCP clients reject outright. ([aee1c31](https://github.com/Grinv/steam-games-mcp/commit/aee1c31))
 
 ### Fixed
 
-- Fix `get_recently_played`'s description claiming most-recently-played ordering when it sorts by two-week playtime — the ordering decides what the new cap discards.
-- Fix `find_friends_who_own` picking its 200 checked friends in Steam's raw payload order, which barely overlapped the 100 `get_friend_list` shows for the same account.
-- Fix `get_game_reviews`' `review_language` not warning that an ISO code like 'ru' makes Steam report zero reviews instead of erroring.
+- Fix `get_recently_played`'s description claiming most-recently-played ordering when it sorts by two-week playtime — the ordering decides what the new cap discards. ([aee1c31](https://github.com/Grinv/steam-games-mcp/commit/aee1c31))
+- Fix `find_friends_who_own` picking its 200 checked friends in Steam's raw payload order, which barely overlapped the 100 `get_friend_list` shows for the same account. ([aee1c31](https://github.com/Grinv/steam-games-mcp/commit/aee1c31))
+- Fix `get_game_reviews`' `review_language` not warning that an ISO code like 'ru' makes Steam report zero reviews instead of erroring. ([aee1c31](https://github.com/Grinv/steam-games-mcp/commit/aee1c31))
 
 ## [0.13.0] - 2026-08-13
 
