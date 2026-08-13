@@ -39,7 +39,10 @@ const STEAMID64_MIN = 76561197960265728n;
 const STEAMID64_MSG =
   "A SteamID64 is a 17-digit number starting at 76561197960265728. " +
   "Use resolve_vanity_url to convert a custom profile name.";
-const steamId64Base = z
+// Exported so tools/prompts.ts can reuse the same validation for its own
+// steamid argument under a prompt-specific .describe() — AGENTS.md's "one shared
+// steamid schema" rule covers every surface that takes one, prompts included.
+export const steamId64Base = z
   .string()
   .trim()
   .regex(STEAMID64_RE, STEAMID64_MSG)
