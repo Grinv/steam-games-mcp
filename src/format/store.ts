@@ -46,6 +46,10 @@ export interface StoreQueryResponse {
 // Catalog-wide deal discovery. The server filters by min discount; review
 // thresholds (percent / count) and discount-desc sorting are applied here over
 // the returned page, since the Query API ignores those filters/sorts.
+// Matches WISHLIST_DETAIL_MAX: same store-card shape, and 60 of them measured
+// ~34 KB, which real MCP clients accept.
+export const DISCOVER_MAX = 60;
+
 export function summarizeDiscover(
   r: StoreQueryResponse,
   opts: StoreFilters,
@@ -61,10 +65,20 @@ export function summarizeDiscover(
     )
     .map((it) => storeCard(it, opts.tagMap))
     .sort((a, b) => (b.discount_pct as number) - (a.discount_pct as number));
+  // Capped like every other card list: `count` scans up to 200 entries, and with
+  // loose filters nearly all of them survive — ~195 cards is ~104 KB, which an
+  // MCP client rejects outright for exceeding its per-result token limit, so the
+  // caller gets nothing at all. That's the same failure that halved get_items'
+  // and get_prices' caps; discover_games was the one card list still uncapped,
+  // and its own description tells callers to "raise `count` for stricter
+  // filters", steering them straight into it. Sorted by discount first, so the
+  // cap keeps the best deals; `matched` still reports the true pre-cap count.
+  const { included, returned } = capList(rows, DISCOVER_MAX);
   return discoverGamesOutput.parse({
     total_matching: r.response?.metadata?.total_matching_records ?? null,
-    returned: rows.length,
-    deals: rows,
+    matched: rows.length,
+    returned,
+    deals: included,
   });
 }
 

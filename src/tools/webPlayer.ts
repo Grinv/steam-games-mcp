@@ -260,7 +260,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       title: "Get recently played games",
       description:
         "List the games a player has played in the last two weeks, with recent and total playtime, " +
-        `most-recently-played first (capped at ${RECENTLY_PLAYED_MAX}; check \`returned\` vs \`total\`). ` +
+        `most-played-in-those-two-weeks first (capped at ${RECENTLY_PLAYED_MAX}; check \`returned\` vs \`total\`) — ` +
+        "the ordering is what decides which games the cap keeps, and it is playtime, not recency. " +
         `For all-time top games by playtime instead (capped to the top ${OWNED_GAMES_MAX}), use get_owned_games. ` +
         "Requires STEAM_API_KEY and a public profile with game-details visibility (same requirement " +
         "as get_owned_games) — otherwise it returns found:false.",

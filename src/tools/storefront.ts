@@ -113,9 +113,12 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
           // subset with rescoped totals.
           .nonempty()
           .describe(
-            "Filter reviews by language, e.g. 'english'. Default 'all'. Setting this ALSO rescopes " +
-              "the summary counts (total_reviews / positive / negative / %) to that language — they " +
-              "are no longer the game's global totals. Leave it at 'all' when you want those.",
+            "Filter reviews by language. Use Steam's full language name — english, russian, " +
+              "schinese — NOT an ISO code like en/ru/zh: Steam answers an unrecognized value with " +
+              "zero reviews rather than an error, so a 9M-review game reads as having none. " +
+              "Default 'all'. Setting this ALSO rescopes the summary counts (total_reviews / " +
+              "positive / negative / %) to that language — they are no longer the game's global " +
+              "totals. Leave it at 'all' when you want those.",
           )
           .default("all"),
         type: z

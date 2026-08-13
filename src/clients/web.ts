@@ -468,7 +468,11 @@ export class SteamWebClient {
     // 0.12.2) the fan-out rate-limited itself: that same account reported 527 of
     // its 634 friends as `unavailable` with a 420, which the allSettled below
     // then dutifully passed off as a normal result.
-    const ids = allIds.slice(0, FRIENDS_CHECKED_MAX);
+    // friendIdsToEnrich, not a raw slice: it applies get_friend_list's own
+    // most-recently-added-first ordering, so "the 200 checked" is a subset an
+    // agent can actually name — a raw slice took Steam's arbitrary payload order,
+    // which barely overlaps the 100 get_friend_list shows for the same account.
+    const ids = friendIdsToEnrich(res, FRIENDS_CHECKED_MAX);
     // settledWithLimit, not Promise.all: #ownedPlaytimes only returns null for a
     // private profile (see below) — a genuine transient failure (rate-limited/
     // network/timeout/5xx) on ONE friend's own GetOwnedGames call still throws,

@@ -382,6 +382,22 @@ explicit `null`, so live output still read `0.00 USD`. Correct the raw
 response interface from the observed payload too (it declared `number |
 undefined`, a shape Steam never sends).
 
+**Fixing one site doesn't close the class — sweep every sibling for the same
+pattern.** A confirmed finding is a description of a mistake the codebase is
+prone to, so grep for it everywhere before calling the fix done, and re-check
+the tools you did _not_ touch. `get_items`' and `get_prices`' caps were halved
+for producing responses MCP clients reject, and `discover_games` shipped in the
+same release still uncapped at ~104 KB — its own description even tells callers
+to raise `count`. Then re-run the checklist item that class belongs to (here,
+§3's payload-size bullet) against the whole tool list, line by line: a sweep
+built from your own diff only covers what you already knew was broken.
+
+**Diff every description against the behavior it describes, as its own pass.**
+When the same commit writes both the code and its `.describe()`, a mismatch
+reads as correct to its author — `get_recently_played` shipped claiming
+most-recently-played ordering while sorting by two-week playtime, which is also
+what its new cap uses to decide what to discard.
+
 ## 7. Commit + changelog, if asked
 
 One `fix:`/`feat:` commit per logically distinct change (don't bundle two

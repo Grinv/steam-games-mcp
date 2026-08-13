@@ -14,6 +14,7 @@ import {
   routerWithEmptyTagList,
 } from "./steamFixtures.js";
 import { ITEMS_MAX } from "../tools/common.js";
+import { DISCOVER_MAX } from "../format/store.js";
 
 // Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant
@@ -698,6 +699,44 @@ describe("discover_games", () => {
       arguments: { released_within_days: 365 * 20 },
     });
     assert.ok((wide.structuredContent as { deals: { appid: number }[] }).deals.length >= 1);
+  });
+
+  test(`discover_games caps its result list at ${DISCOVER_MAX}, reporting the true match count`, async (t) => {
+    // `count` scans up to 200 catalog entries and, with loose filters, nearly all
+    // survive — ~195 store cards is ~104 KB, which an MCP client rejects outright
+    // for exceeding its per-result token limit, so the caller gets nothing. Same
+    // failure that halved get_items'/get_prices' caps; this was the one card list
+    // still uncapped, and its own description says to raise `count`.
+    const many = Array.from({ length: 195 }, (_, i) => ({
+      appid: 1000 + i,
+      name: `Game ${i}`,
+      visible: true,
+      best_purchase_option: {
+        // Ascending discount, so the cap must keep the BEST deals (it sorts desc).
+        discount_pct: i,
+        formatted_final_price: "$1.99",
+        formatted_original_price: "$9.99",
+      },
+      reviews: { summary_filtered: { percent_positive: 90, review_count: 100 } },
+      platforms: { windows: true },
+    }));
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+      url.includes("IStoreQueryService/Query")
+        ? jsonResponse({
+            response: { metadata: { total_matching_records: 9999 }, store_items: many },
+          })
+        : router(url),
+    );
+    const res = await client.callTool({ name: "discover_games", arguments: { count: 200 } });
+    const s = res.structuredContent as {
+      matched: number;
+      returned: number;
+      deals: { discount_pct: number }[];
+    };
+    assert.equal(s.matched, 195);
+    assert.equal(s.returned, DISCOVER_MAX);
+    assert.equal(s.deals.length, DISCOVER_MAX);
+    assert.equal(s.deals[0]!.discount_pct, 194); // best discount survives the cap
   });
 
   test("discover_games rejects a well-formed date that isn't a real calendar date", async (t) => {

@@ -99,9 +99,15 @@ export const discoverGamesOutput = z.strictObject({
         "and this tool applies only over the scanned `count`-sized window below. Don't read this " +
         "as 'N games match all my filters' — use `returned` for that instead.",
     ),
-  returned: z
+  matched: z
     .number()
     .describe("How many results survived every filter, out of the scanned window (see `count`)."),
+  returned: z
+    .number()
+    .describe(
+      "How many of `matched` are in `deals` below. Lower than `matched` when the result was " +
+        "capped for response size — narrow the filters (or page with `start`) to see the rest.",
+    ),
   deals: z.array(storeCardSchema),
 });
 

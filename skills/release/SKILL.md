@@ -46,9 +46,18 @@ don't rely on the `preversion` hook alone to catch a skipped one:
    configured, so its key-gated checks always skip there and only the
    keyless Storefront/Web API checks actually gate CI.
 4. Commit everything from steps 1–2.
-5. `npm version <patch|minor|major>` — preversion gate, then bumps + syncs
+5. **Confirm every check the release was gated on actually finished and
+   reported.** A verification that is still running, or that died partway (a
+   subagent lost to an API error, a tool outage), is not a pass — either re-run
+   it to completion or tell the user which surface is unverified and let them
+   decide. Your own narrower re-check is not a substitute: it is built from the
+   diff you just wrote, so it inherits the same blind spots, while the skill's
+   checklist is what covers the tools you did _not_ touch. `discover_games`
+   shipped in v0.13.0 with no output cap this way — a relaunched sweep was mid-
+   flight at tag time and reported that blocker half an hour after publish.
+6. `npm version <patch|minor|major>` — preversion gate, then bumps + syncs
    every file + commits `"release: vX.Y.Z"` + tags `vX.Y.Z`.
-6. `git push --follow-tags` — pushing the tag triggers `.github/workflows/release.yml`.
+7. `git push --follow-tags` — pushing the tag triggers `.github/workflows/release.yml`.
 
 The tag push (`v*`) runs the **Release** workflow: `check:api` gate → build → test
 → pack `.mcpb` → extract `CHANGELOG.md`'s section for this version (fails loudly,
@@ -67,7 +76,7 @@ Never hand-edit the version in the derived files; bump `package.json` via
 
 ## Fixing a mistake before pushing
 
-If something's wrong after `npm version` but before step 6 (e.g. a fixup commit
+If something's wrong after `npm version` but before step 7 (e.g. a fixup commit
 needs to land under the same release), it's safe to amend history and move the
 tag — nothing's been pushed yet. One footgun when moving a tag:
 `git tag -f <name>` **without** `-a`/`-m` silently downgrades an existing

@@ -25,7 +25,7 @@ import {
 } from "./common.js";
 import { steamid, steamIdTool } from "./webShared.js";
 import { wishlistNotFound, withNotFound } from "../format/shared.schemas.js";
-import { WISHLIST_DETAIL_MAX } from "../format/store.js";
+import { DISCOVER_MAX, WISHLIST_DETAIL_MAX } from "../format/store.js";
 import { FOLLOWED_MAX, WISHLIST_LIGHT_MAX } from "../format/web.js";
 import { ACHIEVEMENTS_MAX } from "../format/webAchievements.js";
 import {
@@ -169,7 +169,9 @@ export function registerStoreWebTools(
         "server-side, but the exact date cutoff — plus compat, platform, review and tag filtering — " +
         "has no server-side support in the Steam catalog API, so those are scanned popularity-first " +
         "and applied afterward over that same window — great for popular titles; a niche match may " +
-        "fall outside the top `count` (raise count for stricter filters).",
+        `fall outside the top \`count\` (raise count for stricter filters). At most ${DISCOVER_MAX} results come ` +
+        "back per call, best discount first: compare `returned` against `matched` to see whether the " +
+        "list was capped, and narrow the filters or page with `start` for the rest.",
       inputSchema: z.strictObject({
         released_after: z
           .string()

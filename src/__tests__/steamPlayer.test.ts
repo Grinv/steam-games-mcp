@@ -838,13 +838,19 @@ describe("find_friends_who_own", () => {
       relationship: "friend",
       friend_since: 1600000000 + i,
     }));
+    // Friends are looked up most-recently-added first (the same order
+    // get_friend_list returns), NOT in Steam's raw payload order, so the chunk a
+    // given friend lands in follows from that sort — derive the probes from it
+    // rather than from the fixture's own indices.
+    const enrichOrder = manyFriends.toSorted((a, b) => b.friend_since - a.friend_since);
+    const chunk2Marker = enrichOrder[100]!.steamid; // appears only in the 2nd chunk
+    const inChunk1 = enrichOrder[10]!.steamid;
+    const inChunk2 = enrichOrder[120]!.steamid;
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       if (url.includes("GetFriendList"))
         return jsonResponse({ friendslist: { friends: manyFriends } });
       if (url.includes("GetPlayerSummaries")) {
-        // The 101st friend (index 100) only appears in the second chunk's
-        // steamids list — use it to distinguish which chunk this call is.
-        if (url.includes(manyFriends[100]!.steamid)) return jsonResponse({}, { status: 500 });
+        if (url.includes(chunk2Marker)) return jsonResponse({}, { status: 500 });
         return jsonResponse({
           response: {
             players: manyFriends
@@ -854,12 +860,10 @@ describe("find_friends_who_own", () => {
         });
       }
       if (url.includes("GetOwnedGames")) {
-        // Only friends 60 and 120 own anything, so the owners list stays well
-        // under FRIENDS_WHO_OWN_MAX and both survive to be asserted on — one
-        // from each side of the enrichment chunk boundary.
-        const owns = [manyFriends[60]!.steamid, manyFriends[120]!.steamid].some((id) =>
-          url.includes(id),
-        );
+        // Only these two own anything, so the owners list stays well under
+        // FRIENDS_WHO_OWN_MAX and both survive to be asserted on — one from each
+        // side of the enrichment chunk boundary.
+        const owns = [inChunk1, inChunk2].some((id) => url.includes(id));
         return jsonResponse(owns ? OWNED : { response: { game_count: 0, games: [] } });
       }
       return jsonResponse({});
@@ -875,11 +879,11 @@ describe("find_friends_who_own", () => {
     };
     assert.equal(s.total_friends, 150);
     assert.equal(s.matches[0]!.owners.length, 2);
-    // Friend 60 came from the chunk that succeeded, friend 120 from the one that
+    // One probe came from the chunk that succeeded, the other from the one that
     // failed — the latter degrades to name:null rather than blanking everyone.
     const byId = new Map(s.matches[0]!.owners.map((o) => [o.steamid, o.name]));
-    assert.equal(byId.get(manyFriends[60]!.steamid), `Friend ${manyFriends[60]!.steamid}`);
-    assert.equal(byId.get(manyFriends[120]!.steamid), null);
+    assert.equal(byId.get(inChunk1), `Friend ${inChunk1}`);
+    assert.equal(byId.get(inChunk2), null);
   });
 
   test("find_friends_who_own caps how many friends it looks up, and says how many that was", async (t) => {
