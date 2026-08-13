@@ -20,7 +20,11 @@ Check every one of these, not just a sample:
 - Tool `description`/field `.describe()` text in `src/tools/*.ts` itself:
   does it still match the actual `inputSchema`/`outputSchema` and the real
   behavior? Cross-check new/edited descriptions against the
-  `tool-description-check` skill (Glama's TDQS rubric) per AGENTS.md.
+  `tool-description-check` skill (Glama's TDQS rubric) per AGENTS.md. Check
+  each `outputSchema` **branch** against what the shaper actually builds, not
+  just the happy path — `get_owned_games`' `found:false` branch still
+  advertised an `owns` field the 0.10.1 fix had stopped emitting, i.e. the
+  published schema re-legitimized the very bug that was fixed.
 - `CHANGELOG.md`'s `[Unreleased]` section (see the `changelog-style` skill for
   entry style) has one line per real behavior change made in this pass — add
   missing entries, don't just flag them as missing.

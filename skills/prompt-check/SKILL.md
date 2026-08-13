@@ -28,6 +28,14 @@ automatically covered by a tool-schema trim fix like 61fe40a) slips past a
 `field ? ... : ...`/`field ?? "default"` check the same way an actually-set
 value would.
 
+**Validate every tool call the rendered text instructs against that tool's
+actual `inputSchema` and documented caps** — reading the prompt for plausible
+tool/param names isn't enough. Both live-confirmed here: `deals_digest`
+rendered `min_discount` values outside `discover_games`' own 1-100 range, and
+`what_should_i_play` told the agent to read ownership off `get_owned_games`'
+`games` list, which is capped at the top 50 by playtime and whose own source
+comment says it is not reliable for ownership (`check_appids` is).
+
 **Watch out for a SteamID64 argument specifically**: the inspector CLI's own
 `--prompt-args key=value` parsing silently coerces a numeric-looking value
 through a JS number, and a 17-digit SteamID64 exceeds

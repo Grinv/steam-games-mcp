@@ -159,7 +159,12 @@ environment supports concurrent subagents/background tasks.
   digit count or out of the valid 64-bit range (e.g. accountid 0 — this has
   previously leaked raw upstream HTML instead of a clean `found:false`, see
   `CHANGELOG.md`'s 0.10.2 entry), batch `appids`/`ids` at their `.min()`/cap
-  boundary and one past it, an unknown/misspelled param name.
+  boundary and one past it, an unknown/misspelled param name. Include
+  **shape-valid but impossible** values, not just malformed ones, and assert
+  the result was actually filtered rather than that the call returned at all:
+  `discover_games`' `released_after` passed its `^\d{4}-\d{2}-\d{2}$` regex on
+  `2026-13-45`, and the resulting `Date.parse` NaN made the date filter match
+  everything (`2026-02-31` silently rolled over to another date).
 - **SteamID64 / vanity edge cases**: a syntactically valid but nonexistent
   SteamID64, a vanity name that doesn't resolve, a vanity name containing
   URL-unsafe characters, a private profile (fields should degrade gracefully,
@@ -192,9 +197,13 @@ environment supports concurrent subagents/background tasks.
   (`get_player_achievements`, `get_global_achievements`), a large wishlist
   (`get_wishlist`), `discover_games`/`get_items` with a wide batch of appids.
   Check the actual response size/token count for the largest realistic case
-  (e.g. a Steam account with 1000+ games, a game with 200+ achievements), not
-  just that it returns _something_ — AGENTS.md calls out that these
-  responses must be capped/trimmed.
+  (e.g. a Steam account with 1000+ games, a game with 200+ achievements) **and
+  at the tool's own advertised maximum**, not just that it returns _something_
+  (AGENTS.md requires these responses be capped/trimmed) — a documented cap the
+  MCP client then refuses is a total failure, not a trim: `get_items` at its
+  stated 100 appids and `get_prices` at 500 each
+  produced ~56 KB and were rejected outright for exceeding the client's
+  per-result token limit, so the caller got nothing at all.
 - **Documented vs. actual shape**: for anything that looks surprising live,
   grep the field back to its `.describe()` text in `src/tools/*.ts` and its
   `format/*.schemas.ts` — does the tool's own description/outputSchema
@@ -206,7 +215,10 @@ environment supports concurrent subagents/background tasks.
   the error message doesn't leak raw upstream HTML/markup (a real prior bug
   class in this repo, see `CHANGELOG.md` 0.10.2) or misattribute a transport
   error to "not found"/"private profile" when it's actually a 5xx/network
-  blip.
+  blip. A plausible-but-wrong locale can also corrupt results with no error at
+  all: an ISO `language` (`ru`, not Steam's `russian`) emptied the `GetTagList`
+  tag dictionary, so every `tags` filter matched nothing — indistinguishable
+  live from "no games matched".
 - **Systematic input-schema fuzzing** across every tool: wrong JS types,
   invalid enums, missing required fields, malformed nested objects, extremely
   long strings. Only flag a genuine problem — an unhandled exception/stack
@@ -281,6 +293,14 @@ there) for:
   malformed-SteamID64 fix, 0.10.1's `get_current_players`/`get_game` fixes).
   Check every call site that takes a user-controlled id/appid for the same
   "does a 400/404/5xx get normalized, or does raw upstream body leak through."
+- A shape-only validator (a regex, a bare `z.string()`) whose value then feeds
+  a computation that **degrades silently instead of erroring** — `Date.parse`
+  → `NaN` makes every `<`/`>` comparison false (filter matches everything), an
+  empty lookup table makes every membership test false (matches nothing), and
+  both ship a confidently wrong answer as a normal-looking result. Validate the
+  _parsed_ value, and treat empty-but-non-null as failure: an upstream that
+  signals errors as **200 + an empty body** (`GetTagList` on an unrecognized
+  `language`) slips past every `catch`- and null-based guard.
 - A tool that assumes a private profile 404s instead of returning a
   restricted-but-200 shape (or vice versa) — Steam's actual behavior differs
   by endpoint, don't assume one implies the other for a sibling endpoint.
@@ -354,7 +374,13 @@ rather than inlining a new one), then re-run the full
 live only after the running MCP server process has been restarted (it won't
 pick up source changes on its own) — build/test passing is necessary but
 re-confirming actual live behavior changed is stronger evidence than trusting
-the diff alone.
+the diff alone. **A fix about an upstream payload's shape must be re-verified
+against the real API, never only against a fixture you wrote** — that fixture
+encodes the same assumption as the fix: `get_featured`'s unpriced-title fix
+tested `original_price === undefined` and went green, but Steam sends an
+explicit `null`, so live output still read `0.00 USD`. Correct the raw
+response interface from the observed payload too (it declared `number |
+undefined`, a shape Steam never sends).
 
 ## 7. Commit + changelog, if asked
 
