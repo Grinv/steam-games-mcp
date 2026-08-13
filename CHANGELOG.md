@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-08-13
+
 ### Security
 
 - Collapse whitespace in the prompts' free-form arguments, so a multi-line value can't render as its own paragraph of agent instructions. ([7d38e57](https://github.com/Grinv/steam-games-mcp/commit/7d38e57))
