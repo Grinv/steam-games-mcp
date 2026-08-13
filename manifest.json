@@ -50,7 +50,7 @@
     { "name": "get_global_achievements", "description": "Global achievement unlock rates." },
     {
       "name": "get_items",
-      "description": "Batch store card (price, review %, release) for many appids."
+      "description": "Batch store card (price, review %, compat, tags, release) for up to 50 appids."
     },
     {
       "name": "discover_games",
@@ -58,10 +58,13 @@
     },
     {
       "name": "get_game_achievements",
-      "description": "Full achievement list w/ names + rarity (key)."
+      "description": "A game's achievement list w/ names + rarity, first 150 (key)."
     },
     { "name": "get_current_players", "description": "Live concurrent player count." },
-    { "name": "get_wishlist", "description": "A player's wishlist appids (public profiles)." },
+    {
+      "name": "get_wishlist",
+      "description": "A player's wishlist: appids, or full store cards with prices, reviews, compat and tags via include_details (public profiles)."
+    },
     {
       "name": "get_followed_games",
       "description": "A player's followed games, separate from the wishlist (public profiles)."

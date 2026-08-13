@@ -15,6 +15,7 @@ import { settledWithLimit } from "../lib/concurrency.js";
 import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.js";
 import {
   friendIdsToEnrich,
+  isPrivateOwnedGames,
   summarizeComparePlayers,
   summarizeCurrentPlayers,
   summarizeFollowedGames,
@@ -267,7 +268,7 @@ export class SteamWebClient {
       // get excluded as "already owned" and could be recommended back.
       include_played_free_games: true,
     });
-    if (res.response?.games === undefined && res.response?.game_count === undefined) {
+    if (isPrivateOwnedGames(res)) {
       return notFound(PRIVATE_PROFILE_REASON);
     }
     const games = (res.response?.games ?? [])
@@ -499,7 +500,7 @@ export class SteamWebClient {
       include_appinfo: false,
       include_played_free_games: true,
     });
-    if (res.response?.games === undefined && res.response?.game_count === undefined) return null;
+    if (isPrivateOwnedGames(res)) return null;
     const wanted = new Set(appids);
     const playtimes = new Map<number, number>();
     for (const g of res.response?.games ?? []) {

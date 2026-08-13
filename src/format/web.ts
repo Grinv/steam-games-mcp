@@ -111,7 +111,12 @@ export interface OwnedGamesResponse {
 
 // Steam returns an empty `response: {}` (no game_count) when the profile or its
 // game-details are private — distinct from a public account with 0 games.
-function isPrivate(r: OwnedGamesResponse): boolean {
+// Exported because clients/web.ts hits the same GetOwnedGames shape twice before
+// any summarizer runs, and had hand-inlined this condition at both sites.
+// Strictly GetOwnedGames: its sibling GetRecentlyPlayedGames answers with its
+// own `total_count` field instead, which is exactly the mix-up that once
+// reported a public profile with no recent playtime as private.
+export function isPrivateOwnedGames(r: OwnedGamesResponse): boolean {
   return r.response?.game_count === undefined && r.response?.games === undefined;
 }
 
@@ -119,11 +124,16 @@ function isPrivate(r: OwnedGamesResponse): boolean {
 // blow the budget), so it's NOT reliable for "does this player own game X" —
 // pass checkAppids to check specific appids against the FULL, uncapped list
 // instead; `owns` then answers that reliably regardless of the games cap.
+//
+// Exported like every other cap in this file: the number appears in four tool
+// descriptions besides this one (three of them cross-referencing get_owned_games
+// from another tool), so a bare literal meant changing it in six places.
+export const OWNED_GAMES_MAX = 50;
 export function summarizeOwnedGames(
   r: OwnedGamesResponse,
   opts: { max?: number; checkAppids?: number[] } = {},
 ): z.infer<typeof getOwnedGamesOutput> {
-  if (isPrivate(r)) {
+  if (isPrivateOwnedGames(r)) {
     // No `owns` here even if checkAppids was given: a private profile means
     // ownership is genuinely unknown, not false — reporting owned:false would
     // misrepresent "can't check" as "doesn't own it".
@@ -136,7 +146,7 @@ export function summarizeOwnedGames(
   }
   const all = r.response?.games ?? [];
   const games = all.slice().sort((a, b) => (b.playtime_forever ?? 0) - (a.playtime_forever ?? 0));
-  const max = opts.max ?? 50;
+  const max = opts.max ?? OWNED_GAMES_MAX;
   const byAppid = new Map(
     all
       .filter((g): g is OwnedGame & { appid: number } => typeof g.appid === "number")
@@ -173,12 +183,13 @@ const COMPARE_PRIVATE_REASON =
 // Shared games between two players' FULL libraries (not capped like
 // summarizeOwnedGames — comparing needs the whole list, not just the top N by
 // playtime), each with its own playtime. Sorted by combined playtime desc.
+export const COMPARE_SHARED_MAX = 50;
 export function summarizeComparePlayers(
   a: OwnedGamesResponse,
   b: OwnedGamesResponse,
-  max = 50,
+  max = COMPARE_SHARED_MAX,
 ): z.infer<typeof notFoundReason> | z.infer<typeof comparePlayersFound> {
-  if (isPrivate(a) || isPrivate(b)) {
+  if (isPrivateOwnedGames(a) || isPrivateOwnedGames(b)) {
     return notFound(COMPARE_PRIVATE_REASON);
   }
   const gamesA = new Map((a.response?.games ?? []).map((g) => [g.appid, g]));

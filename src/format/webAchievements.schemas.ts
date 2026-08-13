@@ -6,16 +6,33 @@
 // its shape. `z.strictObject()` throughout.
 import { z } from "zod";
 
+// The `game` caveat below is the same one getGameAchievementsOutput carries:
+// both fields are populated from Valve's achievement schema (playerstats.gameName
+// / game.gameName), so they hit the identical codename case. Warned in one place
+// only was a disclosure gap, not a difference in behavior.
 export const playerAchievementsFound = z.strictObject({
   found: z.literal(true),
-  game: z.string().nullable(),
+  game: z
+    .string()
+    .nullable()
+    .describe(
+      "The game's name from Valve's achievement schema — occasionally an internal dev " +
+        "codename rather than the store title (e.g. 'Fiber' for Persona 5 Royal). Treat the " +
+        "appid you passed as the reliable identifier, or get the store title from get_game.",
+    ),
   total: z.number(),
   unlocked: z.number(),
   completion_pct: z.number().nullable(),
   returned: z.number(),
   achievements: z.array(
     z.strictObject({
-      name: z.string().optional(),
+      name: z
+        .string()
+        .optional()
+        .describe(
+          "Display name, falling back to the achievement's internal api name when Valve's " +
+            "schema has no localized title for it.",
+        ),
       achieved: z.boolean(),
       unlocked_at: z.string().nullable(),
     }),

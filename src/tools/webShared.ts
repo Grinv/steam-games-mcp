@@ -70,7 +70,8 @@ export const otherSteamid = steamId64Base.describe(
 
 // Collapses the "resolve steamid (arg or STEAM_ID default), call one client
 // method" shape shared by every steamid tool — wrapped via requireKey above
-// (webPlayer.ts's tools), or keyless via reply (webStore.ts's get_followed_games).
+// (webPlayer.ts's tools), or keyless via reply (webStore.ts's get_wishlist and
+// get_followed_games, neither of which needs the key for a raw SteamID64).
 // Generic over the tool's full input type so tools that take extra params
 // besides steamid (get_owned_games's check_appids, compare_players's
 // other_steamid, ...) still go through this instead of each hand-rolling

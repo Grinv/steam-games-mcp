@@ -18,7 +18,8 @@
   or the client (see `src/lib/errors.ts`'s `redact`).
 - **No data is kept between requests beyond a small TTL cache** (`CACHE_TTL_MS`,
   default 5 minutes) of non-personal store/catalog responses (game details,
-  review histogram, tag dictionary). Player-specific responses (profile,
+  review histogram, tag dictionary, the featured/specials payload, global
+  achievement percentages and a game's achievement schema). Player-specific responses (profile,
   library, achievements, friends) are never cached, with one exception:
   `get_player_summary`'s numeric Steam level is cached for up to
   `CACHE_TTL_MS` keyed by SteamID, since it's non-sensitive and rarely

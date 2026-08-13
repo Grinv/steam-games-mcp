@@ -28,7 +28,8 @@ src/
                   #   Each shaper has a co-located *.schemas.ts (schema-first: the shaper
                   #   builds its return value via `schema.parse({...})`, see Conventions);
                   #   storeCard.ts shares store.schemas.ts with store.ts
-  lib/            # GENERIC carcass: http, rateLimit, cache, errors, logger, result
+  lib/            # GENERIC carcass: http, rateLimit, cache, concurrency, errors,
+                  #   logger, result
   clients/        # storefront.ts (keyless store), web.ts (official Web API; key
                   #   optional; builds storeService.ts, exposed via `.store` for
                   #   tools/webStore.ts), storeService.ts (modern store-browse/
@@ -40,8 +41,9 @@ src/
                   #   wrapper across storefront+web), guard.ts, prompts.ts (MCP
                   #   Prompts)
   __tests__/      # node:test (*.test.ts) + helpers.ts
-scripts/          # build-tests.mjs, run-tests.mjs, sync-version.mjs (generic),
-                  #   check-api.mjs (domain), preversion-check.mjs (CHANGELOG gate)
+scripts/          # build-tests.mjs, run-tests.mjs, sync-version.mjs (+ its
+                  #   sync-version.d.mts declaration) (generic), check-api.mjs
+                  #   (domain), preversion-check.mjs (CHANGELOG gate)
 skills/           # reusable agent workflows for this repo (e.g. live-audit/) —
                   #   plain Markdown with a YAML frontmatter name/description,
                   #   not tied to any one tool's orchestration features. Same
@@ -78,7 +80,9 @@ npm run inspector      # run under the MCP Inspector
   major-version-only, so this doesn't need to track the patch floor). `.nvmrc`
   pins the maintainer's local dev version (currently `22`) for convenience, not
   the supported floor — CI's `node: [20, 22, 24]` matrix is what actually
-  enforces `>=20.11`.
+  enforces `>=20.11`. Note `@types/node` tracks current Node, not the floor, so
+  `tsc` will happily accept an API that only exists past 20.11; the CI node-20
+  job is the only thing that catches it.
 - **Never write to stdout** — it is the MCP protocol channel. Use the logger,
   which writes to **stderr only** and redacts credentials (the Web API key
   travels as a `key` query param). There is no MCP `logging` capability and no
