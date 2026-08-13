@@ -114,17 +114,31 @@ export class StorefrontClient {
   // Batch prices for many appids in one place. appdetails accepts a comma-list
   // with filters=price_overview; we chunk to keep URLs/responses bounded and
   // merge. Not cached — prices change and the appid set varies per call.
+  //
+  // Promise.allSettled, not a sequential await: summarizePrices already emits
+  // `available:false` for any appid missing from the merged map, and this tool's
+  // contract is "one row per id, never dropped" — so one chunk's transient
+  // failure should cost that chunk's prices, not the whole call. Awaiting in a
+  // bare loop threw the successful chunks away too. (Mirrors web.ts's
+  // #playerSummaries, whose chunk loop was converted for the same reason.)
   async getPrices(appids: number[], country?: string): Promise<Record<string, unknown>> {
     const cc = country ?? this.#cc;
     const CHUNK = 100;
+    const chunks: number[][] = [];
+    for (let i = 0; i < appids.length; i += CHUNK) chunks.push(appids.slice(i, i + CHUNK));
+    const settled = await Promise.allSettled(
+      chunks.map((chunk) =>
+        this.#http.getJson<PriceDetailsResponse>("api/appdetails", {
+          query: { appids: chunk.join(","), cc, filters: "price_overview" },
+        }),
+      ),
+    );
+    // Every chunk failing is an outage, not "no game has a price" — surface it
+    // rather than answering with a full list of available:false rows.
+    const fulfilled = settled.filter((r) => r.status === "fulfilled");
+    if (fulfilled.length === 0) throw (settled[0] as PromiseRejectedResult).reason;
     const merged: PriceDetailsResponse = {};
-    for (let i = 0; i < appids.length; i += CHUNK) {
-      const chunk = appids.slice(i, i + CHUNK);
-      const res = await this.#http.getJson<PriceDetailsResponse>("api/appdetails", {
-        query: { appids: chunk.join(","), cc, filters: "price_overview" },
-      });
-      Object.assign(merged, res);
-    }
+    for (const r of fulfilled) Object.assign(merged, r.value);
     return summarizePrices(merged, appids);
   }
 

@@ -11,8 +11,10 @@ import { RateLimiter } from "../lib/rateLimit.js";
 import { TtlCache } from "../lib/cache.js";
 import { ApiError, type ApiErrorCode, withFallbackOn } from "../lib/errors.js";
 import { messageFor } from "../lib/result.js";
+import { settledWithLimit } from "../lib/concurrency.js";
 import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.js";
 import {
+  friendIdsToEnrich,
   summarizeComparePlayers,
   summarizeCurrentPlayers,
   summarizeFollowedGames,
@@ -418,7 +420,7 @@ export class SteamWebClient {
   async getFriendList(steamid: string): Promise<Record<string, unknown>> {
     const res = await this.#friendsRaw(steamid);
     if (res === null) return notFound(PRIVATE_FRIENDS_REASON);
-    return summarizeFriendList(res, await this.#playerSummaries(friendIdsOf(res)));
+    return summarizeFriendList(res, await this.#playerSummaries(friendIdsToEnrich(res)));
   }
 
   // Which of a player's friends own a given set of appids, with playtime —
@@ -427,19 +429,33 @@ export class SteamWebClient {
   // missed. GetOwnedGames (unlike GetFriendList) doesn't error on a private
   // profile — it answers 200 with neither `games` nor `game_count`, which
   // #ownedPlaytimes reports as null.
+  // How many per-friend GetOwnedGames calls may be in flight at once. Low
+  // enough that a 2000-friend account doesn't stampede api.steampowered.com,
+  // high enough that a normal friend list still resolves in a few round-trips.
+  static readonly #FRIEND_LOOKUP_CONCURRENCY = 10;
+
   async findFriendsWhoOwn(steamid: string, appids: number[]): Promise<Record<string, unknown>> {
     const res = await this.#friendsRaw(steamid);
     if (res === null) return notFound(PRIVATE_FRIENDS_REASON);
     const ids = friendIdsOf(res);
     if (ids.length === 0) return summarizeFriendsWhoOwn(appids, [], [], {});
-    // Promise.allSettled, not Promise.all: #ownedPlaytimes only returns null
-    // for a private profile (see below) — a genuine transient failure
-    // (rate-limited/network/timeout/5xx) on ONE friend's own GetOwnedGames
-    // call still throws, and with a friend list of any size that's not a rare
-    // case. One friend's bad luck must not sink everyone else's results.
+    // settledWithLimit, not Promise.all: #ownedPlaytimes only returns null for a
+    // private profile (see below) — a genuine transient failure (rate-limited/
+    // network/timeout/5xx) on ONE friend's own GetOwnedGames call still throws,
+    // and with a friend list of any size that's not a rare case. One friend's
+    // bad luck must not sink everyone else's results.
+    //
+    // Bounded, not a plain allSettled over the whole list: `ids` is the full,
+    // uncapped friend list (FRIENDS_WHO_OWN_MAX caps only the OUTPUT), so a
+    // 2000-friend account fired 2000 simultaneous requests at the same endpoint
+    // and rate-limited itself — the allSettled above then dutifully reported
+    // most of them as unavailable_friends. Every friend is still checked (a
+    // skipped friend would be an unreported non-owner), just a few at a time.
     const [players, settled] = await Promise.all([
       this.#playerSummaries(ids),
-      Promise.allSettled(ids.map((id) => this.#ownedPlaytimes(id, appids))),
+      settledWithLimit(ids, SteamWebClient.#FRIEND_LOOKUP_CONCURRENCY, (id) =>
+        this.#ownedPlaytimes(id, appids),
+      ),
     ]);
     const ownership = settled.map((r) =>
       r.status === "fulfilled"

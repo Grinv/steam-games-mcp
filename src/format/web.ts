@@ -428,6 +428,25 @@ export interface FriendListResponse {
 // in a GetPlayerSummaries batch (fetched alongside) for name/state/avatar.
 // Sorted most-recent-friend-first, capped like the other list tools.
 export const FRIENDS_MAX = 100;
+
+// The steamids summarizeFriendList will actually return — same most-recent-first
+// sort, same cap. getFriendList enriches only these: a 2000-friend account
+// otherwise spent 20 chunked GetPlayerSummaries round-trips to populate a
+// 100-entry list and threw 19 of them away. Lives here, next to the sort it
+// mirrors, so the two can't drift apart.
+export function friendIdsToEnrich(r: FriendListResponse, max = FRIENDS_MAX): string[] {
+  return sortedFriends(r)
+    .slice(0, max)
+    .map((f) => f.steamid)
+    .filter((id): id is string => Boolean(id));
+}
+
+function sortedFriends(r: FriendListResponse) {
+  return (r.friendslist?.friends ?? []).toSorted(
+    (a, b) => (b.friend_since ?? 0) - (a.friend_since ?? 0),
+  );
+}
+
 export function summarizeFriendList(
   r: FriendListResponse,
   players: PlayerSummariesResponse,
@@ -439,8 +458,7 @@ export function summarizeFriendList(
   }
   const byId = new Map<string, PlayerSummary>();
   for (const p of players.response?.players ?? []) if (p.steamid) byId.set(p.steamid, p);
-  const sorted = friends.toSorted((a, b) => (b.friend_since ?? 0) - (a.friend_since ?? 0));
-  const { included, returned } = capList(sorted, max);
+  const { included, returned } = capList(sortedFriends(r), max);
   return friendListFound.parse({
     found: true,
     total: friends.length,

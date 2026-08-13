@@ -349,6 +349,53 @@ describe("get_prices", () => {
     assert.equal(mock.calls.filter((c) => c.url.includes("/api/appdetails")).length, 2);
   });
 
+  test("get_prices keeps the successful chunks when one chunk fails", async (t) => {
+    // The chunk loop used to await sequentially, so one chunk's 5xx threw out of
+    // the loop and discarded the chunks that had already succeeded — even though
+    // summarizePrices marks any missing appid available:false and the tool
+    // promises "one row per id, never dropped".
+    const { client } = await setupServer(
+      t,
+      { STEAM_STORE_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
+      (url) => {
+        if (!url.includes("/api/appdetails")) return jsonResponse({});
+        const ids = new URL(url).searchParams.get("appids")?.split(",") ?? [];
+        // Key off the payload, not call order — the chunks now run concurrently.
+        if (ids.includes("101")) return jsonResponse({}, { status: 500 });
+        const body: Record<string, unknown> = {};
+        for (const id of ids) body[id] = { success: true, data: [] };
+        return jsonResponse(body);
+      },
+    );
+    const appids = Array.from({ length: 150 }, (_, i) => i + 1);
+    const res = await client.callTool({ name: "get_prices", arguments: { appids } });
+    const s = res.structuredContent as {
+      count: number;
+      prices: { appid: number; available: boolean }[];
+    };
+    assert.notEqual(res.isError, true);
+    assert.equal(s.count, 150);
+    // First chunk survived; the failed chunk's ids degrade to available:false.
+    assert.equal(s.prices.find((p) => p.appid === 1)!.available, true);
+    assert.equal(s.prices.find((p) => p.appid === 100)!.available, true);
+    assert.equal(s.prices.find((p) => p.appid === 101)!.available, false);
+    assert.equal(s.prices.find((p) => p.appid === 150)!.available, false);
+  });
+
+  test("get_prices surfaces an error when every chunk fails (not 150 available:false rows)", async (t) => {
+    const { client } = await setupServer(
+      t,
+      { STEAM_STORE_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
+      (url) =>
+        url.includes("/api/appdetails") ? jsonResponse({}, { status: 500 }) : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_prices",
+      arguments: { appids: Array.from({ length: 150 }, (_, i) => i + 1) },
+    });
+    assert.equal(res.isError, true);
+  });
+
   test("get_prices reports unavailable when an appid's key is entirely absent from the response", async (t) => {
     // Distinct from an explicit {success:false} entry — Steam can just omit
     // the key altogether for some appids in a batch response.

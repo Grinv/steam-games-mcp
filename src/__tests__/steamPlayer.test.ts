@@ -7,6 +7,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { setupServer, jsonResponse, htmlResponse, assertToolError, textOf } from "./helpers.js";
 import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.js";
+import { FRIENDS_MAX } from "../format/web.js";
 
 // Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant
@@ -593,6 +594,35 @@ describe("get_player_achievements", () => {
 });
 
 describe("get_friend_list", () => {
+  test("get_friend_list enriches only the friends it will return, not the whole list", async (t) => {
+    // GetPlayerSummaries is chunked at 100 ids; the summarizer then sorts by
+    // friend_since and keeps FRIENDS_MAX. Enriching all 250 cost 3 round-trips
+    // to fill a 100-entry list and threw 2 of them away.
+    const friends = Array.from({ length: 250 }, (_, i) => ({
+      steamid: `765611979602${String(i + 1000).padStart(5, "0")}`,
+      relationship: "friend",
+      friend_since: 1600000000 + i,
+    }));
+    const { client, mock } = await setupServer(t, ENV, (url) => {
+      if (url.includes("GetFriendList")) return jsonResponse({ friendslist: { friends } });
+      if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "get_friend_list",
+      arguments: { steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { total: number; returned: number };
+    assert.equal(s.total, 250);
+    assert.equal(s.returned, FRIENDS_MAX);
+    const summaryCalls = mock.calls.filter((c) => c.url.includes("GetPlayerSummaries"));
+    assert.equal(summaryCalls.length, 1);
+    // And it's the newest 100 that got enriched, matching the summarizer's sort.
+    const asked = new URL(summaryCalls[0]!.url).searchParams.get("steamids")!.split(",");
+    assert.equal(asked.length, FRIENDS_MAX);
+    assert.equal(asked[0], friends.at(-1)!.steamid);
+  });
+
   test("get_friend_list merges names and sorts most-recent-friend-first", async (t) => {
     const { client } = await setupServer(t, ENV, router);
     const res = await client.callTool({
@@ -672,55 +702,6 @@ describe("get_friend_list", () => {
       arguments: { steamid: "76561197960287930" },
     });
     assertToolError(res, /5xx|retry later/i);
-  });
-
-  test("a GetPlayerSummaries chunk failure (150-friend list, 2 chunks) doesn't sink the whole call", async (t) => {
-    // #playerSummaries chunks at 100 ids/call. Build a 150-friend list so the
-    // enrichment call spans two chunks, and fail only the second one — the
-    // first 100 friends' names must still come through, not a hard error.
-    const manyFriends = Array.from({ length: 150 }, (_, i) => ({
-      steamid: `765611979602${String(87930 + i).padStart(5, "0")}`,
-      relationship: "friend",
-      friend_since: 1600000000 + i,
-    }));
-    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
-      if (url.includes("GetFriendList"))
-        return jsonResponse({ friendslist: { friends: manyFriends } });
-      if (url.includes("GetPlayerSummaries")) {
-        // The 101st friend (index 100) only appears in the second chunk's
-        // steamids list — use it to distinguish which chunk this call is.
-        if (url.includes(manyFriends[100]!.steamid)) return jsonResponse({}, { status: 500 });
-        return jsonResponse({
-          response: {
-            players: manyFriends
-              .filter((f) => url.includes(f.steamid))
-              .map((f) => ({ steamid: f.steamid, personaname: `Friend ${f.steamid}` })),
-          },
-        });
-      }
-      return jsonResponse({});
-    });
-    const res = await client.callTool({
-      name: "get_friend_list",
-      arguments: { steamid: "76561197960287930" },
-    });
-    assert.equal(res.isError, undefined);
-    const s = res.structuredContent as {
-      found: boolean;
-      total: number;
-      returned: number;
-      friends: { steamid: string; name: string | null }[];
-    };
-    assert.equal(s.found, true);
-    assert.equal(s.total, 150);
-    // get_friend_list's own 100-most-recent cap keeps friends 50-149 (by
-    // friend_since desc) — friend 60 (chunk 1, succeeded) and friend 120
-    // (chunk 2, failed) are both within that window, on opposite sides of
-    // the #playerSummaries chunk boundary (chunks split at raw index 100).
-    assert.equal(s.returned, 100);
-    const byId = new Map(s.friends.map((f) => [f.steamid, f.name]));
-    assert.equal(byId.get(manyFriends[60]!.steamid), `Friend ${manyFriends[60]!.steamid}`);
-    assert.equal(byId.get(manyFriends[120]!.steamid), null);
   });
 });
 
@@ -803,6 +784,96 @@ describe("find_friends_who_own", () => {
     // sanitized the same way a top-level tool failure's message is (messageFor()),
     // not embedded as-is (which could otherwise leak raw HTML/error-page text).
     assert.doesNotMatch(s.unavailable_friends[0]!.reason, /server exploded/);
+  });
+
+  test("a GetPlayerSummaries chunk failure (150-friend list, 2 chunks) doesn't sink the whole call", async (t) => {
+    // #playerSummaries chunks at 100 ids/call, and find_friends_who_own enriches
+    // the FULL friend list (unlike get_friend_list, which now enriches only the
+    // 100 it returns and so never spans two chunks). Fail only the second chunk:
+    // the first 100 friends' names must still come through, not a hard error.
+    const manyFriends = Array.from({ length: 150 }, (_, i) => ({
+      steamid: `765611979602${String(87930 + i).padStart(5, "0")}`,
+      relationship: "friend",
+      friend_since: 1600000000 + i,
+    }));
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetFriendList"))
+        return jsonResponse({ friendslist: { friends: manyFriends } });
+      if (url.includes("GetPlayerSummaries")) {
+        // The 101st friend (index 100) only appears in the second chunk's
+        // steamids list — use it to distinguish which chunk this call is.
+        if (url.includes(manyFriends[100]!.steamid)) return jsonResponse({}, { status: 500 });
+        return jsonResponse({
+          response: {
+            players: manyFriends
+              .filter((f) => url.includes(f.steamid))
+              .map((f) => ({ steamid: f.steamid, personaname: `Friend ${f.steamid}` })),
+          },
+        });
+      }
+      if (url.includes("GetOwnedGames")) {
+        // Only friends 60 and 120 own anything, so the owners list stays well
+        // under FRIENDS_WHO_OWN_MAX and both survive to be asserted on — one
+        // from each side of the enrichment chunk boundary.
+        const owns = [manyFriends[60]!.steamid, manyFriends[120]!.steamid].some((id) =>
+          url.includes(id),
+        );
+        return jsonResponse(owns ? OWNED : { response: { game_count: 0, games: [] } });
+      }
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [620], steamid: "76561197960287930" },
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as {
+      total_friends: number;
+      matches: { appid: number; owners: { steamid: string; name: string | null }[] }[];
+    };
+    assert.equal(s.total_friends, 150);
+    assert.equal(s.matches[0]!.owners.length, 2);
+    // Friend 60 came from the chunk that succeeded, friend 120 from the one that
+    // failed — the latter degrades to name:null rather than blanking everyone.
+    const byId = new Map(s.matches[0]!.owners.map((o) => [o.steamid, o.name]));
+    assert.equal(byId.get(manyFriends[60]!.steamid), `Friend ${manyFriends[60]!.steamid}`);
+    assert.equal(byId.get(manyFriends[120]!.steamid), null);
+  });
+
+  test("find_friends_who_own bounds its per-friend fan-out but still checks every friend", async (t) => {
+    // `ids` is the full, uncapped friend list (FRIENDS_WHO_OWN_MAX caps only the
+    // output), so a plain allSettled over it fired one simultaneous request per
+    // friend — a large account rate-limited itself and its own allSettled then
+    // reported most friends as unavailable.
+    const friends = Array.from({ length: 45 }, (_, i) => ({
+      steamid: `7656119796028${String(i + 10).padStart(4, "0")}`,
+      relationship: "friend",
+      friend_since: 1600000000 + i,
+    }));
+    let inFlight = 0;
+    let peak = 0;
+    const { client, mock } = await setupServer(t, ENV, async (url) => {
+      if (url.includes("GetFriendList")) return jsonResponse({ friendslist: { friends } });
+      if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
+      if (url.includes("GetOwnedGames")) {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setImmediate(r));
+        inFlight--;
+        return jsonResponse(OWNED);
+      }
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [620], steamid: "76561197960287930" },
+    });
+    assert.notEqual(res.isError, true);
+    const owned = mock.calls.filter((c) => c.url.includes("GetOwnedGames"));
+    // Every friend is still checked — a skipped one would be an unreported owner.
+    assert.equal(owned.length, 45);
+    assert.ok(peak <= 10, `expected at most 10 concurrent lookups, saw ${peak}`);
+    assert.ok(peak > 1, "the fan-out should still be concurrent, not serial");
   });
 
   test("find_friends_who_own reports found:false for a private friends list (403)", async (t) => {
