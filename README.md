@@ -150,7 +150,7 @@ Key: **–** no credentials · **K** Steam Web API key.
 | `get_recommended_games`   | K   | Personalized picks from playtime-weighted tags + review quality, excluding owned games                                      |
 | `get_player_achievements` | K   | A player's achievement progress in a game — achievement list capped at top 200, unlocked first                              |
 | `get_friend_list`         | K   | A player's friends — name, online state, current game (public friends list)                                                 |
-| `find_friends_who_own`    | K   | Which friends own given appid(s) + their playtime — checks each friend's FULL library, not just top 50                      |
+| `find_friends_who_own`    | K   | Which friends own given appid(s) + their playtime — each friend's FULL library, first 200 friends (`friends_checked`)       |
 | `compare_players`         | K   | Games two players both own, with each one's playtime — checks each player's FULL library, not just top 50                   |
 
 **Two tiers.** Store/search + discovery tools (`store`/`api.steampowered.com`)

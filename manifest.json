@@ -91,7 +91,7 @@
     { "name": "get_friend_list", "description": "A player's friends (key, public friends list)." },
     {
       "name": "find_friends_who_own",
-      "description": "Which friends own given appid(s), checking their full library (key)."
+      "description": "Which friends own given appid(s), checking each one's full library — first 200 friends (key)."
     },
     {
       "name": "compare_players",
