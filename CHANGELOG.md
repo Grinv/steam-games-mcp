@@ -32,7 +32,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fix `what_should_i_play`'s documented `budget: 'free'` rendering as "drop any result priced above free" instead of a free-to-play filter. ([7d38e57](https://github.com/Grinv/steam-games-mcp/commit/7d38e57))
 - Fix a `prompts/get` call with no `arguments` field at all failing validation, even though every prompt argument is optional. ([7d38e57](https://github.com/Grinv/steam-games-mcp/commit/7d38e57))
 - Fix `get_game` reporting a region-blocked appid as a nonexistent one; the error now names the country and both possible causes. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
-- Fix `get_featured` pricing an unreleased title at "0.00 USD" as if it were free; an absent price is `null` now. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix `get_featured` pricing an unreleased title at "0.00 USD" as if it were free; an absent price is `null` now. ([fef888e](https://github.com/Grinv/steam-games-mcp/commit/fef888e))
 - Fix `get_player_achievements` turning a transient 5xx during its game-schema lookup into a definitive "Achievements unavailable." ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
 - Fix a 403 from `get_game_achievements`' keyless achievement lookup being blamed on bad credentials. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
 - Fix `get_game_reviews`' `review_language` accepting an empty string, which Steam treats as its own filter rather than 'all'. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
