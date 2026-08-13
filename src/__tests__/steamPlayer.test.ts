@@ -324,6 +324,29 @@ describe("get_recommended_games", () => {
     assert.deepEqual(s.recommendations[0]!.matched_tags, ["Roguelike"]);
   });
 
+  test("get_recommended_games: `limit` caps the returned picks, and the old `count` name is rejected loudly", async (t) => {
+    // Renamed count → limit so the "how many to RETURN" parameter is spelled the
+    // same as get_game_news'/get_game_reviews'. discover_games keeps `count`
+    // because it means something else there (entries to SCAN). The input schemas
+    // are strictObject, so a caller still passing `count` gets a clear
+    // Unrecognized-key error rather than silently falling back to the default.
+    const { client } = await setupServer(t, ENV, recoRouter);
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930", limit: 1 },
+    });
+    const s = res.structuredContent as { count: number; recommendations: unknown[] };
+    assert.notEqual(res.isError, true);
+    assert.equal(s.recommendations.length, 1);
+    assert.equal(s.count, 1);
+
+    const old = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930", count: 1 },
+    });
+    assertToolError(old, /unrecognized key/i);
+  });
+
   test("get_recommended_games: exclude_tags drops matching candidates end-to-end", async (t) => {
     const { client } = await setupServer(t, ENV, (url) => {
       if (url.includes("IStoreQueryService/Query")) {

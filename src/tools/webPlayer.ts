@@ -287,13 +287,13 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "instead. Note: taste is weighted from only the player's " +
         `${FAVORITE_TAG_SAMPLE_SIZE} most-played owned games, and candidates come from a fixed ` +
         `${RECOMMENDATION_POOL_SIZE}-entry catalog scan, so a heavy exclude_tags/min_discount ` +
-        "combination can return fewer than `count` — there's no larger scan to fall back to. " +
+        "combination can return fewer than `limit` — there's no larger scan to fall back to. " +
         "Requires STEAM_API_KEY and a public profile with game-details visible (same requirement as " +
         "get_owned_games) — found:false is also returned if the player owns no games at all, or if too " +
         "few of their played games have resolvable tags to build a taste profile.",
       inputSchema: z.strictObject({
         steamid,
-        count: z
+        limit: z
           .int()
           .positive()
           .max(25)
@@ -321,8 +321,12 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: getRecommendedGamesOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { count, exclude_tags, min_discount }) =>
-      web.getRecommendedGames(sid, { count, excludeTags: exclude_tags, minDiscount: min_discount }),
+    steamIdTool(web, requireKey, (sid, { limit, exclude_tags, min_discount }) =>
+      web.getRecommendedGames(sid, {
+        count: limit,
+        excludeTags: exclude_tags,
+        minDiscount: min_discount,
+      }),
     ),
   );
 

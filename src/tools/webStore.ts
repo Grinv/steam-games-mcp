@@ -222,7 +222,10 @@ export function registerStoreWebTools(
           .positive()
           .max(200)
           .describe(
-            "How many catalog entries to scan (1-200). Default 50. Raise for stricter filters.",
+            "How many catalog entries to SCAN (1-200). Default 50. Not a result count — the " +
+              "filters below are applied over this window, so a strict combination can return far " +
+              "fewer than this; raise it for stricter filters. (Tools that cap what they RETURN " +
+              "call that `limit`.)",
           )
           .default(50),
         start: z
