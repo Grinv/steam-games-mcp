@@ -575,11 +575,30 @@ describe("get_player_achievements", () => {
   // #explainNoPlayerAchievements' own fallback: the disambiguating
   // GetSchemaForGame lookup can itself fail. That must still degrade to a
   // reason string, never throw/crash the tool.
-  test("get_player_achievements: success:false and the schema lookup ALSO fails → generic fallback reason", async (t) => {
+  test("get_player_achievements: a transient schema-lookup failure is retryable, not a verdict", async (t) => {
+    // The disambiguating GetSchemaForGame call used to be wrapped in a bare
+    // catch, so a 5xx on it turned into a definitive "Achievements unavailable."
+    // — telling the agent to stop asking about a game that may well have them.
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       if (url.includes("GetPlayerAchievements"))
         return jsonResponse({ playerstats: { success: false } });
       if (url.includes("GetSchemaForGame")) return jsonResponse({}, { status: 500 });
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 620 },
+    });
+    assertToolError(res, /5xx|retry/i);
+  });
+
+  test("get_player_achievements: a non-transient schema-lookup failure still gives the fallback reason", async (t) => {
+    // The other half of the same branch: a 403 is about this appid/key, not a
+    // blip, so it stays a found:false answer rather than a retryable error.
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetPlayerAchievements"))
+        return jsonResponse({ playerstats: { success: false } });
+      if (url.includes("GetSchemaForGame")) return jsonResponse({}, { status: 403 });
       return jsonResponse({});
     });
     const res = await client.callTool({

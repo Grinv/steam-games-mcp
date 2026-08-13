@@ -29,7 +29,11 @@ export const personaStates = [
 export const visibilitySchema = z.enum(["public", "private"]);
 
 export const getPlayerSummaryOutput = z.discriminatedUnion("found", [
-  z.strictObject({ found: z.literal(false) }),
+  // Both this tool and get_player_bans work on private profiles, so found:false
+  // here means one thing only — no such account. Said out loud (like every
+  // sibling tool's found:false) rather than left for the agent to infer from a
+  // bare boolean, which reads just as easily as "private".
+  z.strictObject({ found: z.literal(false), reason: z.string() }),
   z.strictObject({
     found: z.literal(true),
     steamid: z.string().optional(),
@@ -58,7 +62,10 @@ export const getOwnedGamesOutput = z.discriminatedUnion("found", [
     reason: z.string(),
     game_count: z.null(),
     games: z.array(z.never()),
-    owns: z.array(z.strictObject({ appid: z.number(), owned: z.literal(false) })).optional(),
+    // No `owns` here on purpose: summarizeOwnedGames deliberately omits it on
+    // this branch (a private profile means ownership is unknown, not false —
+    // the 0.10.1 fix), so advertising it in the outputSchema told the calling
+    // model that owned:false from a private profile is a shape it may receive.
   }),
   z.strictObject({
     found: z.literal(true),
@@ -96,6 +103,7 @@ export const getRecentlyPlayedOutput = z.discriminatedUnion("found", [
   z.strictObject({
     found: z.literal(true),
     total: z.number(),
+    returned: z.number(),
     games: z.array(ownedGame),
   }),
 ]);
@@ -138,7 +146,7 @@ export const wishlistLightFound = z.strictObject({
 });
 
 export const getPlayerBansOutput = z.discriminatedUnion("found", [
-  z.strictObject({ found: z.literal(false) }),
+  z.strictObject({ found: z.literal(false), reason: z.string() }),
   z.strictObject({
     found: z.literal(true),
     steamid: z.string().optional(),

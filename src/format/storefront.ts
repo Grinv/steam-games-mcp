@@ -10,7 +10,7 @@
 // `outputSchema` advertised to MCP clients.
 
 import { z } from "zod";
-import { hours, isoDay, money, names, storeUrl, stripHtml } from "./shared.js";
+import { capList, hours, isoDay, money, names, storeUrl, stripHtml } from "./shared.js";
 import {
   detailPriceSchema,
   featuredItemSchema,
@@ -99,8 +99,17 @@ function platforms(p: StoreApp["platforms"]): string[] {
     .map(([os]) => os);
 }
 
+// `dlc` is a bare appid list with no names, so it's near-useless past a sample
+// yet can dominate the whole response: Train Simulator Classic (appid 24010)
+// ships 791 DLC appids, ~5.8 KB of digits and two thirds of the payload. Capped
+// like every other collection in this codebase, with dlc_total for the real
+// count. Sized to still cover the ordinary "a few dozen DLC" game whole.
+export const DLC_MAX = 50;
+
 export function detailApp(a: StoreApp): z.infer<typeof getGameOutput> {
   const reqs = Array.isArray(a.pc_requirements) ? undefined : a.pc_requirements;
+  const allDlc = a.dlc ?? [];
+  const dlc = capList(allDlc, DLC_MAX);
   return getGameOutput.parse({
     appid: a.steam_appid,
     name: a.name,
@@ -126,7 +135,8 @@ export function detailApp(a: StoreApp): z.infer<typeof getGameOutput> {
       .map((h) => h.name)
       .filter((n): n is string => Boolean(n)),
     supported_languages: stripHtml(a.supported_languages),
-    dlc: a.dlc ?? [],
+    dlc: dlc.included,
+    dlc_total: allDlc.length,
     demos: (a.demos ?? []).map((d) => d.appid).filter((id): id is number => typeof id === "number"),
     // Content descriptor ids flag mature themes (violence/nudity/etc.); notes
     // is Valve's free-text. Empty ids → no mature descriptors.
@@ -303,7 +313,16 @@ function featuredItems(items: FeaturedItem[] | undefined): z.infer<typeof featur
       discounted: i.discounted ?? false,
       discount_percent: i.discount_percent ?? 0,
       original_price: money(i.original_price, i.currency),
-      final_price: money(i.final_price, i.currency),
+      // A not-yet-priced game (every `coming_soon` entry, confirmed against
+      // appdetails: is_free:false with price_overview:null) arrives as
+      // final_price 0 with no original_price, which money() rendered as
+      // "0.00 USD" — an agent then reports an unreleased paid game as free. Null
+      // means "no price yet"; a genuinely free title is indistinguishable in
+      // this payload, so "unknown" is the honest answer for both.
+      final_price:
+        i.final_price === 0 && i.original_price === undefined
+          ? null
+          : money(i.final_price, i.currency),
       store_url: storeUrl(i.id),
     });
   }

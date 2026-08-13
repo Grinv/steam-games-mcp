@@ -73,7 +73,14 @@ export const getGameOutput = z.strictObject({
         "list — for every achievement with rarity and a hidden flag, use get_game_achievements instead.",
     ),
   supported_languages: z.string().nullable(),
-  dlc: z.array(z.number()),
+  dlc: z
+    .array(z.number())
+    .describe(
+      "Appids of this game's DLC, capped — a DLC-heavy game can list hundreds, which would " +
+        "dwarf every other field. Compare against dlc_total, and pass the appids to get_items " +
+        "for their names and prices.",
+    ),
+  dlc_total: z.number().describe("How many DLC this game has in total, before the `dlc` cap."),
   demos: z.array(z.number()),
   content_descriptors: z.strictObject({ ids: z.array(z.number()), notes: z.string().nullable() }),
   base_game: z.strictObject({ appid: z.number(), name: z.string().nullable() }).nullable(),
@@ -124,7 +131,14 @@ export const featuredItemSchema = z.strictObject({
   discounted: z.boolean(),
   discount_percent: z.number(),
   original_price: z.string().nullable(),
-  final_price: z.string().nullable(),
+  final_price: z
+    .string()
+    .nullable()
+    .describe(
+      "Current price, or null when this section's payload carries no price — which is every " +
+        "`coming_soon` entry (not yet priced, NOT free) and any free-to-play title. Call get_game " +
+        "or get_items on the appid when you need to tell those two apart.",
+    ),
   store_url: z.string().nullable(),
 });
 

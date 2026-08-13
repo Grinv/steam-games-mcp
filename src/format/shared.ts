@@ -20,6 +20,14 @@ export const PRIVATE_PROFILE_REASON =
   "Profile or game-details are private. Ask the owner to set Steam → Privacy → " +
   "Game details = Public, or this data can't be read.";
 
+// The two tools that read a profile regardless of its privacy setting
+// (get_player_summary, get_player_bans) can only fail one way, so they say which
+// one instead of returning a bare found:false an agent could read as "private".
+export const NO_SUCH_ACCOUNT_REASON =
+  "No Steam account with that SteamID64. This tool works on private profiles too, " +
+  "so this is not a privacy setting — double-check the id, or resolve a vanity name " +
+  "with resolve_vanity_url.";
+
 // The 17-digit SteamID64 shape. Single source for both the steamid tool-input
 // validation (tools/webShared.ts) and the SteamID64-vs-vanity discrimination in
 // the client's requireSteamId (clients/web.ts) — same pattern, two purposes.

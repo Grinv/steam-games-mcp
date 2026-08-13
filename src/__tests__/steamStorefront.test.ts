@@ -120,6 +120,20 @@ describe("get_game", () => {
     assertToolError(res, /no steam app with id 999/i);
   });
 
+  test("get_game's not-found message names the region, since appdetails uses success:false for both", async (t) => {
+    // Confirmed live: appid 1174180 is a full record under cc=US and
+    // success:false under cc=RU. Saying only "no such appid" sent the agent off
+    // to re-search a perfectly good one.
+    const { client } = await setupServer(t, { ...ENV, STEAM_COUNTRY: "RU" }, (url) =>
+      url.includes("/api/appdetails")
+        ? jsonResponse({ "999": { success: false } })
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({ name: "get_game", arguments: { appid: 999 } });
+    assertToolError(res, /region RU/);
+    assertToolError(res, /isn't available in that country/i);
+  });
+
   test("get_game returns a not-found error for success:true with no data (region-restricted/delisted)", async (t) => {
     const { client } = await setupServer(t, ENV, (url) => {
       if (url.includes("/api/appdetails")) return jsonResponse({ "999": { success: true } });

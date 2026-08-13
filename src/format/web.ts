@@ -11,6 +11,7 @@
 
 import { z } from "zod";
 import {
+  NO_SUCH_ACCOUNT_REASON,
   PRIVATE_PROFILE_REASON,
   capList,
   hours,
@@ -75,7 +76,7 @@ export function summarizePlayer(
   level?: number | null,
 ): z.infer<typeof getPlayerSummaryOutput> {
   const p = r.response?.players?.[0];
-  if (!p) return getPlayerSummaryOutput.parse({ found: false });
+  if (!p) return getPlayerSummaryOutput.parse({ found: false, reason: NO_SUCH_ACCOUNT_REASON });
   return getPlayerSummaryOutput.parse({
     found: true,
     steamid: p.steamid,
@@ -222,8 +223,10 @@ function isPrivateRecentlyPlayed(r: RecentlyPlayedResponse): boolean {
   return r.response?.total_count === undefined && r.response?.games === undefined;
 }
 
+export const RECENTLY_PLAYED_MAX = 50;
 export function summarizeRecentlyPlayed(
   r: RecentlyPlayedResponse,
+  max = RECENTLY_PLAYED_MAX,
 ): z.infer<typeof getRecentlyPlayedOutput> {
   if (isPrivateRecentlyPlayed(r)) {
     return getRecentlyPlayedOutput.parse({
@@ -233,10 +236,19 @@ export function summarizeRecentlyPlayed(
       games: [],
     });
   }
+  // The two-week window keeps this list short in practice, but "in practice" is
+  // not a bound — it was the one collection summarizer with neither a cap nor a
+  // `returned` count, against AGENTS.md's trim-every-list rule. Sorted so the
+  // cap keeps the games actually played most, not an arbitrary slice.
+  const all = (r.response?.games ?? []).toSorted(
+    (a, b) => (b.playtime_2weeks ?? 0) - (a.playtime_2weeks ?? 0),
+  );
+  const { included, returned } = capList(all, max);
   return getRecentlyPlayedOutput.parse({
     found: true,
-    total: r.response?.total_count ?? r.response?.games?.length ?? 0,
-    games: (r.response?.games ?? []).map((g) => ({
+    total: r.response?.total_count ?? all.length,
+    returned,
+    games: included.map((g) => ({
       appid: g.appid,
       name: g.name ?? null,
       playtime_2weeks_hours: hours(g.playtime_2weeks),
@@ -360,7 +372,7 @@ export interface PlayerBansResponse {
 
 export function summarizePlayerBans(r: PlayerBansResponse): z.infer<typeof getPlayerBansOutput> {
   const p = r.players?.[0];
-  if (!p) return getPlayerBansOutput.parse({ found: false });
+  if (!p) return getPlayerBansOutput.parse({ found: false, reason: NO_SUCH_ACCOUNT_REASON });
   const vacBanned = p.VACBanned ?? false;
   const vacBanCount = p.NumberOfVACBans ?? 0;
   const gameBanCount = p.NumberOfGameBans ?? 0;

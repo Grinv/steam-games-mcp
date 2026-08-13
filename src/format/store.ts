@@ -96,7 +96,16 @@ export function summarizeItems(
       const bp = it.best_purchase_option;
       return {
         ...baseCard(it, tagMap),
+        // Always present, so `available` discriminates every row the way
+        // get_prices' does instead of being inferable only from its absence.
+        available: true,
         is_free: it.is_free ?? false,
+        // null covers three different situations that Steam's payload doesn't
+        // separate — not sold in this country (confirmed live: appid 1174180
+        // returns a name and nothing else under cc=RU, a full card under cc=US),
+        // not released yet, or simply no purchase option. is_free and
+        // coming_soon narrow it down; the schema says so rather than letting an
+        // agent read null as "free".
         price: bp ? priceFields(bp) : it.is_free ? { is_free: true } : null,
         coming_soon: it.release?.is_coming_soon ?? false,
       };

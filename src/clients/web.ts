@@ -55,6 +55,16 @@ import type { Config } from "../config.js";
 
 type Query = Record<string, string | number | boolean | undefined>;
 
+// Failures that say nothing about the resource itself — retrying may well
+// succeed. A catch that flattens these into a definitive "not found"/"no data"
+// answer tells the agent to stop asking about something that does exist.
+const TRANSIENT_CODES: readonly ApiErrorCode[] = [
+  "server_error",
+  "network",
+  "timeout",
+  "rate_limited",
+];
+
 const PRIVATE_FRIENDS_REASON =
   "Profile or friends list is private. Ask the owner to set Steam → Privacy → " +
   "Friends List = Public.";
@@ -347,7 +357,12 @@ export class SteamWebClient {
           ? "This game has achievements, but the player's data is hidden (private game-details, or they don't own it)."
           : "This game has no achievements.",
       );
-    } catch {
+    } catch (e) {
+      // A transient failure of this second (schema) call must not be reported as
+      // a definitive "no achievements here" — that's a retryable upstream
+      // problem, and the agent can only tell if we say so. Only a genuine
+      // appid-level rejection falls through to the not-found wording.
+      if (e instanceof ApiError && TRANSIENT_CODES.includes(e.code)) throw e;
       return notFound(apiError || "Achievements unavailable.");
     }
   }
@@ -668,9 +683,16 @@ export class SteamWebClient {
           appid,
           l,
         }),
+        // hasCredentials:false like every other keyless-by-design call site
+        // (lib/http.ts fixes hasCredentials per client instance, not per
+        // request, so a 403 here would otherwise be blamed on the configured
+        // key). Currently only ever read as a boolean below, so this is
+        // pre-emptive — but the sibling call at getGlobalAchievements passes it,
+        // and this exact inconsistency has twice survived a fix elsewhere.
         this.#get<GlobalAchievementsResponse>(
           "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
           { gameid: appid },
+          { hasCredentials: false },
         ),
       ]);
       if (schemaResult.status === "fulfilled") {

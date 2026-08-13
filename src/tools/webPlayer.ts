@@ -11,8 +11,8 @@ import { requireKey as makeRequireKey, otherSteamid, steamid, steamIdTool } from
 import { notFoundReason, withNotFound } from "../format/shared.schemas.js";
 import { recommendedGamesFound } from "../format/store.schemas.js";
 import { FAVORITE_TAG_SAMPLE_SIZE, RECOMMENDATION_POOL_SIZE } from "../clients/storeService.js";
-import { FRIENDS_MAX, FRIENDS_WHO_OWN_MAX } from "../format/web.js";
-import { ACHIEVEMENTS_MAX } from "../format/webAchievements.js";
+import { FRIENDS_MAX, FRIENDS_WHO_OWN_MAX, RECENTLY_PLAYED_MAX } from "../format/web.js";
+import { ACHIEVEMENTS_MAX, GAME_SCHEMA_ACHIEVEMENTS_MAX } from "../format/webAchievements.js";
 import {
   comparePlayersFound,
   findFriendsWhoOwnFound,
@@ -52,8 +52,11 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       title: "Get a game's full achievement list",
       description:
         "List a game's achievements by appid with their names, descriptions, hidden flag and " +
-        `global unlock % (rarity), in the game's own definition order (capped at the first ${ACHIEVEMENTS_MAX}; ` +
-        "check `returned` vs `total` — most games have far fewer). Requires STEAM_API_KEY (the " +
+        `global unlock % (rarity), in the game's own definition order (capped at the first ${GAME_SCHEMA_ACHIEVEMENTS_MAX}; ` +
+        "check `returned` vs `total` — most games have far fewer). An empty `achievements` list " +
+        "with total:0 means this appid has no achievement schema at all — a DLC, soundtrack, tool " +
+        "or demo, or an appid that doesn't exist; the two are not reported separately here, so use " +
+        "get_game to confirm the appid is a real base game. Requires STEAM_API_KEY (the " +
         "achievement schema needs a key). For just the rarity by internal id without a key, use " +
         "get_global_achievements; for a few named highlights, see get_game's achievements_highlighted; " +
         "for a specific player's own unlock progress instead of the catalog-wide list, use " +
@@ -222,8 +225,11 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
           .nonempty()
           .max(50)
           .describe(
-            "Steam appids to reliably check ownership of (1-50), regardless of the top-50-by-" +
-              "playtime cap on `games`. Adds an `owns` field: [{appid, owned, playtime_hours}].",
+            "Steam appids to check ownership of (1-50), regardless of the top-50-by-playtime cap " +
+              "on `games`. Adds an `owns` field: [{appid, owned, playtime_hours}]. One upstream " +
+              "gap to know about: Steam omits free-to-play titles the player owns but has NEVER " +
+              "launched, so those report owned:false. A private profile reports no `owns` at all " +
+              "(ownership unknown) rather than a false owned:false.",
           )
           .optional(),
       }),
@@ -238,7 +244,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
     {
       title: "Get recently played games",
       description:
-        "List the games a player has played in the last two weeks, with recent and total playtime. " +
+        "List the games a player has played in the last two weeks, with recent and total playtime, " +
+        `most-recently-played first (capped at ${RECENTLY_PLAYED_MAX}; check \`returned\` vs \`total\`). ` +
         "For all-time top games by playtime instead (capped to the top 50), use get_owned_games. " +
         "Requires STEAM_API_KEY and a public profile with game-details visibility (same requirement " +
         "as get_owned_games) — otherwise it returns found:false.",

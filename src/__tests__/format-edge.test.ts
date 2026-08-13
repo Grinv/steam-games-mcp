@@ -1,22 +1,27 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  DLC_MAX,
   detailApp,
+  summarizeFeatured,
   summarizeReviews,
   summarizeReviewHistogram,
   summarizeSearch,
 } from "../format/storefront.js";
 import {
+  RECENTLY_PLAYED_MAX,
   summarizePlayer,
   summarizeOwnedGames,
   summarizeFriendsWhoOwn,
   summarizeNews,
+  summarizeRecentlyPlayed,
 } from "../format/web.js";
 import {
   summarizeGlobalAchievements,
   summarizeGameSchema,
   summarizePlayerAchievements,
   ACHIEVEMENTS_MAX,
+  GAME_SCHEMA_ACHIEVEMENTS_MAX,
 } from "../format/webAchievements.js";
 
 // Steam frequently omits optional fields; these exercise the sparse-payload
@@ -103,6 +108,80 @@ describe("detailApp", () => {
     assert.equal(d.price.final, "$9.99");
     assert.equal(d.price.discount_percent, 0);
   });
+
+  test("a DLC-heavy game caps `dlc` but still reports the true dlc_total", () => {
+    // Train Simulator Classic ships 791 DLC appids — ~5.8 KB of bare digits that
+    // dwarfed every field an agent actually asked for, and the only collection
+    // in the codebase without a cap.
+    const dlc = Array.from({ length: 791 }, (_, i) => 1000 + i);
+    const d = detailApp({ steam_appid: 24010, name: "Train Simulator", dlc }) as {
+      dlc: number[];
+      dlc_total: number;
+    };
+    assert.equal(d.dlc.length, DLC_MAX);
+    assert.equal(d.dlc_total, 791);
+    assert.equal(d.dlc[0], 1000); // Steam's own order preserved
+  });
+
+  test("a game with few DLC returns them all, with dlc_total matching", () => {
+    const d = detailApp({ dlc: [1, 2, 3] }) as { dlc: number[]; dlc_total: number };
+    assert.deepEqual(d.dlc, [1, 2, 3]);
+    assert.equal(d.dlc_total, 3);
+  });
+});
+
+describe("summarizeFeatured", () => {
+  test("an unpriced coming-soon title reports null, not '0.00 USD'", () => {
+    // Confirmed against appdetails: every coming_soon entry is is_free:false
+    // with price_overview:null — not free, just not priced yet. money() rendered
+    // the 0 as a real price, so an agent called an unreleased paid game free.
+    const s = summarizeFeatured({
+      coming_soon: {
+        items: [{ id: 1, name: "Unreleased", currency: "USD", final_price: 0 }],
+      },
+      specials: {
+        items: [
+          { id: 2, name: "On sale", currency: "USD", original_price: 1999, final_price: 999 },
+        ],
+      },
+    }) as { coming_soon: { final_price: string | null }[]; specials: { final_price: string }[] };
+    assert.equal(s.coming_soon[0]!.final_price, null);
+    // A real price is still a real price.
+    assert.equal(s.specials[0]!.final_price, "9.99 USD");
+  });
+});
+
+describe("summarizeRecentlyPlayed", () => {
+  test("caps the list most-played-first and reports `returned` alongside the true total", () => {
+    // The two-week window keeps this short in practice, but it was the one
+    // collection summarizer with neither a cap nor a returned count.
+    const games = Array.from({ length: RECENTLY_PLAYED_MAX + 20 }, (_, i) => ({
+      appid: i + 1,
+      name: `Game ${i}`,
+      playtime_2weeks: i, // ascending, so the cap must keep the LAST ones
+      playtime_forever: i * 10,
+    }));
+    const s = summarizeRecentlyPlayed({
+      response: { total_count: games.length, games },
+    }) as { total: number; returned: number; games: { appid: number }[] };
+    assert.equal(s.total, RECENTLY_PLAYED_MAX + 20);
+    assert.equal(s.returned, RECENTLY_PLAYED_MAX);
+    assert.equal(s.games.length, RECENTLY_PLAYED_MAX);
+    assert.equal(s.games[0]!.appid, games.at(-1)!.appid);
+  });
+
+  test("a public profile with nothing played in two weeks stays found:true", () => {
+    // GetRecentlyPlayedGames answers {total_count:0} with no `games` key — the
+    // regression that once reported this as a private profile.
+    const s = summarizeRecentlyPlayed({ response: { total_count: 0 } }) as {
+      found: boolean;
+      total: number;
+      returned: number;
+    };
+    assert.equal(s.found, true);
+    assert.equal(s.total, 0);
+    assert.equal(s.returned, 0);
+  });
 });
 
 describe("summarizeSearch", () => {
@@ -170,7 +249,12 @@ test("summarizeReviews: empty payload → null summary and no reviews; long text
 });
 
 test("summarizePlayer: no players → found:false; sparse player fills nullable fields", () => {
-  assert.deepEqual(summarizePlayer({ response: { players: [] } }), { found: false });
+  // The reason spells out that found:false here means "no such account", never
+  // "private" — this tool reads private profiles too.
+  const missing = summarizePlayer({ response: { players: [] } }) as Record<string, unknown>;
+  assert.equal(missing.found, false);
+  assert.match(String(missing.reason), /no steam account/i);
+  assert.doesNotMatch(String(missing.reason), /^Profile or/i);
   const p = summarizePlayer({
     response: { players: [{ steamid: "1", personaname: "Solo" }] },
   }) as Record<string, unknown>;
@@ -300,7 +384,7 @@ describe("summarizeGlobalAchievements", () => {
 });
 
 describe("summarizeGameSchema", () => {
-  test("a 1000+-achievement game is capped at 200 in definition order, total stays the true count", () => {
+  test(`a 1000+-achievement game is capped at ${GAME_SCHEMA_ACHIEVEMENTS_MAX} in definition order, total stays the true count`, () => {
     const achievements = Array.from({ length: 1328 }, (_, i) => ({
       name: `a${i}`,
       displayName: `Achievement ${i}`,
@@ -312,11 +396,14 @@ describe("summarizeGameSchema", () => {
       { achievementpercentages: { achievements: [] } },
     ) as { total: number; returned: number; achievements: { name: string }[] };
     assert.equal(s.total, 1328);
-    assert.equal(s.returned, ACHIEVEMENTS_MAX);
-    assert.equal(s.achievements.length, ACHIEVEMENTS_MAX);
+    assert.equal(s.returned, GAME_SCHEMA_ACHIEVEMENTS_MAX);
+    assert.equal(s.achievements.length, GAME_SCHEMA_ACHIEVEMENTS_MAX);
     assert.equal(s.achievements[0]!.name, "Achievement 0"); // definition order preserved
   });
 
+  // This tool carries description text per entry, so it has a lower cap than its
+  // two siblings — but the common ~120-130-achievement game must still come back
+  // whole, which is the reason the shared cap isn't 100 either.
   test("a common-sized list (e.g. 130 achievements) is returned in full, well under the cap", () => {
     const achievements = Array.from({ length: 130 }, (_, i) => ({
       name: `a${i}`,

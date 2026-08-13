@@ -26,7 +26,9 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       description:
         "Search the Steam store by title — term can be partial or approximate, not an exact match; " +
         "returns matches with their appid (needed by the other game tools), price, Metacritic score, " +
-        "platforms, type (game/dlc/…) and a clickable store_url. Returns only Steam's own first page " +
+        "platforms, type and a clickable store_url. Note `type` is Steam's storesearch value, which " +
+        "is 'app' for every store item — it does NOT distinguish a game from its DLC or soundtrack; " +
+        "call get_game on the appid for the real type (game/dlc/music/…). Returns only Steam's own first page " +
         "of matches (~10, no pagination) — refine the term if the game you want isn't listed. No API " +
         "key required.",
       inputSchema: z.strictObject({
@@ -106,7 +108,15 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         review_language: z
           .string()
           .trim()
-          .describe("Filter reviews by language, e.g. 'english'. Default 'all'.")
+          // .nonempty() so a blank value can't silently narrow the result: Steam
+          // treats "" as its own filter, not as "all", so it quietly returned a
+          // subset with rescoped totals.
+          .nonempty()
+          .describe(
+            "Filter reviews by language, e.g. 'english'. Default 'all'. Setting this ALSO rescopes " +
+              "the summary counts (total_reviews / positive / negative / %) to that language — they " +
+              "are no longer the game's global totals. Leave it at 'all' when you want those.",
+          )
           .default("all"),
         type: z
           .enum(["all", "positive", "negative"])

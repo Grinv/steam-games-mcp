@@ -33,6 +33,16 @@ export interface PlayerAchievementsResponse {
 // of those blows past the response size limit entirely.
 export const ACHIEVEMENTS_MAX = 200;
 
+// get_game_achievements gets a lower one: it's the only tool of the three that
+// emits description text per entry (~190 bytes/item against ~75 for a player's
+// unlock row and ~45 for a rarity row), so the shared 200 made it roughly four
+// times heavier than its siblings — ~38 KB for a single call on a
+// 373-achievement game. 150 holds it to the same ~28 KB budget as the batch
+// caps in tools/common.ts while still returning the common ~120-130-achievement
+// game in full, which is why the shared cap is 200 rather than 100 to begin
+// with — that case must not start getting truncated here.
+export const GAME_SCHEMA_ACHIEVEMENTS_MAX = 150;
+
 export function summarizePlayerAchievements(
   r: PlayerAchievementsResponse,
   max = ACHIEVEMENTS_MAX,
@@ -128,7 +138,7 @@ export interface GameSchemaResponse {
 export function summarizeGameSchema(
   schema: GameSchemaResponse,
   global: GlobalAchievementsResponse,
-  max = ACHIEVEMENTS_MAX,
+  max = GAME_SCHEMA_ACHIEVEMENTS_MAX,
 ): z.infer<typeof getGameAchievementsOutput> {
   const pct = new Map<string, number>();
   for (const x of global.achievementpercentages?.achievements ?? []) {
