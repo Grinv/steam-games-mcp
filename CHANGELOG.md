@@ -18,6 +18,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Cap `get_recently_played` at 50 games, most-played first, and add a `returned` count. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
 - Add a `reason` to `get_player_summary`/`get_player_bans`' `found: false` — both read private profiles fine, so it can only mean no such account. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
 - Carry `available: true` on every `get_items` row, so the discriminator is present on all rows like `get_prices`'. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Cap `find_friends_who_own` at 200 friends looked up per call and report `friends_checked` — checking every friend of a 634-friend account ran past an MCP client's 60s request timeout. ([50efbde](https://github.com/Grinv/steam-games-mcp/commit/50efbde))
 - **Breaking:** rename `get_recommended_games`' `count` parameter to `limit`, matching every other tool that caps what it returns. `discover_games` keeps `count`, which means entries to scan. ([038dca0](https://github.com/Grinv/steam-games-mcp/commit/038dca0))
 
 ### Fixed
