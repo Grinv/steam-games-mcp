@@ -194,6 +194,14 @@ const friendNameEntry = z.strictObject({ steamid: z.string(), name: z.string().n
 export const findFriendsWhoOwnFound = z.strictObject({
   found: z.literal(true),
   total_friends: z.number(),
+  friends_checked: z
+    .number()
+    .describe(
+      "How many of `total_friends` were actually looked up. Lower than total_friends on a very " +
+        "large friend list, where checking every one would exceed an MCP client's request " +
+        "timeout — the unchecked friends are simply absent from all three lists below, so treat " +
+        "a gap here as 'not checked', never as 'doesn't own it'.",
+    ),
   matches: z.array(
     z.strictObject({
       appid: z.number(),

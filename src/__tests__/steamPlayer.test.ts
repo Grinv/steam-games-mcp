@@ -7,7 +7,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { setupServer, jsonResponse, htmlResponse, assertToolError, textOf } from "./helpers.js";
 import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.js";
-import { FRIENDS_MAX } from "../format/web.js";
+import { FRIENDS_CHECKED_MAX, FRIENDS_MAX } from "../format/web.js";
 
 // Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant
@@ -882,6 +882,52 @@ describe("find_friends_who_own", () => {
     assert.equal(byId.get(manyFriends[120]!.steamid), null);
   });
 
+  test("find_friends_who_own caps how many friends it looks up, and says how many that was", async (t) => {
+    // Measured live: one GetOwnedGames call per friend means a 634-friend account
+    // runs past the 60s default request timeout an MCP client gives up at, so the
+    // whole call fails. Bounded to FRIENDS_CHECKED_MAX, with friends_checked
+    // reporting the truth so an unchecked friend never reads as a non-owner.
+    const friends = Array.from({ length: FRIENDS_CHECKED_MAX + 75 }, (_, i) => ({
+      steamid: `7656119796${String(i + 1000000).padStart(7, "0")}`,
+      relationship: "friend",
+      friend_since: 1600000000 + i,
+    }));
+    const { client, mock } = await setupServer(t, ENV, (url) => {
+      if (url.includes("GetFriendList")) return jsonResponse({ friendslist: { friends } });
+      if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
+      if (url.includes("GetOwnedGames")) return jsonResponse(OWNED);
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [620], steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { total_friends: number; friends_checked: number };
+    assert.notEqual(res.isError, true);
+    assert.equal(s.total_friends, FRIENDS_CHECKED_MAX + 75);
+    assert.equal(s.friends_checked, FRIENDS_CHECKED_MAX);
+    // And it really only paid for the friends it checked.
+    assert.equal(
+      mock.calls.filter((c) => c.url.includes("GetOwnedGames")).length,
+      FRIENDS_CHECKED_MAX,
+    );
+  });
+
+  test("find_friends_who_own reports friends_checked == total_friends on a normal-sized list", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("GetFriendList")) return jsonResponse(FRIENDLIST);
+      if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
+      if (url.includes("GetOwnedGames")) return jsonResponse(OWNED);
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [620], steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { total_friends: number; friends_checked: number };
+    assert.equal(s.friends_checked, s.total_friends);
+  });
+
   test("find_friends_who_own bounds its per-friend fan-out but still checks every friend", async (t) => {
     // `ids` is the full, uncapped friend list (FRIENDS_WHO_OWN_MAX caps only the
     // output), so a plain allSettled over it fired one simultaneous request per
@@ -912,7 +958,8 @@ describe("find_friends_who_own", () => {
     });
     assert.notEqual(res.isError, true);
     const owned = mock.calls.filter((c) => c.url.includes("GetOwnedGames"));
-    // Every friend is still checked — a skipped one would be an unreported owner.
+    // 45 is under FRIENDS_CHECKED_MAX, so every friend is still checked here — the
+    // separate cap test above covers the truncating case.
     assert.equal(owned.length, 45);
     assert.ok(peak <= 10, `expected at most 10 concurrent lookups, saw ${peak}`);
     assert.ok(peak > 1, "the fan-out should still be concurrent, not serial");

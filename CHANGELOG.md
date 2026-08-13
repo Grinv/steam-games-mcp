@@ -36,6 +36,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fix `get_featured` pricing an unreleased title at "0.00 USD" as if it were free; an absent price is `null` now. ([fef888e](https://github.com/Grinv/steam-games-mcp/commit/fef888e))
 - Fix `get_player_achievements` turning a transient 5xx during its game-schema lookup into a definitive "Achievements unavailable." ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
 - Fix a 403 from `get_game_achievements`' keyless achievement lookup being blamed on bad credentials. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix `get_game_achievements` not disclosing that an empty list with `total: 0` means the appid has no achievement schema — a DLC, soundtrack, tool or demo, or no such appid. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
 - Fix `get_game_reviews`' `review_language` accepting an empty string, which Steam treats as its own filter rather than 'all'. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
 - Fix `get_game_reviews` not disclosing that `review_language` also rescopes the summary totals to that language. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
 - Fix `get_items`' `price: null` not documenting its three meanings: not sold in that country, not released yet, or no purchase option. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))

@@ -13,6 +13,7 @@ import { recommendedGamesFound } from "../format/store.schemas.js";
 import { FAVORITE_TAG_SAMPLE_SIZE, RECOMMENDATION_POOL_SIZE } from "../clients/storeService.js";
 import {
   COMPARE_SHARED_MAX,
+  FRIENDS_CHECKED_MAX,
   FRIENDS_MAX,
   FRIENDS_WHO_OWN_MAX,
   OWNED_GAMES_MAX,
@@ -145,7 +146,10 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "lookup failed (e.g. rate-limited) lands in unavailable_friends with a reason instead of " +
         "failing the whole call — every other friend's result still comes through. Each of owners, " +
         `private_friends and unavailable_friends is capped at ${FRIENDS_WHO_OWN_MAX} entries (a sibling _total field ` +
-        "appears only when it was actually truncated). Get appids from search_games.",
+        `appears only when it was actually truncated). On a big account only the first ${FRIENDS_CHECKED_MAX} friends ` +
+        "are looked up at all (one Steam call per friend would otherwise run past an MCP client's " +
+        "request timeout) — compare `friends_checked` against `total_friends`, and treat a friend " +
+        "missing from all three lists as unchecked, not as a non-owner. Get appids from search_games.",
       inputSchema: z.strictObject({
         appids: z
           .array(z.int().positive())

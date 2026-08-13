@@ -511,13 +511,25 @@ export function summarizeFriendList(
 // case as a confirmed non-owner, and separate from each other since only one
 // of them (unavailable) is worth a retry.
 export const FRIENDS_WHO_OWN_MAX = 100;
+
+// How many friends get looked up at all. One GetOwnedGames call per friend is
+// unavoidable here, and a big account makes that a wall: measured live on a
+// 634-friend profile, checking every friend takes longer than the 60s default
+// request timeout an MCP client gives up at, so the whole call fails. Capping
+// the lookups keeps the answer bounded and honest (`friends_checked` says how
+// many were actually read) — and it is strictly better than the alternative
+// that shipped through 0.12.2, where the unbounded fan-out rate-limited itself
+// and reported 527 of those 634 friends as `unavailable`.
+export const FRIENDS_CHECKED_MAX = 200;
+
 export function summarizeFriendsWhoOwn(
   appids: number[],
   friendIds: string[],
   ownership: (Map<number, number> | null | { error: string })[],
   players: PlayerSummariesResponse,
-  max = FRIENDS_WHO_OWN_MAX,
+  opts: { max?: number; totalFriends?: number } = {},
 ): z.infer<typeof findFriendsWhoOwnFound> {
+  const max = opts.max ?? FRIENDS_WHO_OWN_MAX;
   const byId = new Map<string, PlayerSummary>();
   for (const p of players.response?.players ?? []) if (p.steamid) byId.set(p.steamid, p);
   const nameOf = (steamid: string) => ({ steamid, name: byId.get(steamid)?.personaname ?? null });
@@ -553,7 +565,8 @@ export function summarizeFriendsWhoOwn(
   const cappedUnavailable = capList(unavailableFriends, max);
   return findFriendsWhoOwnFound.parse({
     found: true,
-    total_friends: friendIds.length,
+    total_friends: opts.totalFriends ?? friendIds.length,
+    friends_checked: friendIds.length,
     matches: appids.map((appid) => {
       const forAppid = owners.get(appid) ?? [];
       const { included, returned } = capList(forAppid, max);

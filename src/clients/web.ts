@@ -14,6 +14,7 @@ import { messageFor } from "../lib/result.js";
 import { settledWithLimit } from "../lib/concurrency.js";
 import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.js";
 import {
+  FRIENDS_CHECKED_MAX,
   friendIdsToEnrich,
   isPrivateOwnedGames,
   summarizeComparePlayers,
@@ -453,20 +454,26 @@ export class SteamWebClient {
   async findFriendsWhoOwn(steamid: string, appids: number[]): Promise<Record<string, unknown>> {
     const res = await this.#friendsRaw(steamid);
     if (res === null) return notFound(PRIVATE_FRIENDS_REASON);
-    const ids = friendIdsOf(res);
-    if (ids.length === 0) return summarizeFriendsWhoOwn(appids, [], [], {});
+    const allIds = friendIdsOf(res);
+    if (allIds.length === 0) return summarizeFriendsWhoOwn(appids, [], [], {});
+    // Two bounds, both measured live on a 634-friend account:
+    //
+    // FRIENDS_CHECKED_MAX caps how many friends are looked up at all. One
+    // GetOwnedGames call per friend is unavoidable, so a big account is a wall:
+    // checking all 634 runs past the 60s default request timeout an MCP client
+    // gives up at, failing the whole call. `friends_checked` reports how many
+    // were read so a gap never reads as "doesn't own it".
+    //
+    // #FRIEND_LOOKUP_CONCURRENCY caps how many run at once. Unbounded (through
+    // 0.12.2) the fan-out rate-limited itself: that same account reported 527 of
+    // its 634 friends as `unavailable` with a 420, which the allSettled below
+    // then dutifully passed off as a normal result.
+    const ids = allIds.slice(0, FRIENDS_CHECKED_MAX);
     // settledWithLimit, not Promise.all: #ownedPlaytimes only returns null for a
     // private profile (see below) — a genuine transient failure (rate-limited/
     // network/timeout/5xx) on ONE friend's own GetOwnedGames call still throws,
     // and with a friend list of any size that's not a rare case. One friend's
     // bad luck must not sink everyone else's results.
-    //
-    // Bounded, not a plain allSettled over the whole list: `ids` is the full,
-    // uncapped friend list (FRIENDS_WHO_OWN_MAX caps only the OUTPUT), so a
-    // 2000-friend account fired 2000 simultaneous requests at the same endpoint
-    // and rate-limited itself — the allSettled above then dutifully reported
-    // most of them as unavailable_friends. Every friend is still checked (a
-    // skipped friend would be an unreported non-owner), just a few at a time.
     const [players, settled] = await Promise.all([
       this.#playerSummaries(ids),
       settledWithLimit(ids, SteamWebClient.#FRIEND_LOOKUP_CONCURRENCY, (id) =>
@@ -486,7 +493,9 @@ export class SteamWebClient {
               r.reason instanceof ApiError ? messageFor(r.reason) : "An unexpected error occurred.",
           },
     );
-    return summarizeFriendsWhoOwn(appids, ids, ownership, players);
+    return summarizeFriendsWhoOwn(appids, ids, ownership, players, {
+      totalFriends: allIds.length,
+    });
   }
 
   // Playtime (minutes, playtime_forever) for just the requested appids a
