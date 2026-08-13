@@ -282,7 +282,9 @@ interface FeaturedItem {
   name?: string;
   discounted?: boolean;
   discount_percent?: number;
-  original_price?: number;
+  // Explicitly nullable: Steam sends `original_price: null` (not an absent key)
+  // for anything with no price yet — every coming_soon entry, verified live.
+  original_price?: number | null;
   final_price?: number;
   currency?: string;
 }
@@ -315,14 +317,13 @@ function featuredItems(items: FeaturedItem[] | undefined): z.infer<typeof featur
       original_price: money(i.original_price, i.currency),
       // A not-yet-priced game (every `coming_soon` entry, confirmed against
       // appdetails: is_free:false with price_overview:null) arrives as
-      // final_price 0 with no original_price, which money() rendered as
-      // "0.00 USD" — an agent then reports an unreleased paid game as free. Null
+      // final_price 0 with original_price null — which money() rendered as
+      // "0.00 USD", so an agent reported an unreleased paid game as free. Null
       // means "no price yet"; a genuinely free title is indistinguishable in
-      // this payload, so "unknown" is the honest answer for both.
+      // this payload, so "unknown" is the honest answer for both. `== null`
+      // deliberately: Steam sends an explicit null here, not an absent key.
       final_price:
-        i.final_price === 0 && i.original_price === undefined
-          ? null
-          : money(i.final_price, i.currency),
+        i.final_price === 0 && i.original_price == null ? null : money(i.final_price, i.currency),
       store_url: storeUrl(i.id),
     });
   }

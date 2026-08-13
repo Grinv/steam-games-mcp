@@ -6,6 +6,47 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- Collapse whitespace in the prompts' free-form arguments, so a multi-line value can't render as its own paragraph of agent instructions. ([7d38e57](https://github.com/Grinv/steam-games-mcp/commit/7d38e57))
+
+### Changed
+
+- Halve `get_items`' appid cap to 50 and `get_prices`' to 250 — the old caps produced ~56 KB responses MCP clients reject as over their token limit. ([b9539bf](https://github.com/Grinv/steam-games-mcp/commit/b9539bf))
+- Lower `get_game_achievements`' cap to 150 achievements (was 200) — its entries carry description text, making them ~3x heavier than its siblings'. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Cap `get_game`'s `dlc` list at 50 appids and add a `dlc_total` count. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Cap `get_recently_played` at 50 games, most-played first, and add a `returned` count. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Add a `reason` to `get_player_summary`/`get_player_bans`' `found: false` — both read private profiles fine, so it can only mean no such account. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Carry `available: true` on every `get_items` row, so the discriminator is present on all rows like `get_prices`'. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+
+### Fixed
+
+- Fix an unrecognized `language` (e.g. 'ru' instead of 'russian') silently making every `tags` filter match nothing instead of failing with an error. ([b9539bf](https://github.com/Grinv/steam-games-mcp/commit/b9539bf))
+- Fix `discover_games`' `released_after` accepting an impossible date ('2026-13-45', '2026-02-31'), which silently disabled or shifted the cutoff. ([b9539bf](https://github.com/Grinv/steam-games-mcp/commit/b9539bf))
+- Fix `get_prices` discarding every already-fetched batch when a single chunk of appids failed, instead of failing only when all of them do. ([51032f0](https://github.com/Grinv/steam-games-mcp/commit/51032f0))
+- Fix `find_friends_who_own` firing one request per friend at once on a large friend list and rate-limiting itself into "unavailable" results. ([51032f0](https://github.com/Grinv/steam-games-mcp/commit/51032f0))
+- Fix `get_friend_list` spending extra round-trips enriching friends it then discarded, on accounts with more than 100 friends. ([51032f0](https://github.com/Grinv/steam-games-mcp/commit/51032f0))
+- Fix `what_should_i_play` re-recommending already-owned games — it now checks ownership with `check_appids` instead of the top-50 `get_owned_games` list. ([7d38e57](https://github.com/Grinv/steam-games-mcp/commit/7d38e57))
+- Fix `deals_digest` accepting a `min_discount`/`min_review` outside 1-100 and rendering a `discover_games` call that then failed validation. ([7d38e57](https://github.com/Grinv/steam-games-mcp/commit/7d38e57))
+- Fix the prompts' `steamid` argument accepting a vanity name and rendering it into tool calls that every tool then rejects. ([7d38e57](https://github.com/Grinv/steam-games-mcp/commit/7d38e57))
+- Fix `what_should_i_play`'s documented `budget: 'free'` rendering as "drop any result priced above free" instead of a free-to-play filter. ([7d38e57](https://github.com/Grinv/steam-games-mcp/commit/7d38e57))
+- Fix a `prompts/get` call with no `arguments` field at all failing validation, even though every prompt argument is optional. ([7d38e57](https://github.com/Grinv/steam-games-mcp/commit/7d38e57))
+- Fix `get_game` reporting a region-blocked appid as a nonexistent one; the error now names the country and both possible causes. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix `get_featured` pricing an unreleased title at "0.00 USD" as if it were free; an absent price is `null` now. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix `get_player_achievements` turning a transient 5xx during its game-schema lookup into a definitive "Achievements unavailable." ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix a 403 from `get_game_achievements`' keyless achievement lookup being blamed on bad credentials. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix `get_game_reviews`' `review_language` accepting an empty string, which Steam treats as its own filter rather than 'all'. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix `get_game_reviews` not disclosing that `review_language` also rescopes the summary totals to that language. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix `get_items`' `price: null` not documenting its three meanings: not sold in that country, not released yet, or no purchase option. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix `get_owned_games`' `found: false` branch still advertising the `owns` field it stopped emitting in 0.10.1. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix `search_games`' description promising a `type` of "game/dlc/…" when Steam's store search returns "app" for every result. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix `check_appids` calling itself reliable without noting that Steam omits free-to-play titles the player has never launched. ([bd98f61](https://github.com/Grinv/steam-games-mcp/commit/bd98f61))
+- Fix `get_player_achievements`' `game`/`name` fields not warning they can be Valve's internal codename, unlike their `get_game_achievements` twins. ([045803e](https://github.com/Grinv/steam-games-mcp/commit/045803e))
+- Fix README claiming every player-data tool needs an API key, contradicting its own table marking `get_wishlist`/`get_followed_games` keyless. ([045803e](https://github.com/Grinv/steam-games-mcp/commit/045803e))
+- Fix README describing `get_game_achievements` as "top 200" — the list is in definition order, not ranked, and the cap is 150. ([045803e](https://github.com/Grinv/steam-games-mcp/commit/045803e))
+- Fix `manifest.json`'s tool summaries predating `get_wishlist`'s `include_details` and contradicting `get_items`'/`get_game_achievements`' caps. ([045803e](https://github.com/Grinv/steam-games-mcp/commit/045803e))
+- Fix SECURITY.md's list of what the TTL cache holds reading as exhaustive while naming three of its six entries. ([045803e](https://github.com/Grinv/steam-games-mcp/commit/045803e))
+
 ## [0.12.2] - 2026-07-31
 
 ### Security

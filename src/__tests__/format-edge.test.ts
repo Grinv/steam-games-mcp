@@ -137,7 +137,12 @@ describe("summarizeFeatured", () => {
     // the 0 as a real price, so an agent called an unreleased paid game free.
     const s = summarizeFeatured({
       coming_soon: {
-        items: [{ id: 1, name: "Unreleased", currency: "USD", final_price: 0 }],
+        // original_price is an explicit null in Steam's payload, not an absent
+        // key — the first version of this fix only checked for undefined and
+        // still rendered "0.00 USD" live.
+        items: [
+          { id: 1, name: "Unreleased", currency: "USD", original_price: null, final_price: 0 },
+        ],
       },
       specials: {
         items: [

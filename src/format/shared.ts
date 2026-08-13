@@ -63,7 +63,10 @@ export function stripHtml(s: string | undefined): string | null {
 }
 
 // Format raw price cents (+ optional currency) into a compact label.
-export function money(cents: number | undefined, currency: string | undefined): string | null {
+export function money(
+  cents: number | undefined | null,
+  currency: string | undefined,
+): string | null {
   if (typeof cents !== "number") return null;
   const v = (cents / 100).toFixed(2);
   return currency ? `${v} ${currency}` : v;
