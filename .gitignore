@@ -18,6 +18,6 @@ coverage/
 .DS_Store
 
 # Personal/local Claude Code settings (permission grants can embed secrets
-# used in allowlisted commands) — .claude/skills is a tracked symlink, this
-# is not.
+# used in allowlisted commands) — .claude/skills is a tracked symlink to
+# .agents/skills, this is not.
 .claude/settings.local.json

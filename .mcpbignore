@@ -9,12 +9,10 @@ docs/
 coverage/
 
 # Agent/contributor tooling — dev-only, irrelevant to an installed extension.
-# .agents/skills and .claude/skills are symlinks to skills/; mcpb pack
-# resolves symlinks to real files, so without these the same 7 files were
-# shipping three times over.
+# .claude/skills is a symlink to .agents/skills; mcpb pack resolves symlinks
+# to real files, so without both entries the same 7 files ship twice over.
 .claude/
 .agents/
-skills/
 AGENTS.md
 CLAUDE.md
 SECURITY.md

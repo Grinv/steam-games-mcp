@@ -44,14 +44,14 @@ src/
 scripts/          # build-tests.mjs, run-tests.mjs, sync-version.mjs (+ its
                   #   sync-version.d.mts declaration) (generic), check-api.mjs
                   #   (domain), preversion-check.mjs (CHANGELOG gate)
-skills/           # reusable agent workflows for this repo (e.g. live-audit/) —
+.agents/skills/   # reusable agent workflows for this repo (e.g. live-audit/) —
                   #   plain Markdown with a YAML frontmatter name/description,
                   #   not tied to any one tool's orchestration features. Same
                   #   skill name/layout as this project's sibling MCP servers
                   #   (tmdb-mcp, mal-mcp, anilist-mcp-server) — sync
                   #   improvements both ways rather than letting them drift.
-                  #   `.claude/skills`/`.agents/skills` are symlinks to this
-                  #   directory (Claude Code/Codex CLI/Gemini CLI pickup)
+                  #   `.claude/skills` is a symlink here (Codex CLI/Gemini CLI
+                  #   read `.agents/skills` directly, Claude Code the symlink)
 ```
 
 ## Commands
@@ -139,10 +139,10 @@ dist/src-*.mjs`'s `standardSchemaToJsonSchema`) — one of these types reaching
 For a full audit of the currently published (or just-fixed) package —
 build/test/lint plus hammering the live MCP tools with edge cases,
 cross-checked against source — follow
-[skills/live-audit/SKILL.md](skills/live-audit/SKILL.md). It covers the
-keyless-vs-key-gated tool split, SteamID64/appid edge cases, and known bug
-classes found in past passes worth checking don't recur. For a diff that
-touches error-handling or partial-failure resilience specifically (a new
+[.agents/skills/live-audit/SKILL.md](.agents/skills/live-audit/SKILL.md).
+It covers the keyless-vs-key-gated tool split, SteamID64/appid edge cases,
+and known bug classes found in past passes worth checking don't recur. For a
+diff that touches error-handling or partial-failure resilience specifically (a new
 `Promise.allSettled`/try-catch), also run `/code-review` (or an equivalent
 static-reasoning pass) over it — live-testing structurally can't trigger one
 specific sub-request's failure on cue, so bugs in that exact path (an

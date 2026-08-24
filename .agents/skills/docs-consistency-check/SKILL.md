@@ -28,8 +28,9 @@ Check every one of these, not just a sample:
 - `CHANGELOG.md`'s `[Unreleased]` section (see the `changelog-style` skill for
   entry style) has one line per real behavior change made in this pass — add
   missing entries, don't just flag them as missing.
-- `AGENTS.md`'s "Keyless caveat" list and its `src/` tree (and this `skills/`
-  entry) still match the filesystem and the actual keyless method list.
+- `AGENTS.md`'s "Keyless caveat" list and its `src/` tree (and this
+  `.agents/skills/` entry) still match the filesystem and the actual keyless
+  method list.
 - `docs/notes.md`, `docs/clients.md` and any other `docs/*.md` for stale
   phrasing (e.g. describing something as "once published"/"upcoming" that
   already shipped).
