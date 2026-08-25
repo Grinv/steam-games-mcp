@@ -39,6 +39,67 @@ price-history API (confirmed against the full method list), and the only
 sources for it (SteamDB / IsThereAnyDeal) were deliberately dropped to keep
 the server Steam-only and dependency-free.
 
+## Where prices come from
+
+Not from the Storefront API, even in the Storefront-backed tools. Both
+`appdetails`' `price_overview` and `storesearch`' `price` are filled from the
+**first sub of an app's default package group** rather than from its base game,
+so an app whose first sub is an upgrade SKU is reported at the upgrade's price
+with `discount_percent: 0`. Verified live on appid 3717330 (Yakuza Kiwami,
+`cc=ID`): Rp 20 000 for package 1466003, the upgrade for owners of the Legacy
+version, where the store page, Steam's own search page and
+`IStoreBrowseService/GetItems` all say Rp 200 000 → Rp 120 000 (−40%). It isn't
+"the cheapest sub" either — appid 3937550 has a cheaper Deluxe Upgrade sub yet
+reports its base package, which happens to sit first there — and nothing in the
+payload distinguishes the two: both subs carry `percent_savings: 0` and the real
+discount survives only as HTML inside `option_text`.
+
+So `StorefrontClient` takes a `PurchasePriceSource` (satisfied by
+`StoreServiceClient`) and overlays `best_purchase_option`'s amounts onto the
+prices it reports. This is the one place the two clients are wired together, and
+it's why `server.ts` builds the Web API client first. The `currency` code still
+comes from the Storefront row, since GetItems returns none.
+
+`best_purchase_option` is **not** a drop-in authority, though: Valve's "best" is
+whatever it considers the best value, routinely a bundle containing this app
+_and another game_. Measured over Steam's top 500 US sellers, 421 of which are
+priced: 5 report a bundle price (appid 2186680, Warhammer 40,000: Rogue Trader,
+is $49.99 as package 782856 but $48.36 as bundle 67187 "The Darkest Grimdark
+Bundle"), against 2 where the Storefront price is the wrong one. Trusting it
+blindly would therefore trade a rare wrong answer for a commoner one, so the
+overlay applies only when the option names a `packageid` and GetItems doesn't
+call the app free — see `isOwnPackage()` and `summarizePurchasePrices()`. Over
+that same sample the rule changes 2 prices out of 415 overlaid: appid 518790
+(theHunter: Call of the Wild) stops reading as **Free** when it costs $19.99,
+and appid 1675200 (Steam Deck) reports the 512 GB OLED model instead of the
+cheapest listed SKU — for hardware and multi-edition apps neither source names
+"the" price, and this at least agrees with what `get_items` reports.
+
+That first case is why an override also outranks `appdetails`' `is_free` flag,
+which the trap corrupts too: theHunter's default group opens with a free upgrade
+for Classic owners, so appdetails reports the whole app as free. GetItems' own
+`is_free` is the trustworthy one — a genuinely free app either exposes no
+purchase option (Dota 2) or prices it at $0.00 and flags itself free (appid
+2019300, Dokimon Quest) — so skipping those keeps "an override exists" meaning
+"GetItems prices this as a paid package of its own".
+
+The overlay is best-effort throughout: a failed or malformed lookup leaves the
+Storefront number in place rather than failing the tool, and a row Steam prices
+at nothing (free, unreleased, not sold in that country) is left alone instead of
+being given a package price the store isn't offering.
+
+A game's price is what the game costs on its own, so the same rule applies to
+the card tools (`get_items`, `discover_games`, the detailed wishlist,
+recommendations), which read the service directly. Every card request therefore
+asks for `include_all_purchase_options` and `ownPurchaseOption()` prefers the
+app's own package over whatever Steam called best. Asked up front rather than
+fetched in a follow-up for the ~~1% of apps that need it, because measured
+interleaved, the follow-up round-trip costs about what the bigger payload does
+(~~+40 ms on a 50-app batch, inside run-to-run noise; ~+300 ms on a 200-entry
+catalog page) — so the cheaper design is the one without a second request to
+fail. An app with no own package keeps the bundle price: a null price there would
+read as "not sold in this country".
+
 ## API references
 
 - Steam Web API: https://developer.valvesoftware.com/wiki/Steam_Web_API (official wiki);

@@ -30,7 +30,9 @@ src/
                   #   storeCard.ts shares store.schemas.ts with store.ts
   lib/            # GENERIC carcass: http, rateLimit, cache, concurrency, errors,
                   #   logger, result
-  clients/        # storefront.ts (keyless store), web.ts (official Web API; key
+  clients/        # storefront.ts (keyless store; takes storeService as a
+                  #   PurchasePriceSource, because Storefront prices are wrong —
+                  #   see docs/architecture.md), web.ts (official Web API; key
                   #   optional; builds storeService.ts, exposed via `.store` for
                   #   tools/webStore.ts), storeService.ts (modern store-browse/
                   #   query/wishlist-sorted card services)

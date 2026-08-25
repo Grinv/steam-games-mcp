@@ -17,8 +17,10 @@ import {
   computeFavoriteTagWeights,
   summarizeDiscover,
   summarizeItems,
+  summarizePurchasePrices,
   summarizeRecommendations,
   summarizeWishlistDetailed,
+  type PurchasePrices,
   type StoreQueryResponse,
   type WishlistDetailedResponse,
 } from "../format/store.js";
@@ -44,11 +46,22 @@ const storeCardDataRequest = (tagCount: number) => ({
   include_release: true,
   include_platforms: true,
   include_tag_count: tagCount,
+  // Steam's best_purchase_option is routinely a bundle of this app AND another
+  // game, so every card needs the app's own package alongside it — see
+  // format/storeCard.ts's ownPurchaseOption() for why this is asked up front
+  // rather than fetched in a follow-up.
+  include_all_purchase_options: true,
 });
 
 // getRecommendedGames tuning: how many of the player's most-played owned games
 // feed the tag-weighting step, how many of the resulting top tags are surfaced
 // as `based_on_tags`, and how big a catalog page is scored against them.
+// getPurchasePrices' batch size. GetItems is GET-only (POST answers 405) and the
+// whole request travels in the `input_json` query param, so the ceiling is
+// Steam's ~8 KB URI limit rather than a documented item count — measured live:
+// 220 appids answer 200, 250 answer HTTP 414. 150 keeps room for longer appids.
+export const PRICE_LOOKUP_CHUNK = 150;
+
 export const FAVORITE_TAG_SAMPLE_SIZE = 30;
 const BASED_ON_TAGS_LIMIT = 6;
 export const RECOMMENDATION_POOL_SIZE = 300;
@@ -166,6 +179,61 @@ export class StoreServiceClient {
       l,
     );
     return summarizeItems(res, appids, tagMap);
+  }
+
+  // The base-game purchase price of each appid, for correcting the Storefront
+  // API's price_overview (see format/storefront.ts's overridePrice() for the
+  // upstream bug this exists to work around). Deliberately different from
+  // getItems(): no tag dictionary (nothing displays tags here) and an EMPTY
+  // data_request, which already returns best_purchase_option and keeps the
+  // payload ~1 KB per item instead of ~4.5 KB.
+  //
+  // Best-effort by contract: this only ever improves numbers the caller already
+  // has, so a chunk that fails just leaves its appids on the Storefront price
+  // rather than failing the whole tool call. HttpClient already logs the
+  // underlying failure.
+  async getPurchasePrices(
+    appids: number[],
+    country?: string,
+    language?: string,
+  ): Promise<PurchasePrices> {
+    if (appids.length === 0) return {};
+    const context = {
+      language: language ?? this.#l,
+      country_code: country ?? this.#country,
+    };
+    const chunks: number[][] = [];
+    for (let i = 0; i < appids.length; i += PRICE_LOOKUP_CHUNK)
+      chunks.push(appids.slice(i, i + PRICE_LOOKUP_CHUNK));
+    const settled = await Promise.allSettled(
+      chunks.map((chunk) =>
+        this.#get<StoreItemsResponse>(
+          "IStoreBrowseService/GetItems/v1/",
+          {
+            input_json: JSON.stringify({
+              ids: chunk.map((appid) => ({ appid })),
+              context,
+              data_request: {},
+            }),
+          },
+          { hasCredentials: false },
+        ),
+      ),
+    );
+    const merged: PurchasePrices = {};
+    for (const r of settled) {
+      if (r.status !== "fulfilled") continue;
+      try {
+        Object.assign(merged, summarizePurchasePrices(r.value));
+      } catch {
+        // The shaper throws on a payload that doesn't match its schema. Here that
+        // must cost only this chunk's corrections, exactly like a failed request:
+        // the outer Promise.all in StorefrontClient.getPrices/getGame would
+        // otherwise turn an enrichment's schema hiccup into a failed tool call.
+        continue;
+      }
+    }
+    return merged;
   }
 
   // Personalized recommendations: derive weighted tag preferences from a

@@ -10,6 +10,7 @@
 // `outputSchema` advertised to MCP clients.
 
 import { z } from "zod";
+import type { PurchasePrices } from "./store.js";
 import { capList, hours, isoDay, money, names, storeUrl, stripHtml } from "./shared.js";
 import {
   detailPriceSchema,
@@ -68,28 +69,73 @@ export interface StoreApp {
   ext_user_account_notice?: string;
 }
 
+/** One appid's corrected price, as produced by format/store.ts's
+ *  summarizePurchasePrices(). */
+type PriceOverride = PurchasePrices[string];
+
+/** Steam's Storefront API fills BOTH appdetails' `price_overview` and
+ *  storesearch's `price` from the FIRST sub of an app's default package group
+ *  rather than from its base game, so any app whose first sub is an upgrade SKU
+ *  gets reported at the upgrade's price with discount_percent 0. Verified live
+ *  on appid 3717330 (Yakuza Kiwami, cc=ID): price_overview says Rp 20 000 and
+ *  no discount — that's package 1466003, the upgrade for owners of Kiwami
+ *  (Legacy) — while the store page, Steam's own search page and GetItems' base
+ *  package 1308688 all say Rp 200 000 -> Rp 120 000 (-40%). Nor is it simply
+ *  "the cheapest sub": appid 3937550 has a Rp 259 000 Deluxe Upgrade sub yet
+ *  correctly reports its Rp 579 000 base, which happens to sit first there.
+ *  Nothing in the payload flags the case — both subs carry percent_savings 0 and
+ *  the real discount survives only as HTML inside option_text — so the amounts
+ *  come from IStoreBrowseService/GetItems' best_purchase_option, Valve's own
+ *  answer to "which package is THE one" (clients/storeService.ts's
+ *  getPurchasePrices).
+ *
+ *  Only the three amount fields are replaced; `currency` stays from the
+ *  Storefront row, since GetItems returns no currency code at all. And only a
+ *  row that already HAS a price is corrected — where Steam reports no price
+ *  (free, unreleased, not sold in this country) that answer stands, rather than
+ *  inventing one from a package the store isn't currently offering. */
+function overridePrice(
+  fields: z.infer<typeof priceFieldsSchema>,
+  override: PriceOverride | undefined,
+): z.infer<typeof priceFieldsSchema> {
+  return override ? { ...fields, ...override } : fields;
+}
+
 // The formatted price fields shared by detailApp's price() and summarizePrices.
 // Not `.parse()`d here — the exported summarizer that embeds this already
 // validates the whole object once; parsing again here would just re-check the
 // same fields a second time for no benefit. The `z.infer` return type still
 // gets this checked at the TS level.
-function formattedPrice(p: PriceOverview): z.infer<typeof priceFieldsSchema> {
-  return {
-    currency: p.currency ?? null,
-    final: p.final_formatted ?? null,
-    // Steam leaves initial_formatted empty when there's no discount.
-    initial: p.initial_formatted || p.final_formatted || null,
-    discount_percent: p.discount_percent ?? 0,
-  };
+function formattedPrice(
+  p: PriceOverview,
+  override?: PriceOverride,
+): z.infer<typeof priceFieldsSchema> {
+  return overridePrice(
+    {
+      currency: p.currency ?? null,
+      final: p.final_formatted ?? null,
+      // Steam leaves initial_formatted empty when there's no discount.
+      initial: p.initial_formatted || p.final_formatted || null,
+      discount_percent: p.discount_percent ?? 0,
+    },
+    override,
+  );
 }
 
 function price(
   p: PriceOverview | undefined,
   isFree: boolean | undefined,
+  override?: PriceOverride,
 ): z.infer<typeof detailPriceSchema> {
-  if (isFree) return { is_free: true };
-  if (!p) return null;
-  return { is_free: false, ...formattedPrice(p) };
+  // A wrong `is_free` is the same trap one field over: appdetails flags
+  // theHunter: Call of the Wild (appid 518790) as free because its default
+  // group opens with the free upgrade for theHunter Classic owners, though the
+  // game costs $19.99. An override only exists for an app GetItems prices as a
+  // paid package of its own, so it outranks the flag — and, for the same
+  // reason, can stand in for a missing price_overview.
+  if (isFree && !override) return { is_free: true };
+  if (!p && !override) return null;
+  return { is_free: false, ...formattedPrice(p ?? {}, override) };
 }
 
 function platforms(p: StoreApp["platforms"]): string[] {
@@ -106,7 +152,7 @@ function platforms(p: StoreApp["platforms"]): string[] {
 // count. Sized to still cover the ordinary "a few dozen DLC" game whole.
 export const DLC_MAX = 50;
 
-export function detailApp(a: StoreApp): z.infer<typeof getGameOutput> {
+export function detailApp(a: StoreApp, override?: PriceOverride): z.infer<typeof getGameOutput> {
   const reqs = Array.isArray(a.pc_requirements) ? undefined : a.pc_requirements;
   const allDlc = a.dlc ?? [];
   const dlc = capList(allDlc, DLC_MAX);
@@ -115,8 +161,10 @@ export function detailApp(a: StoreApp): z.infer<typeof getGameOutput> {
     name: a.name,
     type: a.type ?? null,
     short_description: a.short_description || null,
-    is_free: a.is_free ?? false,
-    price: price(a.price_overview, a.is_free),
+    // Deliberately not `a.is_free` alone: see price()'s note on appdetails
+    // flagging a paid game free. These two must never disagree.
+    is_free: override ? false : (a.is_free ?? false),
+    price: price(a.price_overview, a.is_free, override),
     release_date: a.release_date?.date || null,
     coming_soon: a.release_date?.coming_soon ?? false,
     developers: a.developers ?? [],
@@ -176,26 +224,35 @@ export interface SearchResponse {
 // storesearch prices are raw cents (initial/final); derive a discount + labels.
 // Not `.parse()`d — see formattedPrice()'s comment; summarizeSearch validates
 // the whole result once.
-function searchPrice(p: SearchItem["price"]): z.infer<typeof searchPriceSchema> {
+function searchPrice(
+  p: SearchItem["price"],
+  override?: PriceOverride,
+): z.infer<typeof searchPriceSchema> {
   if (!p || typeof p.final !== "number") return null;
   const discount =
     p.initial && p.final && p.initial > p.final ? Math.round((1 - p.final / p.initial) * 100) : 0;
-  return {
-    currency: p.currency ?? null,
-    final: money(p.final, p.currency),
-    initial: money(p.initial, p.currency),
-    discount_percent: discount,
-  };
+  return overridePrice(
+    {
+      currency: p.currency ?? null,
+      final: money(p.final, p.currency),
+      initial: money(p.initial, p.currency),
+      discount_percent: discount,
+    },
+    override,
+  );
 }
 
-export function summarizeSearch(r: SearchResponse): z.infer<typeof searchGamesOutput> {
+export function summarizeSearch(
+  r: SearchResponse,
+  overrides: PurchasePrices = {},
+): z.infer<typeof searchGamesOutput> {
   return searchGamesOutput.parse({
     total: r.total ?? r.items?.length ?? 0,
     results: (r.items ?? []).map((i) => ({
       appid: i.id,
       name: i.name,
       type: i.type ?? null,
-      price: searchPrice(i.price),
+      price: searchPrice(i.price, overrides[String(i.id)]),
       metascore: i.metascore || null,
       platforms: platforms(i.platforms),
       store_url: storeUrl(i.id),
@@ -227,6 +284,7 @@ export type PriceDetailsResponse = Record<
 export function summarizePrices(
   merged: PriceDetailsResponse,
   appids: number[],
+  overrides: PurchasePrices = {},
 ): z.infer<typeof getPricesOutput> {
   const prices = appids.map((id) => {
     const entry = merged[String(id)];
@@ -234,7 +292,12 @@ export function summarizePrices(
     const po = data && !Array.isArray(data) ? data.price_overview : undefined;
     if (!entry?.success) return { appid: id, available: false as const };
     if (!po) return { appid: id, available: true as const, priced: false as const };
-    return { appid: id, available: true as const, is_free: false as const, ...formattedPrice(po) };
+    return {
+      appid: id,
+      available: true as const,
+      is_free: false as const,
+      ...formattedPrice(po, overrides[String(id)]),
+    };
   });
   return getPricesOutput.parse({ count: prices.length, prices });
 }

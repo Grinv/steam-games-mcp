@@ -10,6 +10,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Bump the MCP TypeScript SDK to 2.3.0; a prompt called with no `arguments` at all now renders instead of failing validation, including `is_it_worth_buying`.
 
+### Fixed
+
+- Fix a game being priced at the cost of a bundle it merely belongs to: Warhammer 40,000: Rogue Trader read as $48.36, the total for a two-game bundle, instead of its own $49.99. Steam's "best purchase option" is whatever it deems best value, so the game's own package is now resolved separately.
+- Fix every Storefront-sourced price naming the first package of a game's default group instead of its base game: Yakuza Kiwami read as Rp 20 000, the upgrade sold to owners of the Legacy version, rather than Rp 200 000 → Rp 120 000 (−40%), and theHunter: Call of the Wild read as free. Prices now come from the store-browse service, using only an option that prices the game itself — Steam's "best" option is often a bundle with another game.
+
 ## [0.14.0] - 2026-09-20
 
 ### Added

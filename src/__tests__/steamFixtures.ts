@@ -202,7 +202,11 @@ export const WISHLIST_DETAILED = {
         store_item: {
           appid: 660,
           name: "Full Price Game",
-          best_purchase_option: { discount_pct: 0, formatted_final_price: "$19.99" },
+          best_purchase_option: {
+            packageid: 501,
+            discount_pct: 0,
+            formatted_final_price: "$19.99",
+          },
           reviews: { summary_filtered: { percent_positive: 80, review_count: 500 } },
           platforms: {
             windows: true,
@@ -222,6 +226,7 @@ export const WISHLIST_DETAILED = {
           appid: 620,
           name: "Portal 2",
           best_purchase_option: {
+            packageid: 502,
             discount_pct: 80,
             formatted_final_price: "$1.99",
             formatted_original_price: "$9.99",
@@ -249,6 +254,7 @@ export const ITEMS = {
         name: "Portal 2",
         is_free: false,
         best_purchase_option: {
+          packageid: 503,
           formatted_final_price: "$1.99",
           formatted_original_price: "$9.99",
           discount_pct: 80,
@@ -287,6 +293,7 @@ export const DISCOVER = {
         name: "Portal 2",
         visible: true,
         best_purchase_option: {
+          packageid: 504,
           discount_pct: 80,
           formatted_final_price: "$1.99",
           formatted_original_price: "$9.99",
@@ -311,7 +318,7 @@ export const DISCOVER = {
         appid: 999,
         name: "Shovelware",
         visible: true,
-        best_purchase_option: { discount_pct: 90, formatted_final_price: "$0.10" },
+        best_purchase_option: { packageid: 505, discount_pct: 90, formatted_final_price: "$0.10" },
         reviews: { summary_filtered: { percent_positive: 40, review_count: 5 } },
         platforms: {
           windows: true,
