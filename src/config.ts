@@ -14,7 +14,10 @@ const EnvSchema = z.object({
   STEAM_API_BASE_URL: z.httpUrl().trim().default("https://api.steampowered.com"),
   // Default player for the personal tools (wishlist/library/achievements) so a
   // SteamID64 need not be passed every call. Accepts a 17-digit SteamID64 or a
-  // vanity name (the part after /id/), resolved once via the Web API (needs a key).
+  // vanity name (the part after /id/), resolved once — via the Web API when a
+  // key is set, else via the keyless community profile (see web.ts's
+  // requireSteamId), so a vanity name never costs the keyless tools their key
+  // independence.
   // .trim(): resolve_vanity_url does an exact-match lookup, so stray whitespace
   // here would silently resolve to "not found" instead of the intended profile.
   STEAM_ID: z.string().trim().min(2).optional(),
@@ -58,13 +61,23 @@ export interface Config {
 // SteamID — making web.configured true and sending garbage to Steam (→ 403).
 const UNSUBSTITUTED_PLACEHOLDER = /^\$\{[^}]*\}$/;
 
+// One layer of surrounding quotes, as left by shell-style quoting inside a JSON
+// config ("STEAM_API_KEY": "'${STEAM_API_KEY}'") or by a copy-pasted `export`
+// line. Steam doesn't care that the quotes weren't meant literally: it just
+// answers 401/403 for a key wrapped in them, which names nothing useful. And a
+// quoted placeholder slips past UNSUBSTITUTED_PLACEHOLDER above, so unquoting
+// first is also what lets that check see it.
+const SURROUNDING_QUOTES = /^\s*(['"])([\s\S]*)\1\s*$/;
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // Drop empty/whitespace-only strings and unsubstituted ${...} placeholders so
   // defaults apply and optional fields (key, STEAM_ID) stay genuinely unset.
   const cleaned = Object.fromEntries(
-    Object.entries(env).filter(
-      ([, v]) => v !== undefined && v.trim() !== "" && !UNSUBSTITUTED_PLACEHOLDER.test(v),
-    ),
+    Object.entries(env)
+      .map(([k, v]) => [k, typeof v === "string" ? v.replace(SURROUNDING_QUOTES, "$2") : v])
+      .filter(
+        ([, v]) => typeof v === "string" && v.trim() !== "" && !UNSUBSTITUTED_PLACEHOLDER.test(v),
+      ),
   );
   const parsed = EnvSchema.parse(cleaned);
 

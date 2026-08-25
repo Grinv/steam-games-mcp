@@ -51,6 +51,33 @@ export class HttpClient {
   }
 
   async requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    const text = await this.#request(path, options);
+    if (text === undefined || text.length === 0) return undefined as T;
+    try {
+      return JSON.parse(text) as T;
+    } catch (err) {
+      throw new ApiError({
+        code: "unknown",
+        message: "Upstream returned invalid JSON",
+        cause: err,
+      });
+    }
+  }
+
+  /** The raw response body, for the rare upstream that doesn't speak JSON —
+   *  Steam's community profile view (`?xml=1`) is the only one here. Same
+   *  timeouts, retries and ApiError mapping as requestJson. */
+  async getText(path: string, options: RequestOptions = {}): Promise<string> {
+    return (
+      (await this.#request(path, {
+        ...options,
+        method: options.method ?? "GET",
+        headers: { Accept: "*/*", ...options.headers },
+      })) ?? ""
+    );
+  }
+
+  async #request(path: string, options: RequestOptions): Promise<string | undefined> {
     const url = this.#buildUrl(path, options.query);
     const retries = options.retries ?? this.#opts.retries ?? 2;
     const timeoutMs = options.timeoutMs ?? this.#opts.timeoutMs ?? 15000;
@@ -59,7 +86,7 @@ export class HttpClient {
     for (;;) {
       if (this.#opts.beforeRequest) await this.#opts.beforeRequest();
       try {
-        return await this.#once<T>(url, options, timeoutMs);
+        return await this.#once(url, options, timeoutMs);
       } catch (err) {
         const apiErr = err instanceof ApiError ? err : toNetworkError(err);
         if (!apiErr.retryable || attempt >= retries) throw apiErr;
@@ -76,7 +103,11 @@ export class HttpClient {
     }
   }
 
-  async #once<T>(url: string, options: RequestOptions, timeoutMs: number): Promise<T> {
+  async #once(
+    url: string,
+    options: RequestOptions,
+    timeoutMs: number,
+  ): Promise<string | undefined> {
     // AbortSignal.any bridges the caller's own signal (if given) into our
     // timeout controller's, so fetch aborts on whichever fires first — no
     // manual addEventListener/removeEventListener needed to forward it.
@@ -123,18 +154,8 @@ export class HttpClient {
 
     if (!res.ok) throw await toHttpError(res, options.hasCredentials ?? this.#opts.hasCredentials);
 
-    if (res.status === 204) return undefined as T;
-    const text = await res.text();
-    if (text.length === 0) return undefined as T;
-    try {
-      return JSON.parse(text) as T;
-    } catch (err) {
-      throw new ApiError({
-        code: "unknown",
-        message: "Upstream returned invalid JSON",
-        cause: err,
-      });
-    }
+    if (res.status === 204) return undefined;
+    return await res.text();
   }
 
   #buildUrl(path: string, query?: RequestOptions["query"]): string {

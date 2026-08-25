@@ -34,7 +34,9 @@ src/
                   #   PurchasePriceSource, because Storefront prices are wrong —
                   #   see docs/architecture.md), web.ts (official Web API; key
                   #   optional; builds storeService.ts, exposed via `.store` for
-                  #   tools/webStore.ts), storeService.ts (modern store-browse/
+                  #   tools/webStore.ts; also the one place that talks to
+                  #   steamcommunity.com, to resolve a vanity STEAM_ID without a
+                  #   key), storeService.ts (modern store-browse/
                   #   query/wishlist-sorted card services)
   tools/          # storefront.ts, webStore.ts (keyless-capable Web API tools),
                   #   webPlayer.ts (key-gated player tools), webShared.ts (steamid

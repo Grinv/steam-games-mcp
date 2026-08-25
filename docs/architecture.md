@@ -26,6 +26,14 @@ resolution (`IStoreService/GetTagList`), and the enriched wishlist
 (`IWishlistService/GetWishlistSortedFiltered`). These tools are exposed
 without the key gate; the key is still sent when present.
 
+A vanity `STEAM_ID` would otherwise undo that for `get_wishlist` and
+`get_followed_games`, since `ISteamUser/ResolveVanityURL` does need a key: they
+work keyless for a numeric SteamID64, then fail on resolving the name. So
+`requireSteamId` falls back to `steamcommunity.com/id/<vanity>/?xml=1`, whose
+`<steamID64>` element needs no key — also used as a backstop when a keyed
+attempt fails, so a mistyped key can't take the keyless tools down with it. That
+community page is the only non-API host this server talks to, and only for this.
+
 ## No SteamDB, no third-party deal service
 
 Catalog-wide discovery (`discover_games` via `IStoreQueryService/Query` —

@@ -19,6 +19,35 @@ describe("loadConfig", () => {
     assert.equal(c.defaultSteamId, undefined);
   });
 
+  test("surrounding quotes are stripped, not sent to Steam as part of the value", () => {
+    // Shell-style quoting inside a JSON config ("STEAM_API_KEY":
+    // "'${STEAM_API_KEY}'") or a pasted `export` line leaves the quotes in the
+    // value; Steam then answers 401/403 for a key wrapped in them.
+    const c = loadConfig({
+      STEAM_API_KEY: "'abc123'",
+      STEAM_ID: '"76561197960287930"',
+      STEAM_COUNTRY: "'ID'",
+    });
+    assert.equal(c.steamApiKey, "abc123");
+    assert.equal(c.defaultSteamId, "76561197960287930");
+    assert.equal(c.country, "ID");
+  });
+
+  test("a QUOTED unsubstituted placeholder is unset too, not a real key", () => {
+    // The quotes are what hid it from the placeholder check before, making
+    // web.configured true and sending "${...}" to Steam.
+    const c = loadConfig({ STEAM_API_KEY: "'${STEAM_API_KEY}'" });
+    assert.equal(c.steamApiKey, undefined);
+  });
+
+  test("quotes inside a value are left alone", () => {
+    // Only one matching, surrounding pair is stripped — an apostrophe in the
+    // middle of a value is content, not quoting.
+    const c = loadConfig({ STEAM_ID: "o'brien", STEAM_API_KEY: "'ab'cd'" });
+    assert.equal(c.defaultSteamId, "o'brien");
+    assert.equal(c.steamApiKey, "ab'cd");
+  });
+
   test("unsubstituted .mcpb placeholders are treated as unset", () => {
     // An unfilled optional field arrives as the literal "${user_config.X}".
     const c = loadConfig({

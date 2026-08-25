@@ -162,8 +162,8 @@ price/review checks (`get_items`).
 Player tools need a free
 **`STEAM_API_KEY`** and a **public** profile; they return a clear message when the
 key is unset. The two exceptions are `get_wishlist` and `get_followed_games`,
-marked **–** above: given a raw SteamID64 they work with no key at all (only
-resolving a vanity name to an ID needs one). Set **`STEAM_ID`** (a SteamID64 or vanity name) to make those tools
+marked **–** above: they work with no key at all. Set **`STEAM_ID`** (a SteamID64
+or vanity name — a vanity name resolves without a key too) to make those tools
 default to you, so "my wishlist / library" works without passing an ID each time.
 
 > No third-party services: deal discovery and reviews come from Steam's own
