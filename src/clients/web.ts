@@ -31,6 +31,7 @@ import {
   summarizeWishlist,
   RESULT_OK,
   type CurrentPlayersResponse,
+  type OwnedGamesSort,
   type FollowedGamesCountResponse,
   type FollowedGamesResponse,
   type FriendListResponse,
@@ -228,12 +229,16 @@ export class SteamWebClient {
     );
   }
 
-  async getOwnedGames(steamid: string, checkAppids?: number[]): Promise<Record<string, unknown>> {
+  async getOwnedGames(
+    steamid: string,
+    checkAppids?: number[],
+    opts: { max?: number; sort?: OwnedGamesSort } = {},
+  ): Promise<Record<string, unknown>> {
     const res = await this.#ownedGamesRaw(steamid, {
       include_appinfo: true,
       include_played_free_games: true,
     });
-    return summarizeOwnedGames(res, { checkAppids });
+    return summarizeOwnedGames(res, { checkAppids, ...opts });
   }
 
   async getRecentlyPlayed(steamid: string): Promise<Record<string, unknown>> {

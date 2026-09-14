@@ -54,6 +54,10 @@ const resolveVanityUrlOutput = withNotFound(notFoundReason, vanityFound);
 // work around) — named so the schema and the description can't disagree.
 const CHECK_APPIDS_MAX = 50;
 
+// Upper bound on the `limit` override. Large enough for a whole big library in
+// one call, bounded so a typo can't ask for an unbounded response.
+const OWNED_GAMES_LIMIT_MAX = 1000;
+
 export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): void {
   // Every tool below is gated on the key via requireKey (webShared.ts).
   const requireKey = makeRequireKey(web);
@@ -226,7 +230,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       title: "Get owned games",
       description:
         "List the games a player owns with playtime (hours), most-played first (the `games` list is " +
-        `capped to the top ${OWNED_GAMES_MAX} by playtime — a lightly-played or unplayed game may not appear there). ` +
+        `capped to the top ${OWNED_GAMES_MAX} by playtime — a lightly-played or unplayed game may not appear there; ` +
+        "raise `limit` to widen the cap, or set sort='playtime_asc' to keep the least-played end " +
+        "instead, which is what a 'what have I never got round to playing' question needs). " +
         "To reliably check whether the player owns one or more SPECIFIC appids regardless of that " +
         "cap — 'do I own game X' — pass check_appids; the `owns` field then checks the FULL, uncapped " +
         "library, with each result's own playtime_hours (null if not owned). For the last two weeks " +
@@ -247,11 +253,30 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
               "(ownership unknown) rather than a false owned:false.",
           )
           .optional(),
+        limit: z
+          .int()
+          .positive()
+          .max(OWNED_GAMES_LIMIT_MAX)
+          .describe(
+            `How many games to return (1-${OWNED_GAMES_LIMIT_MAX}, default ${OWNED_GAMES_MAX}). ` +
+              "Raise it only when the whole library is genuinely needed — a big account returns " +
+              "hundreds of entries.",
+          )
+          .optional(),
+        sort: z
+          .enum(["playtime_desc", "playtime_asc"])
+          .describe(
+            "Which end of the library the cap keeps: 'playtime_desc' (default) the most-played, " +
+              "'playtime_asc' the least-played and never-played first.",
+          )
+          .optional(),
       }),
       outputSchema: getOwnedGamesOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { check_appids }) => web.getOwnedGames(sid, check_appids)),
+    steamIdTool(web, requireKey, (sid, { check_appids, limit, sort }) =>
+      web.getOwnedGames(sid, check_appids, { max: limit, sort }),
+    ),
   );
 
   server.registerTool(

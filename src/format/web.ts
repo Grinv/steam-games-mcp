@@ -129,9 +129,15 @@ export function isPrivateOwnedGames(r: OwnedGamesResponse): boolean {
 // descriptions besides this one (three of them cross-referencing get_owned_games
 // from another tool), so a bare literal meant changing it in six places.
 export const OWNED_GAMES_MAX = 50;
+
+// Which end of the library the cap keeps. Descending answers "what do I play";
+// ascending answers "what have I never got round to", which the default order
+// puts exactly where the cap discards it.
+export type OwnedGamesSort = "playtime_desc" | "playtime_asc";
+
 export function summarizeOwnedGames(
   r: OwnedGamesResponse,
-  opts: { max?: number; checkAppids?: number[] } = {},
+  opts: { max?: number; checkAppids?: number[]; sort?: OwnedGamesSort } = {},
 ): z.infer<typeof getOwnedGamesOutput> {
   if (isPrivateOwnedGames(r)) {
     // No `owns` here even if checkAppids was given: a private profile means
@@ -145,7 +151,10 @@ export function summarizeOwnedGames(
     });
   }
   const all = r.response?.games ?? [];
-  const games = all.slice().sort((a, b) => (b.playtime_forever ?? 0) - (a.playtime_forever ?? 0));
+  const direction = opts.sort === "playtime_asc" ? -1 : 1;
+  const games = all
+    .slice()
+    .sort((a, b) => direction * ((b.playtime_forever ?? 0) - (a.playtime_forever ?? 0)));
   const max = opts.max ?? OWNED_GAMES_MAX;
   const byAppid = new Map(
     all
