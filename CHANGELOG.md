@@ -6,6 +6,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Add `limit` and `sort` to `get_owned_games`, so a library's never-played tail can survive the top-50 cap instead of always losing to playtime. ([459bec7](https://github.com/Grinv/steam-games-mcp/commit/459bec7))
+
 ## [0.13.1] - 2026-08-13
 
 ### Changed
