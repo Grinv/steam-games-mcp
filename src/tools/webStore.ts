@@ -47,19 +47,6 @@ import { getGlobalAchievementsOutput } from "../format/webAchievements.schemas.j
 // layer that knows about both paths.
 const getWishlistOutput = withNotFound(wishlistNotFound, wishlistLightFound, wishlistDetailedFound);
 
-// A YYYY-MM-DD regex only checks the SHAPE of a date, and both ways it can be
-// well-formed nonsense produced a wrong answer rather than an error:
-// Date.parse("2026-13-45") is NaN, and every `< NaN` comparison is false, so the
-// cutoff in format/storeCard.ts matched EVERYTHING while `releasedOnly` was
-// still sent upstream (NaN !== undefined) — the response looked filtered;
-// Date.parse("2026-02-31") silently rolls over to 2026-03-03, quietly moving the
-// cutoff. Requiring the date to round-trip rejects both. zod runs a .refine()
-// even after an earlier check failed, so this must never throw on garbage.
-function isRealCalendarDate(v: string): boolean {
-  const t = Date.parse(v);
-  return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === v;
-}
-
 export function registerStoreWebTools(
   server: McpServer,
   web: SteamWebClient,
@@ -173,10 +160,26 @@ export function registerStoreWebTools(
         "back per call, best discount first: compare `returned` against `matched` to see whether the " +
         "list was capped, and narrow the filters or page with `start` for the rest.",
       inputSchema: z.strictObject({
-        released_after: z
-          .string()
-          .regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date, e.g. 2026-03-01.")
-          .refine(isRealCalendarDate, "Not a real calendar date, e.g. 2026-03-01.")
+        // z.iso.date(), not a ^\d{4}-\d{2}-\d{2}$ regex: a shape-only check lets
+        // well-formed nonsense through, and both ways it produced a wrong answer
+        // rather than an error. Date.parse("2026-13-45") is NaN, and every
+        // `< NaN` comparison is false, so the cutoff in format/storeCard.ts
+        // matched EVERYTHING while `releasedOnly` was still sent upstream
+        // (NaN !== undefined) — the response looked filtered; "2026-02-31"
+        // silently rolled over to 2026-03-03, quietly moving the cutoff.
+        // z.iso.date()'s own pattern encodes per-month day counts and leap
+        // years, so it rejects both. It validates a STRING and returns one
+        // (unlike z.date(), which AGENTS.md bans from tool schemas), so the
+        // Date.parse below is unaffected. The error callback keeps the message
+        // scoped to the format check — a non-string still gets zod's precise
+        // "expected string, received number" instead of this sentence.
+        released_after: z.iso
+          .date({
+            error: (issue) =>
+              issue.code === "invalid_type"
+                ? undefined
+                : "Use a real ISO calendar date, e.g. 2026-03-01.",
+          })
           .describe("Keep only games released on/after this date (YYYY-MM-DD).")
           .optional(),
         released_within_days: z
