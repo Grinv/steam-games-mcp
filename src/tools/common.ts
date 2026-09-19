@@ -36,7 +36,14 @@ export const language = z
   .string()
   .trim()
   .min(2)
-  .describe("Store language (e.g. english, russian); overrides STEAM_LANGUAGE for this call.")
+  .describe(
+    "Store language for the text fields, as Steam's full language NAME — english, russian, " +
+      "schinese — NOT an ISO code like en/ru/zh. An unrecognized value is not an error: most " +
+      "endpoints quietly answer in English, so the result looks right and isn't (where a `tags` " +
+      "filter is involved the call fails outright instead, since its tag dictionary comes back " +
+      "empty). Overrides STEAM_LANGUAGE for this call. This is the content language only — " +
+      "prices, and which titles a search matches, follow `country`.",
+  )
   .optional();
 
 // Native-platform filter shared by discover_games and get_wishlist: keeps only

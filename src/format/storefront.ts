@@ -370,14 +370,20 @@ function rollup(x: Rollup): z.infer<typeof rollupSchema> {
 }
 
 // `rollups` is the long-term trend (monthly here); `recent` is per-day for the
-// last ~30 days. Cap both so the response stays bounded.
+// last ~30 days. Cap both so the response stays bounded — most recent kept,
+// since a trend question is about the near end. Exported like every other cap
+// in this codebase so get_review_histogram's description can't state a number
+// the shaper has since moved away from; these two were the last bare literals.
+export const HISTOGRAM_HISTORY_MAX = 24;
+export const HISTOGRAM_RECENT_MAX = 30;
+
 export function summarizeReviewHistogram(
   r: ReviewHistogramResponse,
 ): z.infer<typeof getReviewHistogramOutput> {
   const res = r.results ?? {};
   return getReviewHistogramOutput.parse({
     rollup_type: res.rollup_type ?? null,
-    history: (res.rollups ?? []).slice(-24).map(rollup),
-    recent: (res.recent ?? []).slice(-30).map(rollup),
+    history: (res.rollups ?? []).slice(-HISTOGRAM_HISTORY_MAX).map(rollup),
+    recent: (res.recent ?? []).slice(-HISTOGRAM_RECENT_MAX).map(rollup),
   });
 }

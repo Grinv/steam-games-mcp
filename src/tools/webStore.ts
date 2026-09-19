@@ -185,7 +185,12 @@ export function registerStoreWebTools(
         released_within_days: z
           .int()
           .positive()
-          .describe("Alternative to released_after: released within the last N days.")
+          .describe(
+            "Alternative to released_after: released within the last N days, as a rolling window " +
+              "from now. The two are alternatives, not a combination — pass both and " +
+              "released_after wins and this is ignored, so pick whichever one the question " +
+              "actually asks for.",
+          )
           .optional(),
         steam_deck: steamDeck,
         steam_os: steamOs,
