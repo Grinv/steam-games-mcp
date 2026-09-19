@@ -5,9 +5,18 @@
 // steamPlayer.test.ts (key-gated player tools) for the rest.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { setupServer, jsonResponse, assertToolError } from "./helpers.js";
+import {
+  setupServer,
+  jsonResponse,
+  assertToolError,
+  mockFetch,
+  installFetch,
+  silentLogger,
+} from "./helpers.js";
 import { APP, ENV, router } from "./steamFixtures.js";
 import { PRICES_MAX } from "../tools/common.js";
+import { StorefrontClient } from "../clients/storefront.js";
+import { loadConfig } from "../config.js";
 
 test("the server advertises store and player tools", async (t) => {
   const { client } = await setupServer(t, ENV, router);
@@ -431,6 +440,20 @@ describe("get_prices", () => {
     const empty = await client.callTool({ name: "get_prices", arguments: { appids: [] } });
     assert.equal(empty.isError, true);
     assert.equal(mock.calls.filter((c) => c.url.includes("/api/appdetails")).length, 0);
+  });
+
+  // The one test in this file that drives the client directly rather than a
+  // tool: get_prices' schema is .nonempty(), so an empty list can't reach
+  // getPrices through the MCP surface at all — and the all-chunks-failed
+  // rethrow used to read `settled[0].reason` off an empty array for exactly
+  // that input, throwing a TypeError instead of answering. A client method
+  // shouldn't rely on one caller's validation to avoid crashing.
+  test("getPrices answers an empty appid list instead of throwing on settled[0]", async (t) => {
+    const mock = mockFetch(() => jsonResponse({}));
+    installFetch(t, mock);
+    const store = new StorefrontClient(loadConfig({}), silentLogger());
+    assert.deepEqual(await store.getPrices([]), { count: 0, prices: [] });
+    assert.equal(mock.calls.length, 0, "no chunks means no upstream call");
   });
 });
 
