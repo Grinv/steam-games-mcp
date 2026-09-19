@@ -1,13 +1,21 @@
 // Key-required Steam Web API tools: profile, bans, library, achievements,
 // friends, vanity resolution. Each short-circuits with a clear "set
-// STEAM_API_KEY" message when the key is missing (the target profile must also
-// be public). Split out of a single tools/web.ts once it grew past ~550 lines —
-// see tools/webStore.ts for the keyless-capable half.
+// STEAM_API_KEY" message when the key is missing; the ones that ALSO need the
+// target profile opened up add a note saying so (see PUBLIC_PROFILE_NOTE — four
+// of these tools read a private profile perfectly well). Split out of a single
+// tools/web.ts once it grew past ~550 lines — see tools/webStore.ts for the
+// keyless-capable half.
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
 import { READ_ONLY, appid, language } from "./common.js";
-import { requireKey as makeRequireKey, otherSteamid, steamid, steamIdTool } from "./webShared.js";
+import {
+  PUBLIC_PROFILE_NOTE,
+  requireKey as makeRequireKey,
+  otherSteamid,
+  steamid,
+  steamIdTool,
+} from "./webShared.js";
 import { notFoundReason, withNotFound } from "../format/shared.schemas.js";
 import { recommendedGamesFound } from "../format/store.schemas.js";
 import { FAVORITE_TAG_SAMPLE_SIZE, RECOMMENDATION_POOL_SIZE } from "../clients/storeService.js";
@@ -67,8 +75,11 @@ export const CHECK_APPIDS_MAX = 50;
 export const OWNED_GAMES_LIMIT_MAX = 300;
 
 export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): void {
-  // Every tool below is gated on the key via requireKey (webShared.ts).
+  // Every tool below is gated on the key via requireKey (webShared.ts). Two
+  // variants: the tools whose target profile also has to be public get the extra
+  // note, the four that read fine regardless (see PUBLIC_PROFILE_NOTE) don't.
   const requireKey = makeRequireKey(web);
+  const requireKeyAndPublicProfile = makeRequireKey(web, PUBLIC_PROFILE_NOTE);
 
   server.registerTool(
     "get_game_achievements",
@@ -138,7 +149,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: getFriendListOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid) => web.getFriendList(sid)),
+    steamIdTool(web, requireKeyAndPublicProfile, (sid) => web.getFriendList(sid)),
   );
 
   server.registerTool(
@@ -173,7 +184,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: findFriendsWhoOwnOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { appids }) => web.findFriendsWhoOwn(sid, appids)),
+    steamIdTool(web, requireKeyAndPublicProfile, (sid, { appids }) =>
+      web.findFriendsWhoOwn(sid, appids),
+    ),
   );
 
   server.registerTool(
@@ -195,7 +208,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: comparePlayersOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { other_steamid }) =>
+    steamIdTool(web, requireKeyAndPublicProfile, (sid, { other_steamid }) =>
       web.comparePlayers(sid, other_steamid),
     ),
   );
@@ -286,7 +299,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: getOwnedGamesOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { check_appids, limit, sort }) =>
+    steamIdTool(web, requireKeyAndPublicProfile, (sid, { check_appids, limit, sort }) =>
       web.getOwnedGames(sid, check_appids, { max: limit, sort }),
     ),
   );
@@ -307,7 +320,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: getRecentlyPlayedOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid) => web.getRecentlyPlayed(sid)),
+    steamIdTool(web, requireKeyAndPublicProfile, (sid) => web.getRecentlyPlayed(sid)),
   );
 
   server.registerTool(
@@ -364,7 +377,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: getRecommendedGamesOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { limit, exclude_tags, min_discount }) =>
+    steamIdTool(web, requireKeyAndPublicProfile, (sid, { limit, exclude_tags, min_discount }) =>
       web.getRecommendedGames(sid, {
         count: limit,
         excludeTags: exclude_tags,
@@ -397,7 +410,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: getPlayerAchievementsOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { appid: app, language }) =>
+    steamIdTool(web, requireKeyAndPublicProfile, (sid, { appid: app, language }) =>
       web.getPlayerAchievements(sid, app, language),
     ),
   );

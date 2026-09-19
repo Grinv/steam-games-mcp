@@ -26,6 +26,36 @@ test("player tools error clearly without STEAM_API_KEY", async (t) => {
   assertToolError(res, /STEAM_API_KEY/);
 });
 
+test("the key-gate message only promises a public profile where one is needed", async (t) => {
+  // Regression: one blanket message told every key-gated tool's caller to go
+  // make the target profile public. Four of them don't care —
+  // get_player_summary/get_player_bans read private profiles fine (which is why
+  // their found:false says "no such account" instead of offering a privacy
+  // hint), resolve_vanity_url resolves a name, and get_game_achievements takes
+  // an appid and no profile at all — so that advice sent the caller after a
+  // setting that would change nothing about the error they just got.
+  const { client } = await setupServer(t);
+  const sid = "76561197960287930";
+  for (const [name, args] of [
+    ["get_player_summary", { steamid: sid }],
+    ["get_player_bans", { steamid: sid }],
+    ["resolve_vanity_url", { vanity: "gabelogannewell" }],
+    ["get_game_achievements", { appid: 620 }],
+  ] as const) {
+    const res = await client.callTool({ name, arguments: args });
+    assertToolError(res, /STEAM_API_KEY/);
+    assert.doesNotMatch(textOf(res), /must also be public/, name);
+  }
+  for (const [name, args] of [
+    ["get_owned_games", { steamid: sid }],
+    ["get_friend_list", { steamid: sid }],
+    ["get_player_achievements", { steamid: sid, appid: 620 }],
+  ] as const) {
+    const res = await client.callTool({ name, arguments: args });
+    assert.match(textOf(res), /must also be public/, name);
+  }
+});
+
 describe("get_owned_games", () => {
   test("get_owned_games sorts by playtime and converts to hours", async (t) => {
     const { client } = await setupServer(t, ENV, router);
