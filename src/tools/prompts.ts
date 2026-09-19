@@ -34,6 +34,13 @@ const oneLine = (v: string) => v.replace(/\s+/g, " ").trim();
 // nonsense "drop any result priced above free". A price ceiling and "only
 // free-to-play" are different instructions, so say which one this is.
 const FREE_BUDGET = /^(free|f2p|free[ -]to[ -]play|0)$/i;
+// An amount, with an optional currency symbol or 3-letter code on either side:
+// "20", "19.99", "$20", "1500 RUB", "15€". Anything else is rejected by the
+// schema rather than rendered — "cheap" used to interpolate straight into "drop
+// anything priced above cheap", an instruction the agent can't act on and that
+// reads as though the server meant it.
+const BUDGET_AMOUNT = /^\p{Sc}?\s*\d+(?:[.,]\d{1,2})?\s*(?:\p{Sc}|[A-Za-z]{3})?$/u;
+const isBudget = (v: string) => FREE_BUDGET.test(oneLine(v)) || BUDGET_AMOUNT.test(oneLine(v));
 const budgetRule = (budget: string) =>
   FREE_BUDGET.test(oneLine(budget))
     ? "keep only free-to-play titles"
@@ -79,7 +86,12 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
           budget: z
             .string()
             .trim()
-            .describe("Max price, e.g. '$20', or 'free' for free-to-play only. Omit for no limit.")
+            .refine(isBudget, "Use an amount like '20', '$19.99' or '1500 RUB', or 'free'.")
+            .describe(
+              "Max price as an amount, e.g. '20' or '$19.99' — a bare word like 'cheap' is " +
+                "rejected, since it can't be applied to a price. Or 'free' for free-to-play " +
+                "only. Omit for no limit.",
+            )
             .optional(),
           tags: z
             .string()
