@@ -42,7 +42,8 @@ Valve/Steam hosts, carrying only what that specific call needs:
   (profiles, libraries, achievements, friends) and several keyless endpoints:
   news, global achievement rates, current player counts, a player's wishlist
   and followed games, and the modern store-card services behind `get_items`,
-  `discover_games` and `get_wishlist`'s detailed cards. When `STEAM_API_KEY`
+  `discover_games`, `get_recommended_games` and `get_wishlist`'s detailed
+  cards. When `STEAM_API_KEY`
   is set, it travels as a `key` query parameter on every request to this
   host, per Valve's own API convention, never as a header, never logged
   (see Storage and retention below).

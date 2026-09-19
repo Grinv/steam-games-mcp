@@ -125,9 +125,10 @@ export function isPrivateOwnedGames(r: OwnedGamesResponse): boolean {
 // pass checkAppids to check specific appids against the FULL, uncapped list
 // instead; `owns` then answers that reliably regardless of the games cap.
 //
-// Exported like every other cap in this file: the number appears in four tool
-// descriptions besides this one (three of them cross-referencing get_owned_games
-// from another tool), so a bare literal meant changing it in six places.
+// Exported like every other cap in this file: the number is interpolated into
+// six description sites across tools/webPlayer.ts (three of them
+// cross-referencing get_owned_games from another tool) plus one in
+// tools/prompts.ts, so a bare literal meant changing it in eight places.
 export const OWNED_GAMES_MAX = 50;
 
 // Which end of the library the cap keeps. Descending answers "what do I play";

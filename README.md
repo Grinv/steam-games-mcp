@@ -125,33 +125,33 @@ need a free API key and a public profile. Three short steps:
 
 Key: **–** no credentials · **K** Steam Web API key.
 
-| Tool                      | Key | Purpose                                                                                                                                         |
-| ------------------------- | --- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_games`            | –   | Find games by title → appid (with price)                                                                                                        |
-| `get_game`                | –   | Store details by appid **or name**: price, genres, platforms, Metacritic, age rating, DLC, requirements                                         |
-| `get_items`               | –   | Batch store card (price, review %, **Deck/SteamOS/Machine/Frame** compat, native **platforms**, **tags**) — up to 50 appids                     |
-| `discover_games`          | –   | Find games catalog-wide by **discount**, **recency**, **Deck/SteamOS/Machine/Frame**, **platform**, **tags**, rating                            |
-| `get_game_reviews`        | –   | Review summary + recent reviews                                                                                                                 |
-| `get_review_histogram`    | –   | Review trend over time (history + recent)                                                                                                       |
-| `get_prices`              | –   | Batch current price/discount — up to 250 appids                                                                                                 |
-| `get_specials`            | –   | Steam front-page discounts                                                                                                                      |
-| `get_featured`            | –   | Featured sections (top sellers, new releases, …)                                                                                                |
-| `get_game_news`           | –   | Recent news / patch notes                                                                                                                       |
-| `get_global_achievements` | –   | Global achievement unlock rates (rarity) — top 200                                                                                              |
-| `get_current_players`     | –   | Live concurrent player count                                                                                                                    |
-| `get_wishlist`            | –   | A player's wishlist — appids, or full cards + on-sale filter with `include_details` (public profiles)                                           |
-| `get_followed_games`      | –   | A player's followed games (Steam's "follow" feature, separate from the wishlist) — appids (public profiles)                                     |
-| `get_game_achievements`   | K   | Achievement list (names, descriptions) + rarity — first 150, definition order                                                                   |
-| `resolve_vanity_url`      | K   | Custom profile name → SteamID64                                                                                                                 |
-| `get_player_summary`      | K   | Player public profile (incl. Steam level)                                                                                                       |
-| `get_player_bans`         | K   | VAC/game/community/economy ban status (works even on private profiles)                                                                          |
-| `get_owned_games`         | K   | A player's games + playtime (top 50 by playtime, `limit`/`sort` widen or flip that cap; `check_appids` reliably checks specific appids past it) |
-| `get_recently_played`     | K   | Games played in the last two weeks (top 50 by recent playtime)                                                                                  |
-| `get_recommended_games`   | K   | Personalized picks from playtime-weighted tags + review quality, excluding owned games                                                          |
-| `get_player_achievements` | K   | A player's achievement progress in a game — achievement list capped at top 200, unlocked first                                                  |
-| `get_friend_list`         | K   | A player's friends — name, online state, current game (public friends list)                                                                     |
-| `find_friends_who_own`    | K   | Which friends own given appid(s) + their playtime — each friend's FULL library, first 200 friends (`friends_checked`)                           |
-| `compare_players`         | K   | Games two players both own, with each one's playtime — checks each player's FULL library, not just top 50                                       |
+| Tool                      | Key | Purpose                                                                                                                                                          |
+| ------------------------- | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_games`            | –   | Find games by title → appid (with price)                                                                                                                         |
+| `get_game`                | –   | Store details by appid **or name**: price, genres, platforms, Metacritic, age rating, DLC, requirements                                                          |
+| `get_items`               | –   | Batch store card (price, review %, **Deck/SteamOS/Machine/Frame** compat, native **platforms**, **tags**) — up to 50 appids                                      |
+| `discover_games`          | –   | Find games catalog-wide by **discount**, **recency**, **Deck/SteamOS/Machine/Frame**, **platform**, **tags**, rating                                             |
+| `get_game_reviews`        | –   | Review summary + recent reviews                                                                                                                                  |
+| `get_review_histogram`    | –   | Review trend over time (history + recent)                                                                                                                        |
+| `get_prices`              | –   | Batch current price/discount — up to 250 appids                                                                                                                  |
+| `get_specials`            | –   | Steam front-page discounts                                                                                                                                       |
+| `get_featured`            | –   | Featured sections (top sellers, new releases, …)                                                                                                                 |
+| `get_game_news`           | –   | Recent news / patch notes                                                                                                                                        |
+| `get_global_achievements` | –   | Global achievement unlock rates (rarity) — top 200                                                                                                               |
+| `get_current_players`     | –   | Live concurrent player count                                                                                                                                     |
+| `get_wishlist`            | –   | A player's wishlist — appids, or full cards + on-sale filter with `include_details` (public profiles)                                                            |
+| `get_followed_games`      | –   | A player's followed games (Steam's "follow" feature, separate from the wishlist) — appids (public profiles)                                                      |
+| `get_game_achievements`   | K   | Achievement list (names, descriptions) + rarity — first 150, definition order                                                                                    |
+| `resolve_vanity_url`      | K   | Custom profile name → SteamID64                                                                                                                                  |
+| `get_player_summary`      | K   | Player public profile (incl. Steam level)                                                                                                                        |
+| `get_player_bans`         | K   | VAC/game/community/economy ban status (works even on private profiles)                                                                                           |
+| `get_owned_games`         | K   | A player's games + playtime (50 by playtime, `limit` widens to 300 and `sort` flips which end is kept; `check_appids` reliably checks specific appids past that) |
+| `get_recently_played`     | K   | Games played in the last two weeks (top 50 by recent playtime)                                                                                                   |
+| `get_recommended_games`   | K   | Personalized picks from playtime-weighted tags + review quality, excluding owned games                                                                           |
+| `get_player_achievements` | K   | A player's achievement progress in a game — achievement list capped at top 200, unlocked first                                                                   |
+| `get_friend_list`         | K   | A player's friends — name, online state, current game (public friends list)                                                                                      |
+| `find_friends_who_own`    | K   | Which friends own given appid(s) + their playtime — each friend's FULL library, first 200 friends (`friends_checked`)                                            |
+| `compare_players`         | K   | Games two players both own, with each one's playtime — checks each player's FULL library, not just top 50                                                        |
 
 **Two tiers.** Store/search + discovery tools (`store`/`api.steampowered.com`)
 need **no credentials** — including catalog-wide discovery (`discover_games`:
