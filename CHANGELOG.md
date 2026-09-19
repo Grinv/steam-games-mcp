@@ -8,7 +8,23 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Add `limit` and `sort` to `get_owned_games`, so a library's never-played tail can survive the top-50 cap instead of always losing to playtime. ([459bec7](https://github.com/Grinv/steam-games-mcp/commit/459bec7))
+- Add `limit` (1-300) and `sort` to `get_owned_games`, so a library's never-played tail can survive the 50-entry cap instead of always losing to playtime. ([459bec7](https://github.com/Grinv/steam-games-mcp/commit/459bec7), [032cb22](https://github.com/Grinv/steam-games-mcp/commit/032cb22))
+
+### Changed
+
+- Drop the "target profile must also be public" note from the key-gate error of the four tools that read private profiles fine. ([afeb88d](https://github.com/Grinv/steam-games-mcp/commit/afeb88d))
+- Warn in `language`'s description that an ISO code like 'ru' makes Steam answer in English rather than erroring, and that `country` drives prices and search matches. ([9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9))
+- Report one validation error instead of two for a bad `discover_games` `released_after`, and advertise `format: "date"` in its schema. ([f436189](https://github.com/Grinv/steam-games-mcp/commit/f436189))
+
+### Fixed
+
+- Fix `get_global_achievements`/`get_game_achievements` caching the empty list they fall back to on a 403 — a transient block then read as "this game has no achievements" for a full cache TTL, over any good list already stored. ([3d6f3a3](https://github.com/Grinv/steam-games-mcp/commit/3d6f3a3))
+- Fix `get_review_histogram` and `get_game_reviews` not disclosing that an unknown appid comes back empty rather than as an error, unlike their three siblings. ([9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9))
+- Fix `what_should_i_play` rendering a non-numeric `budget` into the nonsense instruction "drop anything priced above cheap". ([4856ddc](https://github.com/Grinv/steam-games-mcp/commit/4856ddc))
+- Fix `get_owned_games`' description promising "most-played first" unconditionally, which `sort='playtime_asc'` contradicts. ([032cb22](https://github.com/Grinv/steam-games-mcp/commit/032cb22))
+- Fix `discover_games` not documenting that `released_after` overrides `released_within_days` when both are given. ([9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9))
+- Fix `getPrices` throwing a TypeError instead of an empty result for an empty appid list; unreachable through `get_prices`, whose schema rejects one. ([9c647a7](https://github.com/Grinv/steam-games-mcp/commit/9c647a7))
+- Fix PRIVACY.md omitting `get_recommended_games` from the tools backed by Steam's store-card services. ([c96d7a2](https://github.com/Grinv/steam-games-mcp/commit/c96d7a2))
 
 ## [0.13.1] - 2026-08-13
 
