@@ -1312,6 +1312,39 @@ describe("get_game_achievements", () => {
     assert.deepEqual(s.achievements, []);
   });
 
+  test("never caches that degraded empty result", async (t) => {
+    // Same fix as get_global_achievements': the degrade decision moved OUTSIDE
+    // wrapStaleOnError, because returning the empty schema from inside made
+    // TtlCache#dedupe set() it. Both calls 403ing at once is usually an
+    // appid-specific signal, but under load it can just be transient — and a
+    // cached "this game has no achievements" then outlives the blip by a full
+    // TTL. The real list on the retry proves the empty one was never stored.
+    let calls = 0;
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (!url.includes("GetSchemaForGame")) {
+        return url.includes("GetGlobalAchievementPercentagesForApp") && calls === 1
+          ? jsonResponse({}, { status: 403 })
+          : router(url);
+      }
+      calls++;
+      return calls === 1 ? jsonResponse({}, { status: 403 }) : router(url);
+    });
+    const degraded = await client.callTool({
+      name: "get_game_achievements",
+      arguments: { appid: 620 },
+    });
+    assert.equal((degraded.structuredContent as { total: number }).total, 0);
+
+    const retried = await client.callTool({
+      name: "get_game_achievements",
+      arguments: { appid: 620 },
+    });
+    assert.equal(retried.isError, undefined);
+    const s = retried.structuredContent as { total: number; achievements: { name: string }[] };
+    assert.equal(s.total, 2, "the retry must reach Steam, not a cached empty schema");
+    assert.equal(s.achievements[0]!.name, "Wake Up Call");
+  });
+
   test("still surfaces a credentials-flavored error when only the schema call 403s and the keyless global-rarity call succeeds (genuinely ambiguous)", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetSchemaForGame") ? jsonResponse({}, { status: 403 }) : router(url),
