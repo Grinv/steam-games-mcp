@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { setupServer, jsonResponse, htmlResponse, assertToolError, textOf } from "./helpers.js";
 import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.js";
 import { FRIENDS_CHECKED_MAX, FRIENDS_MAX } from "../format/web.js";
+import { OWNED_GAMES_LIMIT_MAX } from "../tools/webPlayer.js";
 
 // Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant
@@ -158,6 +159,33 @@ describe("get_owned_games", () => {
       { appid: 620, owned: true, playtime_hours: 10 },
       { appid: 999, owned: false, playtime_hours: null },
     ]);
+  });
+
+  test(`get_owned_games rejects a limit past ${OWNED_GAMES_LIMIT_MAX} before calling the upstream`, async (t) => {
+    // The ceiling is a response-size budget, not an upstream one: measured live,
+    // an owned-games row is ~95 chars, so the previous 1000 produced a ~95 KB
+    // response — MCP clients reject that outright for exceeding their per-result
+    // token limit and the caller gets nothing at all. Asserted against the
+    // exported constant, and that nothing reached Steam, so a future raise has
+    // to come back through this comment.
+    const { client, mock } = await setupServer(t, ENV, router);
+    const tooBig = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "76561197960287930", limit: OWNED_GAMES_LIMIT_MAX + 1 },
+    });
+    assert.equal(tooBig.isError, true);
+    const zero = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "76561197960287930", limit: 0 },
+    });
+    assert.equal(zero.isError, true);
+    assert.equal(mock.calls.filter((c) => c.url.includes("GetOwnedGames")).length, 0);
+
+    const ok = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "76561197960287930", limit: OWNED_GAMES_LIMIT_MAX },
+    });
+    assert.notEqual(ok.isError, true);
   });
 });
 
