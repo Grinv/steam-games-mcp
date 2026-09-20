@@ -170,16 +170,22 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "lookup failed (e.g. rate-limited) lands in unavailable_friends with a reason instead of " +
         "failing the whole call — every other friend's result still comes through. Each of owners, " +
         `private_friends and unavailable_friends is capped at ${FRIENDS_WHO_OWN_MAX} entries (a sibling _total field ` +
-        `appears only when it was actually truncated). On a big account only the first ${FRIENDS_CHECKED_MAX} friends ` +
-        "are looked up at all (one Steam call per friend would otherwise run past an MCP client's " +
-        "request timeout) — compare `friends_checked` against `total_friends`, and treat a friend " +
+        `appears only when it was actually truncated). On a big account only ${FRIENDS_CHECKED_MAX} friends are ` +
+        "looked up at all (one Steam call per friend would otherwise run past an MCP client's " +
+        "request timeout), and they are the most-recently-added ones — the same ordering and the " +
+        "same prefix get_friend_list shows, so 'the friends checked' is a set you can actually " +
+        "name — compare `friends_checked` against `total_friends`, and treat a friend " +
         "missing from all three lists as unchecked, not as a non-owner. Get appids from search_games.",
       inputSchema: z.strictObject({
         appids: z
           .array(z.int().positive())
           .nonempty()
           .max(10)
-          .describe("Steam appids to check (1-10)."),
+          .describe(
+            "Steam appids to check (1-10). An appid that doesn't exist is not an error — it comes " +
+              "back with an empty `owners` list, indistinguishable from 'no friend owns it'. " +
+              "Confirm it with get_game first if that matters.",
+          ),
         steamid,
       }),
       outputSchema: findFriendsWhoOwnOutput,
@@ -200,7 +206,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         `shared game, unlike get_owned_games whose own list stops at ${OWNED_GAMES_MAX} by playtime by default — but ` +
         `the returned list here is itself capped at the top ${COMPARE_SHARED_MAX} shared games by combined playtime ` +
         "(check `returned` vs `shared_count`). Requires STEAM_API_KEY and both " +
-        "profiles' game-details to be public — otherwise it returns found:false. Omit steamid to " +
+        "profiles' game-details to be public — otherwise it returns found:false, which ALSO " +
+        "covers one player's library lookup failing transiently; read `reason`, which says which " +
+        "case it is and whether retrying is worth it. Omit steamid to " +
         "compare against yourself (STEAM_ID).",
       inputSchema: z.strictObject({
         steamid,
@@ -220,7 +228,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       title: "Get player profile",
       description:
         "Get a player's profile by SteamID64: display name, online state, country, account age, " +
-        "Steam level, and the game they're currently in. Requires STEAM_API_KEY, but works even for " +
+        "Steam level (a separate lookup that degrades to null on failure, independently of " +
+        "profile privacy), and the game they're currently in. Requires STEAM_API_KEY, but works even for " +
         "a private profile (visibility reports 'private') — country, account age and the current " +
         "game only populate when the profile is public. For VAC/game/trade ban status instead, use " +
         "get_player_bans.",
@@ -274,7 +283,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
               "reads the FULL library, and its own cost is bounded by this list's length. Adds an `owns` field: " +
               "[{appid, owned, playtime_hours}]. One upstream " +
               "gap to know about: Steam omits free-to-play titles the player owns but has NEVER " +
-              "launched, so those report owned:false. A private profile reports no `owns` at all " +
+              "launched, so those report owned:false — as does an appid that doesn't exist, so " +
+              "this field can't tell 'no such game' from 'doesn't own it'. A private profile " +
+              "reports no `owns` at all " +
               "(ownership unknown) rather than a false owned:false.",
           )
           .optional(),
@@ -400,7 +411,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "(names, descriptions, global rarity) independent of any player, use get_game_achievements " +
         "instead; for just the rarity without a key, use get_global_achievements. Requires " +
         "STEAM_API_KEY and a public profile with game-details visibility — otherwise it returns " +
-        "found:false (also returned if the game has no achievements at all).",
+        "found:false — which is also what an appid with no achievements, or no such appid at " +
+        "all, returns; the three are not reported separately, so confirm the appid with get_game. ",
       inputSchema: z.strictObject({
         steamid,
         appid,

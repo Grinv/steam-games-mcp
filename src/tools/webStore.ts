@@ -59,6 +59,8 @@ export function registerStoreWebTools(
       title: "Get game news",
       description:
         "Get recent news / patch notes for a game by appid (title, date, author, excerpt, link). " +
+        "Each excerpt is the first ~400 characters of the post with HTML stripped — follow `url` " +
+        "for the full text. " +
         "An unknown/unassigned appid comes back as an empty list rather than an error, the same as " +
         "get_global_achievements. Get the appid from search_games. No API key required.",
       inputSchema: z.strictObject({
@@ -135,7 +137,7 @@ export function registerStoreWebTools(
   server.registerTool(
     "discover_games",
     {
-      title: "Discover games (deals, new releases, Steam Deck, rating)",
+      title: "Discover games",
       description:
         "Find games across the whole Steam catalog (keyless), filtered by ANY combination of: " +
         "discount (min_discount — for 'what's on sale'), release recency (released_after / " +
@@ -149,6 +151,8 @@ export function registerStoreWebTools(
         "reviews' → set min_discount + min_review; 'recent well-reviewed games that run on Steam Deck' " +
         "→ set released_within_days + steam_deck + min_review; 'roguelike deckbuilders on sale' → " +
         "tags:['Roguelike','Deckbuilding'] + min_discount. " +
+        "Base games only: DLC, soundtracks, demos and tools are filtered out, so a 'find DLC on " +
+        "sale' question returns nothing here — price a known DLC appid with get_items instead. " +
         "No appids needed — unlike get_items, which prices a list you already have. For 'games like " +
         "X' from a SINGLE named title, get its tags via get_items and pass them here; for taste " +
         "inferred from the player's WHOLE library instead, use get_recommended_games (key-gated). " +
@@ -309,8 +313,11 @@ export function registerStoreWebTools(
         "List the games a player 'follows' on the Steam store, by SteamID64 — a lighter opt-in " +
         "(get sale/update notifications) that's separate from the wishlist; many players follow more " +
         "games than they wishlist. No API key required, but the follows/profile must be public — " +
-        "otherwise it returns found:false. Returns appids + store_url only (no price/name), " +
-        `capped at the first ${FOLLOWED_MAX} (check \`returned\` vs \`total\`); pass the appids to get_items for ` +
+        "otherwise it returns found:false, which is ALSO what a public account following nothing " +
+        "returns; read `reason` to tell those apart. Returns appids + store_url only (no price/name), " +
+        `capped at ${FOLLOWED_MAX} in whatever order Steam sends them — unlike every other capped list ` +
+        "here there is no ranking, so a game past the cut is not 'less followed' (check " +
+        "`returned` vs `total`); pass the appids to get_items for " +
         "price, review % and compat. Convert a vanity name with resolve_vanity_url " +
         "first (that conversion itself needs STEAM_API_KEY, even though this tool doesn't).",
       inputSchema: z.strictObject({ steamid }),
@@ -326,7 +333,8 @@ export function registerStoreWebTools(
       title: "Get a player's wishlist",
       description:
         "List a player's Steam wishlist by SteamID64. No API key required, but the wishlist/profile " +
-        "must be public — otherwise it returns found:false. By default returns a light list of appids " +
+        "must be public — otherwise it returns found:false, which is ALSO what an empty but public " +
+        "wishlist returns; read `reason` to tell those apart. By default returns a light list of appids " +
         `(sorted by priority, no names), capped at the first ${WISHLIST_LIGHT_MAX} (check \`returned\` vs \`total\`). ` +
         "Set include_details for full store cards in ONE call (name, price/discount, review %, " +
         "Deck/SteamOS/Machine/Frame compat, vr_support, tags, release) — no need to follow up with " +

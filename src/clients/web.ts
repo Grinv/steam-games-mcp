@@ -68,8 +68,15 @@ const TRANSIENT_CODES: readonly ApiErrorCode[] = [
   "rate_limited",
 ];
 
+// GetFriendList answers the same way for a private list and for a SteamID64
+// with no account behind it at all (#FRIENDLIST_NOT_FOUND_CODES below folds
+// not_found in deliberately). Naming only the privacy case told the caller to
+// go change a setting on an account that doesn't exist — confirmed live on
+// 76561197960265728, which get_player_summary correctly reports as no such
+// account. Both causes, like every sibling that can fail two ways.
 const PRIVATE_FRIENDS_REASON =
-  "Profile or friends list is private. Ask the owner to set Steam → Privacy → " +
+  "Friends list is private, or there is no Steam account with that SteamID64. Check the id " +
+  "(resolve a vanity name with resolve_vanity_url), or ask the owner to set Steam → Privacy → " +
   "Friends List = Public.";
 
 // Internal signal, never surfaced: getGameAchievements' cache callback throws

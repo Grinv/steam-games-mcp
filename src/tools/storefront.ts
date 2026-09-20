@@ -17,7 +17,7 @@ import {
   getSpecialsOutput,
   searchGamesOutput,
 } from "../format/storefront.schemas.js";
-import { HISTOGRAM_HISTORY_MAX, HISTOGRAM_RECENT_MAX } from "../format/storefront.js";
+import { DLC_MAX, HISTOGRAM_HISTORY_MAX, HISTOGRAM_RECENT_MAX } from "../format/storefront.js";
 
 export function registerStorefrontTools(server: McpServer, store: StorefrontClient): void {
   server.registerTool(
@@ -49,7 +49,9 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Get game details",
       description:
         "Get full store details for one game: description, price/discount, genres, platforms, " +
-        "release date, developers/publishers, Metacritic, age rating, DLC, PC requirements and a " +
+        "release date, developers/publishers, Metacritic, age rating, DLC (the `dlc` appid list is " +
+        `capped at ${DLC_MAX} — read \`dlc_total\` for the real count, and pass the appids to ` +
+        "get_items for names and prices), PC requirements and a " +
         "small highlighted-achievements sample (achievements_highlighted). " +
         "Identify the game by appid (from search_games) OR by name — a title is resolved to the " +
         "closest store match. Both forms error rather than returning an empty result when nothing " +
