@@ -5,9 +5,18 @@
 // steamPlayer.test.ts (key-gated player tools) for the rest.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { setupServer, jsonResponse, assertToolError } from "./helpers.js";
+import {
+  setupServer,
+  jsonResponse,
+  assertToolError,
+  mockFetch,
+  installFetch,
+  silentLogger,
+} from "./helpers.js";
 import { APP, ENV, router } from "./steamFixtures.js";
 import { PRICES_MAX } from "../tools/common.js";
+import { StorefrontClient } from "../clients/storefront.js";
+import { loadConfig } from "../config.js";
 
 test("the server advertises store and player tools", async (t) => {
   const { client } = await setupServer(t, ENV, router);
@@ -291,7 +300,10 @@ describe("get_prices", () => {
                 },
               },
             },
-            "400": { success: true, data: [] }, // free game: no price_overview
+            // success with no price_overview. Steam answers this IDENTICALLY for a
+            // free-to-play game and for an unreleased paid one (verified live), so the
+            // row reports priced:false rather than guessing is_free:true.
+            "400": { success: true, data: [] },
             "999": { success: false },
           })
         : jsonResponse({}),
@@ -302,7 +314,13 @@ describe("get_prices", () => {
     });
     const s = res.structuredContent as {
       count: number;
-      prices: { appid: number; available: boolean; is_free?: boolean; final?: string }[];
+      prices: {
+        appid: number;
+        available: boolean;
+        is_free?: boolean;
+        priced?: boolean;
+        final?: string;
+      }[];
     };
     assert.equal(s.count, 3);
     assert.equal(s.prices[0]!.appid, 620);
@@ -311,7 +329,8 @@ describe("get_prices", () => {
     assert.equal(s.prices[0]!.final, "$1.99");
     assert.equal(s.prices[1]!.appid, 400);
     assert.equal(s.prices[1]!.available, true);
-    assert.equal(s.prices[1]!.is_free, true);
+    assert.equal(s.prices[1]!.priced, false);
+    assert.equal(s.prices[1]!.is_free, undefined, "freeness is not knowable from this endpoint");
     assert.equal(s.prices[2]!.appid, 999);
     assert.equal(s.prices[2]!.available, false);
   });
@@ -431,6 +450,20 @@ describe("get_prices", () => {
     const empty = await client.callTool({ name: "get_prices", arguments: { appids: [] } });
     assert.equal(empty.isError, true);
     assert.equal(mock.calls.filter((c) => c.url.includes("/api/appdetails")).length, 0);
+  });
+
+  // The one test in this file that drives the client directly rather than a
+  // tool: get_prices' schema is .nonempty(), so an empty list can't reach
+  // getPrices through the MCP surface at all — and the all-chunks-failed
+  // rethrow used to read `settled[0].reason` off an empty array for exactly
+  // that input, throwing a TypeError instead of answering. A client method
+  // shouldn't rely on one caller's validation to avoid crashing.
+  test("getPrices answers an empty appid list instead of throwing on settled[0]", async (t) => {
+    const mock = mockFetch(() => jsonResponse({}));
+    installFetch(t, mock);
+    const store = new StorefrontClient(loadConfig({}), silentLogger());
+    assert.deepEqual(await store.getPrices([]), { count: 0, prices: [] });
+    assert.equal(mock.calls.length, 0, "no chunks means no upstream call");
   });
 });
 

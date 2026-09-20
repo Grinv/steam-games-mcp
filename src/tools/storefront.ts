@@ -17,6 +17,7 @@ import {
   getSpecialsOutput,
   searchGamesOutput,
 } from "../format/storefront.schemas.js";
+import { DLC_MAX, HISTOGRAM_HISTORY_MAX, HISTOGRAM_RECENT_MAX } from "../format/storefront.js";
 
 export function registerStorefrontTools(server: McpServer, store: StorefrontClient): void {
   server.registerTool(
@@ -48,10 +49,15 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Get game details",
       description:
         "Get full store details for one game: description, price/discount, genres, platforms, " +
-        "release date, developers/publishers, Metacritic, age rating, DLC, PC requirements and a " +
+        "release date, developers/publishers, Metacritic, age rating, DLC (the `dlc` appid list is " +
+        `capped at ${DLC_MAX} — read \`dlc_total\` for the real count, and pass the appids to ` +
+        "get_items for names and prices), PC requirements and a " +
         "small highlighted-achievements sample (achievements_highlighted). " +
         "Identify the game by appid (from search_games) OR by name — a title is resolved to the " +
-        "closest store match. No API key required.",
+        "closest store match. Both forms error rather than returning an empty result when nothing " +
+        "matches, and an appid can fail for two different reasons: it may not exist, or it may not " +
+        "be sold in the given `country`. The error names the country and both causes — retry with " +
+        "another `country` before concluding the game doesn't exist. No API key required.",
       inputSchema: z
         .strictObject({
           appid: appid
@@ -94,9 +100,12 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       title: "Get game reviews",
       description:
         "Get the review summary (score label, positive/negative counts, %) and a few recent " +
-        "reviews for a game by appid. Review text over 600 characters is truncated. For long-term " +
-        "trend instead of a snapshot, use get_review_histogram. Get the appid from search_games. " +
-        "No API key required.",
+        "reviews for a game by appid. Review text over 600 characters is truncated. An unknown " +
+        "appid comes back as summary 'No user reviews' with zero counts rather than an error — " +
+        "Steam answers success for any id — so that result means either no such appid or a game " +
+        "nobody has reviewed yet; confirm the appid with get_game if that distinction matters. " +
+        "For long-term trend instead of a snapshot, use get_review_histogram. Get the appid from " +
+        "search_games. No API key required.",
       inputSchema: z.strictObject({
         appid,
         limit: z
@@ -144,9 +153,12 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
       description:
         "Get how a game's reviews trend over time by appid: a long-term history (rollup_type " +
         "reports each entry's granularity, e.g. 'week' or 'month', chosen server-side by Steam; " +
-        "capped at the most recent 24 entries) and the recent per-day breakdown (capped at the most " +
-        "recent 30 days), each with positive/negative counts and positive %. Good " +
-        "for 'are reviews improving / did an update hurt reception'. For a current summary and " +
+        `capped at the most recent ${HISTOGRAM_HISTORY_MAX} entries) and the recent per-day breakdown (capped at the most ` +
+        `recent ${HISTOGRAM_RECENT_MAX} days), each with positive/negative counts and positive %. Good ` +
+        "for 'are reviews improving / did an update hurt reception'. An unknown appid comes back " +
+        "as empty `history`/`recent` arrays rather than an error — Steam answers success for any " +
+        "id — so an empty result means either no such appid or a game nobody has reviewed yet; " +
+        "confirm the appid with get_game if that distinction matters. For a current summary and " +
         "example review text instead of a trend, use get_game_reviews. Get the appid from " +
         "search_games. No API key required.",
       inputSchema: z.strictObject({ appid }),
@@ -165,8 +177,14 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         `checking a whole list (e.g. a wishlist) for deals. Handles up to ${PRICES_MAX} appids; if you also ` +
         `need review %, hardware compatibility or tags, use get_items instead (max ${ITEMS_MAX} appids). Rows ` +
         "come back in the same order as the given appids, one per id (unavailable ones marked " +
-        "available:false, never dropped). Each row has the final/initial price and discount_percent " +
-        "(or is_free). No API key required. Get appids from search_games or get_wishlist.",
+        "available:false — no such appid, not sold in that `country`, or a transient upstream failure " +
+        "on the chunk it fell in, so retry before concluding a game is unavailable — never " +
+        "dropped). A " +
+        "priced row carries final/initial price and discount_percent. A row marked priced:false " +
+        "has no price block at all, which is how BOTH free-to-play and not-yet-released titles " +
+        "come back: this endpoint cannot tell them apart, so never report priced:false as 'free' " +
+        "— pass those appids to get_items, whose is_free/coming_soon do separate them. " +
+        "No API key required. Get appids from search_games or get_wishlist.",
       inputSchema: z.strictObject({
         appids: z
           .array(z.int().positive())

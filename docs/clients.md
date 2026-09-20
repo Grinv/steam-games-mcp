@@ -3,7 +3,7 @@
 This is a standard stdio MCP server. Store/search tools need no credentials;
 player tools need a free Steam Web API key (<https://steamcommunity.com/dev/apikey>).
 
-Run via `npx -y steam-games-mcp` (once installed from npm) or from a built clone with
+Run via `npx -y steam-games-mcp` (no install needed) or from a built clone with
 `node /ABS/PATH/steam-games-mcp/dist/index.js` after `npm ci && npm run build`.
 
 ## Claude Desktop / Claude Code

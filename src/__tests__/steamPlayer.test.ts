@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { setupServer, jsonResponse, htmlResponse, assertToolError, textOf } from "./helpers.js";
 import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.js";
 import { FRIENDS_CHECKED_MAX, FRIENDS_MAX } from "../format/web.js";
+import { OWNED_GAMES_LIMIT_MAX } from "../tools/webPlayer.js";
 
 // Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant
@@ -23,6 +24,36 @@ test("player tools error clearly without STEAM_API_KEY", async (t) => {
     arguments: { steamid: "76561197960287930" },
   });
   assertToolError(res, /STEAM_API_KEY/);
+});
+
+test("the key-gate message only promises a public profile where one is needed", async (t) => {
+  // Regression: one blanket message told every key-gated tool's caller to go
+  // make the target profile public. Four of them don't care —
+  // get_player_summary/get_player_bans read private profiles fine (which is why
+  // their found:false says "no such account" instead of offering a privacy
+  // hint), resolve_vanity_url resolves a name, and get_game_achievements takes
+  // an appid and no profile at all — so that advice sent the caller after a
+  // setting that would change nothing about the error they just got.
+  const { client } = await setupServer(t);
+  const sid = "76561197960287930";
+  for (const [name, args] of [
+    ["get_player_summary", { steamid: sid }],
+    ["get_player_bans", { steamid: sid }],
+    ["resolve_vanity_url", { vanity: "gabelogannewell" }],
+    ["get_game_achievements", { appid: 620 }],
+  ] as const) {
+    const res = await client.callTool({ name, arguments: args });
+    assertToolError(res, /STEAM_API_KEY/);
+    assert.doesNotMatch(textOf(res), /must also be public/, name);
+  }
+  for (const [name, args] of [
+    ["get_owned_games", { steamid: sid }],
+    ["get_friend_list", { steamid: sid }],
+    ["get_player_achievements", { steamid: sid, appid: 620 }],
+  ] as const) {
+    const res = await client.callTool({ name, arguments: args });
+    assert.match(textOf(res), /must also be public/, name);
+  }
 });
 
 describe("get_owned_games", () => {
@@ -158,6 +189,33 @@ describe("get_owned_games", () => {
       { appid: 620, owned: true, playtime_hours: 10 },
       { appid: 999, owned: false, playtime_hours: null },
     ]);
+  });
+
+  test(`get_owned_games rejects a limit past ${OWNED_GAMES_LIMIT_MAX} before calling the upstream`, async (t) => {
+    // The ceiling is a response-size budget, not an upstream one: measured live,
+    // an owned-games row is ~95 chars, so the previous 1000 produced a ~95 KB
+    // response — MCP clients reject that outright for exceeding their per-result
+    // token limit and the caller gets nothing at all. Asserted against the
+    // exported constant, and that nothing reached Steam, so a future raise has
+    // to come back through this comment.
+    const { client, mock } = await setupServer(t, ENV, router);
+    const tooBig = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "76561197960287930", limit: OWNED_GAMES_LIMIT_MAX + 1 },
+    });
+    assert.equal(tooBig.isError, true);
+    const zero = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "76561197960287930", limit: 0 },
+    });
+    assert.equal(zero.isError, true);
+    assert.equal(mock.calls.filter((c) => c.url.includes("GetOwnedGames")).length, 0);
+
+    const ok = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "76561197960287930", limit: OWNED_GAMES_LIMIT_MAX },
+    });
+    assert.notEqual(ok.isError, true);
   });
 });
 
@@ -1282,6 +1340,39 @@ describe("get_game_achievements", () => {
     assert.equal(s.game, null);
     assert.equal(s.total, 0);
     assert.deepEqual(s.achievements, []);
+  });
+
+  test("never caches that degraded empty result", async (t) => {
+    // Same fix as get_global_achievements': the degrade decision moved OUTSIDE
+    // wrapStaleOnError, because returning the empty schema from inside made
+    // TtlCache#dedupe set() it. Both calls 403ing at once is usually an
+    // appid-specific signal, but under load it can just be transient — and a
+    // cached "this game has no achievements" then outlives the blip by a full
+    // TTL. The real list on the retry proves the empty one was never stored.
+    let calls = 0;
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (!url.includes("GetSchemaForGame")) {
+        return url.includes("GetGlobalAchievementPercentagesForApp") && calls === 1
+          ? jsonResponse({}, { status: 403 })
+          : router(url);
+      }
+      calls++;
+      return calls === 1 ? jsonResponse({}, { status: 403 }) : router(url);
+    });
+    const degraded = await client.callTool({
+      name: "get_game_achievements",
+      arguments: { appid: 620 },
+    });
+    assert.equal((degraded.structuredContent as { total: number }).total, 0);
+
+    const retried = await client.callTool({
+      name: "get_game_achievements",
+      arguments: { appid: 620 },
+    });
+    assert.equal(retried.isError, undefined);
+    const s = retried.structuredContent as { total: number; achievements: { name: string }[] };
+    assert.equal(s.total, 2, "the retry must reach Steam, not a cached empty schema");
+    assert.equal(s.achievements[0]!.name, "Wake Up Call");
   });
 
   test("still surfaces a credentials-flavored error when only the schema call 403s and the keyless global-rarity call succeeds (genuinely ambiguous)", async (t) => {

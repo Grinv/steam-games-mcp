@@ -1,13 +1,21 @@
 // Key-required Steam Web API tools: profile, bans, library, achievements,
 // friends, vanity resolution. Each short-circuits with a clear "set
-// STEAM_API_KEY" message when the key is missing (the target profile must also
-// be public). Split out of a single tools/web.ts once it grew past ~550 lines —
-// see tools/webStore.ts for the keyless-capable half.
+// STEAM_API_KEY" message when the key is missing; the ones that ALSO need the
+// target profile opened up add a note saying so (see PUBLIC_PROFILE_NOTE — four
+// of these tools read a private profile perfectly well). Split out of a single
+// tools/web.ts once it grew past ~550 lines — see tools/webStore.ts for the
+// keyless-capable half.
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
-import { READ_ONLY, appid, language } from "./common.js";
-import { requireKey as makeRequireKey, otherSteamid, steamid, steamIdTool } from "./webShared.js";
+import { LANGUAGE_ISO_WARNING, READ_ONLY, appid, language } from "./common.js";
+import {
+  PUBLIC_PROFILE_NOTE,
+  requireKey as makeRequireKey,
+  otherSteamid,
+  steamid,
+  steamIdTool,
+} from "./webShared.js";
 import { notFoundReason, withNotFound } from "../format/shared.schemas.js";
 import { recommendedGamesFound } from "../format/store.schemas.js";
 import { FAVORITE_TAG_SAMPLE_SIZE, RECOMMENDATION_POOL_SIZE } from "../clients/storeService.js";
@@ -52,11 +60,26 @@ const resolveVanityUrlOutput = withNotFound(notFoundReason, vanityFound);
 // How many appids get_owned_games' check_appids accepts per call. Its own
 // input-side bound, unrelated to OWNED_GAMES_MAX (the output cap it exists to
 // work around) — named so the schema and the description can't disagree.
-const CHECK_APPIDS_MAX = 50;
+// Exported because tools/prompts.ts renders this number into what_should_i_play's
+// step 2, and a bare literal there can't be kept in sync with this schema.
+export const CHECK_APPIDS_MAX = 50;
+
+// Upper bound on the `limit` override. A payload budget, not an upstream limit:
+// an owned-games row measures ~95 chars, so 1000 produced a ~95 KB response —
+// nearly double the ~56 KB that already forced get_items'/get_prices' caps down
+// (tools/common.ts), and MCP clients reject those outright for exceeding their
+// per-result token limit, leaving the caller with nothing at all rather than a
+// trimmed list. 300 lands near the same ~28 KB budget those two settled on;
+// check_appids answers "do I own X" past the cap without paying for it.
+// Exported so the schema, the description and the bound's test read one number.
+export const OWNED_GAMES_LIMIT_MAX = 300;
 
 export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): void {
-  // Every tool below is gated on the key via requireKey (webShared.ts).
+  // Every tool below is gated on the key via requireKey (webShared.ts). Two
+  // variants: the tools whose target profile also has to be public get the extra
+  // note, the four that read fine regardless (see PUBLIC_PROFILE_NOTE) don't.
   const requireKey = makeRequireKey(web);
+  const requireKeyAndPublicProfile = makeRequireKey(web, PUBLIC_PROFILE_NOTE);
 
   server.registerTool(
     "get_game_achievements",
@@ -76,7 +99,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       inputSchema: z.strictObject({
         appid,
         language: language.describe(
-          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE.",
+          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE. " +
+            LANGUAGE_ISO_WARNING,
         ),
       }),
       outputSchema: getGameAchievementsOutput,
@@ -119,14 +143,15 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "long they've been friends, most-recently-added first (capped at the " +
         `${FRIENDS_MAX} most-recently-added; check \`returned\` vs \`total\`). Requires STEAM_API_KEY ` +
         "and the friends list to be " +
-        "public — otherwise it returns found:false. For 'which of my friends own game X', use " +
+        "public — otherwise it returns found:false, which also covers a SteamID64 with no account " +
+        "behind it; read `reason`. For 'which of my friends own game X', use " +
         "find_friends_who_own instead — it checks each friend's full library, not just this list. " +
         "Get the SteamID64 from resolve_vanity_url.",
       inputSchema: z.strictObject({ steamid }),
       outputSchema: getFriendListOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid) => web.getFriendList(sid)),
+    steamIdTool(web, requireKeyAndPublicProfile, (sid) => web.getFriendList(sid)),
   );
 
   server.registerTool(
@@ -136,32 +161,41 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       description:
         "Check which of a player's Steam friends own one or more games by appid, with each owner's " +
         "playtime_hours — 'which of my friends have Portal 2 and how long have they played'. Checks " +
-        `each friend's FULL library, unlike get_owned_games which caps its own list at the top ${OWNED_GAMES_MAX} ` +
-        "games by playtime — so a friend's rarely-played or unplayed copy is never missed (its " +
+        `each friend's FULL library, unlike get_owned_games whose own list stops at ${OWNED_GAMES_MAX} games by ` +
+        "playtime by default — so a friend's rarely-played or unplayed copy is never missed (its " +
         "playtime_hours may still be low or 0). For the PLAYER'S OWN ownership instead of a friend's, use " +
         "get_owned_games's check_appids. Requires STEAM_API_KEY and the player's OWN friends list " +
-        "to be public — otherwise the whole call returns found:false. A friend's individually private " +
+        "to be public — otherwise the whole call returns found:false, which also covers a " +
+        "SteamID64 with no account behind it; read `reason`. A friend's individually private " +
         "library is a different, per-friend case: that friend is listed in private_friends (can't be " +
         "checked) rather than silently counted as a non-owner. Likewise, a friend whose own library " +
         "lookup failed (e.g. rate-limited) lands in unavailable_friends with a reason instead of " +
         "failing the whole call — every other friend's result still comes through. Each of owners, " +
         `private_friends and unavailable_friends is capped at ${FRIENDS_WHO_OWN_MAX} entries (a sibling _total field ` +
-        `appears only when it was actually truncated). On a big account only the first ${FRIENDS_CHECKED_MAX} friends ` +
-        "are looked up at all (one Steam call per friend would otherwise run past an MCP client's " +
-        "request timeout) — compare `friends_checked` against `total_friends`, and treat a friend " +
+        `appears only when it was actually truncated). On a big account only ${FRIENDS_CHECKED_MAX} friends are ` +
+        "looked up at all (one Steam call per friend would otherwise run past an MCP client's " +
+        "request timeout), and they are the most-recently-added ones — the same ordering and the " +
+        "same prefix get_friend_list shows, so 'the friends checked' is a set you can actually " +
+        "name — compare `friends_checked` against `total_friends`, and treat a friend " +
         "missing from all three lists as unchecked, not as a non-owner. Get appids from search_games.",
       inputSchema: z.strictObject({
         appids: z
           .array(z.int().positive())
           .nonempty()
           .max(10)
-          .describe("Steam appids to check (1-10)."),
+          .describe(
+            "Steam appids to check (1-10). An appid that doesn't exist is not an error — it comes " +
+              "back with an empty `owners` list, indistinguishable from 'no friend owns it'. " +
+              "Confirm it with get_game first if that matters.",
+          ),
         steamid,
       }),
       outputSchema: findFriendsWhoOwnOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { appids }) => web.findFriendsWhoOwn(sid, appids)),
+    steamIdTool(web, requireKeyAndPublicProfile, (sid, { appids }) =>
+      web.findFriendsWhoOwn(sid, appids),
+    ),
   );
 
   server.registerTool(
@@ -171,10 +205,12 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       description:
         "Find games two players both own, with each one's playtime — 'what can my friend and I both " +
         "play', 'do we have anything in common'. Checks each player's FULL library to find every " +
-        `shared game, unlike get_owned_games which caps its own list at the top ${OWNED_GAMES_MAX} by playtime — but ` +
+        `shared game, unlike get_owned_games whose own list stops at ${OWNED_GAMES_MAX} by playtime by default — but ` +
         `the returned list here is itself capped at the top ${COMPARE_SHARED_MAX} shared games by combined playtime ` +
         "(check `returned` vs `shared_count`). Requires STEAM_API_KEY and both " +
-        "profiles' game-details to be public — otherwise it returns found:false. Omit steamid to " +
+        "profiles' game-details to be public — otherwise it returns found:false, which ALSO " +
+        "covers one player's library lookup failing transiently; read `reason`, which says which " +
+        "case it is and whether retrying is worth it. Omit steamid to " +
         "compare against yourself (STEAM_ID).",
       inputSchema: z.strictObject({
         steamid,
@@ -183,7 +219,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: comparePlayersOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { other_steamid }) =>
+    steamIdTool(web, requireKeyAndPublicProfile, (sid, { other_steamid }) =>
       web.comparePlayers(sid, other_steamid),
     ),
   );
@@ -194,7 +230,10 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       title: "Get player profile",
       description:
         "Get a player's profile by SteamID64: display name, online state, country, account age, " +
-        "Steam level, and the game they're currently in. Requires STEAM_API_KEY, but works even for " +
+        "Steam level (a separate lookup that degrades to null on failure, independently of " +
+        "profile privacy), and the game they're currently in. found:false here means exactly one " +
+        "thing — no account with that SteamID64 — since this tool reads private profiles fine. " +
+        "Requires STEAM_API_KEY, but works even for " +
         "a private profile (visibility reports 'private') — country, account age and the current " +
         "game only populate when the profile is public. For VAC/game/trade ban status instead, use " +
         "get_player_bans.",
@@ -212,7 +251,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       description:
         "Check a player's VAC, game, community and economy (trade) ban status by SteamID64 — 'is this " +
         "player banned', useful before trading or adding a friend. Ban status is always public — this " +
-        "works even when the rest of the profile is private. Requires STEAM_API_KEY.",
+        "works even when the rest of the profile is private. `days_since_last_ban` is null for a " +
+        "player who has never been banned — Steam sends 0 there, which would otherwise read as " +
+        "'banned today'. Requires STEAM_API_KEY.",
       inputSchema: z.strictObject({ steamid }),
       outputSchema: getPlayerBansOutput,
       annotations: READ_ONLY,
@@ -225,8 +266,11 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
     {
       title: "Get owned games",
       description:
-        "List the games a player owns with playtime (hours), most-played first (the `games` list is " +
-        `capped to the top ${OWNED_GAMES_MAX} by playtime — a lightly-played or unplayed game may not appear there). ` +
+        "List the games a player owns with playtime (hours), ordered by playtime — most-played " +
+        `first by default, least-played first with sort='playtime_asc' (the \`games\` list is capped to ${OWNED_GAMES_MAX} ` +
+        "entries by default, so the far end of that ordering may not appear there; raise `limit` to " +
+        "widen the cap, or flip `sort` to keep the never-played end instead, which is what a 'what " +
+        "have I never got round to playing' question needs). " +
         "To reliably check whether the player owns one or more SPECIFIC appids regardless of that " +
         "cap — 'do I own game X' — pass check_appids; the `owns` field then checks the FULL, uncapped " +
         "library, with each result's own playtime_hours (null if not owned). For the last two weeks " +
@@ -240,18 +284,42 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
           .nonempty()
           .max(CHECK_APPIDS_MAX)
           .describe(
-            `Steam appids to check ownership of (1-${CHECK_APPIDS_MAX}), regardless of the top-${OWNED_GAMES_MAX}-by-playtime cap ` +
-              "on `games`. Adds an `owns` field: [{appid, owned, playtime_hours}]. One upstream " +
+            `Steam appids to check ownership of (1-${CHECK_APPIDS_MAX}), regardless of the ${OWNED_GAMES_MAX}-entry cap ` +
+              "on `games` (or of whichever end `sort` keeps). Prefer this over raising `limit`: it " +
+              "reads the FULL library, and its own cost is bounded by this list's length. Adds an `owns` field: " +
+              "[{appid, owned, playtime_hours}]. One upstream " +
               "gap to know about: Steam omits free-to-play titles the player owns but has NEVER " +
-              "launched, so those report owned:false. A private profile reports no `owns` at all " +
+              "launched, so those report owned:false — as does an appid that doesn't exist, so " +
+              "this field can't tell 'no such game' from 'doesn't own it'. A private profile " +
+              "reports no `owns` at all " +
               "(ownership unknown) rather than a false owned:false.",
+          )
+          .optional(),
+        limit: z
+          .int()
+          .positive()
+          .max(OWNED_GAMES_LIMIT_MAX)
+          .describe(
+            `How many games to return (1-${OWNED_GAMES_LIMIT_MAX}, default ${OWNED_GAMES_MAX}). ` +
+              "Raise it only when a wider slice of the library is genuinely needed — the ceiling is " +
+              "a response-size budget, so even a 4000-game account never comes back whole. To check " +
+              "specific appids past the cap, use check_appids rather than a bigger limit.",
+          )
+          .optional(),
+        sort: z
+          .enum(["playtime_desc", "playtime_asc"])
+          .describe(
+            "Which end of the library the cap keeps: 'playtime_desc' (default) the most-played, " +
+              "'playtime_asc' the least-played and never-played first.",
           )
           .optional(),
       }),
       outputSchema: getOwnedGamesOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { check_appids }) => web.getOwnedGames(sid, check_appids)),
+    steamIdTool(web, requireKeyAndPublicProfile, (sid, { check_appids, limit, sort }) =>
+      web.getOwnedGames(sid, check_appids, { max: limit, sort }),
+    ),
   );
 
   server.registerTool(
@@ -262,14 +330,15 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "List the games a player has played in the last two weeks, with recent and total playtime, " +
         `most-played-in-those-two-weeks first (capped at ${RECENTLY_PLAYED_MAX}; check \`returned\` vs \`total\`) — ` +
         "the ordering is what decides which games the cap keeps, and it is playtime, not recency. " +
-        `For all-time top games by playtime instead (capped to the top ${OWNED_GAMES_MAX}), use get_owned_games. ` +
+        `For the all-time library by playtime instead (capped at ${OWNED_GAMES_MAX} entries by default, either end ` +
+        "of that ordering via `sort`), use get_owned_games. " +
         "Requires STEAM_API_KEY and a public profile with game-details visibility (same requirement " +
         "as get_owned_games) — otherwise it returns found:false.",
       inputSchema: z.strictObject({ steamid }),
       outputSchema: getRecentlyPlayedOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid) => web.getRecentlyPlayed(sid)),
+    steamIdTool(web, requireKeyAndPublicProfile, (sid) => web.getRecentlyPlayed(sid)),
   );
 
   server.registerTool(
@@ -289,7 +358,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "needs YOU to name the filters) — this infers taste from the player's WHOLE library instead, " +
         "for 'what should I play next' / 'recommend me something'. For 'something like THIS ONE " +
         "game' (a single named title), get its tags via get_items and call discover_games with them " +
-        "instead. Note: taste is weighted from only the player's " +
+        "instead. Recommends base games only — DLC, soundtracks and demos are never suggested, " +
+        "the same filter discover_games applies. Note: taste is weighted from only the player's " +
         `${FAVORITE_TAG_SAMPLE_SIZE} most-played owned games, and candidates come from a fixed ` +
         `${RECOMMENDATION_POOL_SIZE}-entry catalog scan, so a heavy exclude_tags/min_discount ` +
         "combination can return fewer than `limit` — there's no larger scan to fall back to. " +
@@ -326,7 +396,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       outputSchema: getRecommendedGamesOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { limit, exclude_tags, min_discount }) =>
+    steamIdTool(web, requireKeyAndPublicProfile, (sid, { limit, exclude_tags, min_discount }) =>
       web.getRecommendedGames(sid, {
         count: limit,
         excludeTags: exclude_tags,
@@ -348,18 +418,20 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "(names, descriptions, global rarity) independent of any player, use get_game_achievements " +
         "instead; for just the rarity without a key, use get_global_achievements. Requires " +
         "STEAM_API_KEY and a public profile with game-details visibility — otherwise it returns " +
-        "found:false (also returned if the game has no achievements at all).",
+        "found:false — which is also what an appid with no achievements, or no such appid at " +
+        "all, returns; the three are not reported separately, so confirm the appid with get_game. ",
       inputSchema: z.strictObject({
         steamid,
         appid,
         language: language.describe(
-          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE.",
+          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE. " +
+            LANGUAGE_ISO_WARNING,
         ),
       }),
       outputSchema: getPlayerAchievementsOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid, { appid: app, language }) =>
+    steamIdTool(web, requireKeyAndPublicProfile, (sid, { appid: app, language }) =>
       web.getPlayerAchievements(sid, app, language),
     ),
   );

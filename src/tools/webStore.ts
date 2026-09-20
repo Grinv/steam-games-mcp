@@ -9,6 +9,8 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
 import type { StoreServiceClient } from "../clients/storeService.js";
 import {
+  COUNTRY_UNKNOWN_WARNING,
+  LANGUAGE_ISO_WARNING,
   ITEMS_MAX,
   PRICES_MAX,
   READ_ONLY,
@@ -47,19 +49,6 @@ import { getGlobalAchievementsOutput } from "../format/webAchievements.schemas.j
 // layer that knows about both paths.
 const getWishlistOutput = withNotFound(wishlistNotFound, wishlistLightFound, wishlistDetailedFound);
 
-// A YYYY-MM-DD regex only checks the SHAPE of a date, and both ways it can be
-// well-formed nonsense produced a wrong answer rather than an error:
-// Date.parse("2026-13-45") is NaN, and every `< NaN` comparison is false, so the
-// cutoff in format/storeCard.ts matched EVERYTHING while `releasedOnly` was
-// still sent upstream (NaN !== undefined) — the response looked filtered;
-// Date.parse("2026-02-31") silently rolls over to 2026-03-03, quietly moving the
-// cutoff. Requiring the date to round-trip rejects both. zod runs a .refine()
-// even after an earlier check failed, so this must never throw on garbage.
-function isRealCalendarDate(v: string): boolean {
-  const t = Date.parse(v);
-  return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === v;
-}
-
 export function registerStoreWebTools(
   server: McpServer,
   web: SteamWebClient,
@@ -71,6 +60,8 @@ export function registerStoreWebTools(
       title: "Get game news",
       description:
         "Get recent news / patch notes for a game by appid (title, date, author, excerpt, link). " +
+        "Each excerpt is the first ~400 characters of the post with HTML stripped — follow `url` " +
+        "for the full text. " +
         "An unknown/unassigned appid comes back as an empty list rather than an error, the same as " +
         "get_global_achievements. Get the appid from search_games. No API key required.",
       inputSchema: z.strictObject({
@@ -117,8 +108,8 @@ export function registerStoreWebTools(
         "release date for a LIST of games by appid in ONE keyless call. The efficient way to price-, " +
         "rating-, tag- and compat-check a wishlist or library without a request per game. For a bigger " +
         `batch (up to ${PRICES_MAX} appids) when you only need price, use get_prices instead. An unknown/invalid ` +
-        "appid comes back as its own row marked available:false (never dropped from the list), same " +
-        "as get_prices. Each item " +
+        "appid comes back as its own row marked available:false — rows stay in the order you passed " +
+        "them, one per id, never dropped, same as get_prices. Each item " +
         "carries four compatibility fields, each verified/playable/unsupported/unknown: steam_deck " +
         "(Steam Deck), steam_os (SteamOS in general), steam_machine (the Steam Machine console " +
         "specifically), and steam_frame (Steam Frame VR headset); a `vr_support` flag " +
@@ -147,7 +138,7 @@ export function registerStoreWebTools(
   server.registerTool(
     "discover_games",
     {
-      title: "Discover games (deals, new releases, Steam Deck, rating)",
+      title: "Discover games",
       description:
         "Find games across the whole Steam catalog (keyless), filtered by ANY combination of: " +
         "discount (min_discount — for 'what's on sale'), release recency (released_after / " +
@@ -161,6 +152,8 @@ export function registerStoreWebTools(
         "reviews' → set min_discount + min_review; 'recent well-reviewed games that run on Steam Deck' " +
         "→ set released_within_days + steam_deck + min_review; 'roguelike deckbuilders on sale' → " +
         "tags:['Roguelike','Deckbuilding'] + min_discount. " +
+        "Base games only: DLC, soundtracks, demos and tools are filtered out, so a 'find DLC on " +
+        "sale' question returns nothing here — price a known DLC appid with get_items instead. " +
         "No appids needed — unlike get_items, which prices a list you already have. For 'games like " +
         "X' from a SINGLE named title, get its tags via get_items and pass them here; for taste " +
         "inferred from the player's WHOLE library instead, use get_recommended_games (key-gated). " +
@@ -173,16 +166,37 @@ export function registerStoreWebTools(
         "back per call, best discount first: compare `returned` against `matched` to see whether the " +
         "list was capped, and narrow the filters or page with `start` for the rest.",
       inputSchema: z.strictObject({
-        released_after: z
-          .string()
-          .regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date, e.g. 2026-03-01.")
-          .refine(isRealCalendarDate, "Not a real calendar date, e.g. 2026-03-01.")
+        // z.iso.date(), not a ^\d{4}-\d{2}-\d{2}$ regex: a shape-only check lets
+        // well-formed nonsense through, and both ways it produced a wrong answer
+        // rather than an error. Date.parse("2026-13-45") is NaN, and every
+        // `< NaN` comparison is false, so the cutoff in format/storeCard.ts
+        // matched EVERYTHING while `releasedOnly` was still sent upstream
+        // (NaN !== undefined) — the response looked filtered; "2026-02-31"
+        // silently rolled over to 2026-03-03, quietly moving the cutoff.
+        // z.iso.date()'s own pattern encodes per-month day counts and leap
+        // years, so it rejects both. It validates a STRING and returns one
+        // (unlike z.date(), which AGENTS.md bans from tool schemas), so the
+        // Date.parse below is unaffected. The error callback keeps the message
+        // scoped to the format check — a non-string still gets zod's precise
+        // "expected string, received number" instead of this sentence.
+        released_after: z.iso
+          .date({
+            error: (issue) =>
+              issue.code === "invalid_type"
+                ? undefined
+                : "Use a real ISO calendar date, e.g. 2026-03-01.",
+          })
           .describe("Keep only games released on/after this date (YYYY-MM-DD).")
           .optional(),
         released_within_days: z
           .int()
           .positive()
-          .describe("Alternative to released_after: released within the last N days.")
+          .describe(
+            "Alternative to released_after: released within the last N days, as a rolling window " +
+              "from now. The two are alternatives, not a combination — pass both and " +
+              "released_after wins and this is ignored, so pick whichever one the question " +
+              "actually asks for.",
+          )
           .optional(),
         steam_deck: steamDeck,
         steam_os: steamOs,
@@ -203,12 +217,19 @@ export function registerStoreWebTools(
           .int()
           .nonnegative()
           .max(100)
-          .describe("Minimum positive-review %, e.g. 85. Applied over the returned page.")
+          .describe(
+            "Minimum positive-review %, e.g. 85. Like every filter here except min_discount, it is " +
+              "applied over the scanned `count` window, not server-side — raise `count` if a strict " +
+              "value returns too few.",
+          )
           .optional(),
         min_reviews: z
           .int()
           .nonnegative()
-          .describe("Minimum review count (filters out games with too few reviews).")
+          .describe(
+            "Minimum review count, e.g. 500 — filters out games too obscure to trust a % on. Applied " +
+              "over the scanned `count` window, like min_review.",
+          )
           .optional(),
         min_discount: z
           .int()
@@ -300,8 +321,11 @@ export function registerStoreWebTools(
         "List the games a player 'follows' on the Steam store, by SteamID64 — a lighter opt-in " +
         "(get sale/update notifications) that's separate from the wishlist; many players follow more " +
         "games than they wishlist. No API key required, but the follows/profile must be public — " +
-        "otherwise it returns found:false. Returns appids + store_url only (no price/name), " +
-        `capped at the first ${FOLLOWED_MAX} (check \`returned\` vs \`total\`); pass the appids to get_items for ` +
+        "otherwise it returns found:false, which is ALSO what a public account following nothing " +
+        "returns; read `reason` to tell those apart. Returns appids + store_url only (no price/name), " +
+        `capped at ${FOLLOWED_MAX} in whatever order Steam sends them — unlike every other capped list ` +
+        "here there is no ranking, so a game past the cut is not 'less followed' (check " +
+        "`returned` vs `total`); pass the appids to get_items for " +
         "price, review % and compat. Convert a vanity name with resolve_vanity_url " +
         "first (that conversion itself needs STEAM_API_KEY, even though this tool doesn't).",
       inputSchema: z.strictObject({ steamid }),
@@ -317,7 +341,8 @@ export function registerStoreWebTools(
       title: "Get a player's wishlist",
       description:
         "List a player's Steam wishlist by SteamID64. No API key required, but the wishlist/profile " +
-        "must be public — otherwise it returns found:false. By default returns a light list of appids " +
+        "must be public — otherwise it returns found:false, which is ALSO what an empty but public " +
+        "wishlist returns; read `reason` to tell those apart. By default returns a light list of appids " +
         `(sorted by priority, no names), capped at the first ${WISHLIST_LIGHT_MAX} (check \`returned\` vs \`total\`). ` +
         "Set include_details for full store cards in ONE call (name, price/discount, review %, " +
         "Deck/SteamOS/Machine/Frame compat, vr_support, tags, release) — no need to follow up with " +
@@ -381,10 +406,10 @@ export function registerStoreWebTools(
         steam_machine: steamMachine,
         steam_frame: steamFrame,
         country: country.describe(
-          "Country (cc) for prices; overrides STEAM_COUNTRY. Implies include_details.",
+          `Country (cc) for prices; overrides STEAM_COUNTRY. Implies include_details. ${COUNTRY_UNKNOWN_WARNING}`,
         ),
         language: language.describe(
-          "Store language; overrides STEAM_LANGUAGE. Implies include_details.",
+          `Store language; overrides STEAM_LANGUAGE. Implies include_details. ${LANGUAGE_ISO_WARNING}`,
         ),
       }),
       outputSchema: getWishlistOutput,

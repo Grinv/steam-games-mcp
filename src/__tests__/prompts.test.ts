@@ -162,6 +162,27 @@ describe("prompts", () => {
     assert.match((res.messages[0]!.content as { text: string }).text, /priced above \$20/);
   });
 
+  test("what_should_i_play rejects a budget that isn't an amount", async (t) => {
+    // Regression: budget was a bare z.string(), so "cheap" interpolated straight
+    // into "drop anything priced above cheap" — an instruction the agent can't
+    // act on, phrased as though the server meant it. Rejecting at the schema is
+    // also what keeps free text out of the rendered message entirely.
+    const { client, close } = await connectServer(ENV);
+    t.after(close);
+    for (const budget of ["cheap", "not much", "20 dollars please", ""]) {
+      await assert.rejects(
+        () => client.getPrompt({ name: "what_should_i_play", arguments: { budget } }),
+        /budget/,
+        budget,
+      );
+    }
+    // Amounts, with or without a currency marker on either side, still render.
+    for (const budget of ["20", "19.99", "$20", "1500 RUB", "15€"]) {
+      const res = await client.getPrompt({ name: "what_should_i_play", arguments: { budget } });
+      assert.match((res.messages[0]!.content as { text: string }).text, /priced above/, budget);
+    }
+  });
+
   test("what_should_i_play validates steamid with the shared SteamID64 schema", async (t) => {
     // The prompt used to take a bare z.string(), so a vanity name or a 3-digit
     // number rendered into an instruction every tool would then reject.

@@ -8,8 +8,10 @@ deserves its own client.
 
 The storefront gives credential-free game data to everyone; the Web API adds
 personal/player data when a key is set. A player tool short-circuits with a
-clear "set STEAM_API_KEY" message when the key is missing (the target profile
-must also be public). Keeping both in one server lets, e.g., a library lookup
+clear "set STEAM_API_KEY" message when the key is missing; the ones that read
+profile-owned data add that the target profile must be public too, while
+profile/ban lookups, vanity resolution and the game-achievement schema do not
+(see `PUBLIC_PROFILE_NOTE` in tools/webShared.ts). Keeping both in one server lets, e.g., a library lookup
 and store details compose without the agent threading ids between servers.
 
 ## Keyless caveat

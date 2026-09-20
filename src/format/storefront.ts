@@ -213,7 +213,17 @@ export type PriceDetailsResponse = Record<
 >;
 
 // Shape a merged batch response into one row per requested appid, preserving
-// order. Missing/free entries come back with is_free:true and no numbers.
+// order.
+//
+// A success:true entry with no price_overview reports priced:false, NOT
+// is_free:true. Confirmed live against appdetails?filters=price_overview: both
+// a genuinely free game (570, Dota 2) and an unreleased paid one (a
+// coming_soon title) answer with the identical `"data": []`, so freeness is not
+// something this endpoint's response can establish — claiming it made
+// get_prices answer "free" for unreleased paid titles, contradicting get_items
+// on the same appid in the same second. This is the same trap 0.13.0 fixed for
+// get_featured's "0.00 USD"; featuredItemSchema's final_price documents it too.
+// get_items reads IStoreBrowseService, which carries a real is_free flag.
 export function summarizePrices(
   merged: PriceDetailsResponse,
   appids: number[],
@@ -223,7 +233,7 @@ export function summarizePrices(
     const data = entry?.data;
     const po = data && !Array.isArray(data) ? data.price_overview : undefined;
     if (!entry?.success) return { appid: id, available: false as const };
-    if (!po) return { appid: id, available: true as const, is_free: true as const };
+    if (!po) return { appid: id, available: true as const, priced: false as const };
     return { appid: id, available: true as const, is_free: false as const, ...formattedPrice(po) };
   });
   return getPricesOutput.parse({ count: prices.length, prices });
@@ -370,14 +380,20 @@ function rollup(x: Rollup): z.infer<typeof rollupSchema> {
 }
 
 // `rollups` is the long-term trend (monthly here); `recent` is per-day for the
-// last ~30 days. Cap both so the response stays bounded.
+// last ~30 days. Cap both so the response stays bounded — most recent kept,
+// since a trend question is about the near end. Exported like every other cap
+// in this codebase so get_review_histogram's description can't state a number
+// the shaper has since moved away from; these two were the last bare literals.
+export const HISTOGRAM_HISTORY_MAX = 24;
+export const HISTOGRAM_RECENT_MAX = 30;
+
 export function summarizeReviewHistogram(
   r: ReviewHistogramResponse,
 ): z.infer<typeof getReviewHistogramOutput> {
   const res = r.results ?? {};
   return getReviewHistogramOutput.parse({
     rollup_type: res.rollup_type ?? null,
-    history: (res.rollups ?? []).slice(-24).map(rollup),
-    recent: (res.recent ?? []).slice(-30).map(rollup),
+    history: (res.rollups ?? []).slice(-HISTOGRAM_HISTORY_MAX).map(rollup),
+    recent: (res.recent ?? []).slice(-HISTOGRAM_RECENT_MAX).map(rollup),
   });
 }

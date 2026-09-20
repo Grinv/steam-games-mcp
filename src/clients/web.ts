@@ -31,6 +31,7 @@ import {
   summarizeWishlist,
   RESULT_OK,
   type CurrentPlayersResponse,
+  type OwnedGamesSort,
   type FollowedGamesCountResponse,
   type FollowedGamesResponse,
   type FriendListResponse,
@@ -67,9 +68,23 @@ const TRANSIENT_CODES: readonly ApiErrorCode[] = [
   "rate_limited",
 ];
 
+// GetFriendList answers the same way for a private list and for a SteamID64
+// with no account behind it at all (#FRIENDLIST_NOT_FOUND_CODES below folds
+// not_found in deliberately). Naming only the privacy case told the caller to
+// go change a setting on an account that doesn't exist — confirmed live on
+// 76561197960265728, which get_player_summary correctly reports as no such
+// account. Both causes, like every sibling that can fail two ways.
 const PRIVATE_FRIENDS_REASON =
-  "Profile or friends list is private. Ask the owner to set Steam → Privacy → " +
+  "Friends list is private, or there is no Steam account with that SteamID64. Check the id " +
+  "(resolve a vanity name with resolve_vanity_url), or ask the owner to set Steam → Privacy → " +
   "Friends List = Public.";
+
+// Internal signal, never surfaced: getGameAchievements' cache callback throws
+// this when the failure is confirmed appid-specific, so the caller can degrade
+// to an empty schema OUTSIDE wrapStaleOnError. Throwing (rather than returning
+// the empty result from inside) is what keeps that fallback out of the cache,
+// and leaves a good-but-stale entry free to win instead.
+class NoAchievementSchema extends Error {}
 
 function friendIdsOf(r: FriendListResponse): string[] {
   return (r.friendslist?.friends ?? [])
@@ -228,12 +243,16 @@ export class SteamWebClient {
     );
   }
 
-  async getOwnedGames(steamid: string, checkAppids?: number[]): Promise<Record<string, unknown>> {
+  async getOwnedGames(
+    steamid: string,
+    checkAppids?: number[],
+    opts: { max?: number; sort?: OwnedGamesSort } = {},
+  ): Promise<Record<string, unknown>> {
     const res = await this.#ownedGamesRaw(steamid, {
       include_appinfo: true,
       include_played_free_games: true,
     });
-    return summarizeOwnedGames(res, { checkAppids });
+    return summarizeOwnedGames(res, { checkAppids, ...opts });
   }
 
   async getRecentlyPlayed(steamid: string): Promise<Record<string, unknown>> {
@@ -546,30 +565,38 @@ export class SteamWebClient {
     }
   }
 
+  // The degrade-to-empty catch sits OUTSIDE wrapStaleOnError, the same shape
+  // #steamLevel uses. Inside, it defeated the cache twice over: the callback
+  // RETURNS the empty result, so TtlCache#dedupe set()s it — serving the wrong
+  // answer for the whole TTL, and overwriting a good entry that had gone stale
+  // with the very fallback wrapStaleOnError exists to avoid. Outside, a stale
+  // list still wins (wrapStaleOnError sees the throw), and the degraded answer
+  // is returned to this one caller without ever reaching the cache.
   async getGlobalAchievements(appid: number): Promise<Record<string, unknown>> {
-    return this.#cache.wrapStaleOnError(`global-ach:${appid}`, async () => {
-      try {
-        const res = await this.#get<GlobalAchievementsResponse>(
-          "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
-          { gameid: appid },
-          { hasCredentials: false },
-        );
-        return summarizeGlobalAchievements(res);
-      } catch (e) {
-        // This endpoint is keyless by design (docs/architecture.md's "Keyless
-        // caveat"), so a 403/400/404 here can never genuinely be a credentials
-        // problem even though a key happens to be attached when configured —
-        // verified live: Steam answers this way for an appid with no
-        // achievement schema (e.g. a DLC/soundtrack), not for an invalid key.
-        if (
-          e instanceof ApiError &&
-          (e.code === "forbidden" || e.code === "bad_request" || e.code === "not_found")
-        ) {
-          return summarizeGlobalAchievements({});
-        }
-        throw e;
+    try {
+      return await this.#cache.wrapStaleOnError(`global-ach:${appid}`, async () =>
+        summarizeGlobalAchievements(
+          await this.#get<GlobalAchievementsResponse>(
+            "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
+            { gameid: appid },
+            { hasCredentials: false },
+          ),
+        ),
+      );
+    } catch (e) {
+      // This endpoint is keyless by design (docs/architecture.md's "Keyless
+      // caveat"), so a 403/400/404 here can never genuinely be a credentials
+      // problem even though a key happens to be attached when configured —
+      // verified live: Steam answers this way for an appid with no
+      // achievement schema (e.g. a DLC/soundtrack), not for an invalid key.
+      if (
+        e instanceof ApiError &&
+        (e.code === "forbidden" || e.code === "bad_request" || e.code === "not_found")
+      ) {
+        return summarizeGlobalAchievements({});
       }
-    });
+      throw e;
+    }
   }
 
   // Current concurrent player count for a game. Not cached — it's a live number.
@@ -689,45 +716,56 @@ export class SteamWebClient {
 
   // Full achievement list for a game (GetSchemaForGame needs a key), merged with
   // the keyless global unlock % so each achievement carries its rarity. Cached.
+  //
+  // Like getGlobalAchievements, the degrade-to-empty decision is made OUTSIDE
+  // wrapStaleOnError so the empty result is never cached over a good (possibly
+  // stale) schema. The signal rides on the rejection itself rather than a
+  // closure flag: TtlCache#dedupe shares one in-flight promise across concurrent
+  // callers, so only the first would ever run the callback that set such a flag.
   async getGameAchievements(appid: number, language?: string): Promise<Record<string, unknown>> {
     const l = language ?? this.#l;
-    return this.#cache.wrapStaleOnError(`schema:${appid}:${l}`, async () => {
-      const [schemaResult, globalResult] = await Promise.allSettled([
-        this.#get<GameSchemaResponse>("ISteamUserStats/GetSchemaForGame/v2/", {
-          appid,
-          l,
-        }),
-        // hasCredentials:false like every other keyless-by-design call site
-        // (lib/http.ts fixes hasCredentials per client instance, not per
-        // request, so a 403 here would otherwise be blamed on the configured
-        // key). Currently only ever read as a boolean below, so this is
-        // pre-emptive — but the sibling call at getGlobalAchievements passes it,
-        // and this exact inconsistency has twice survived a fix elsewhere.
-        this.#get<GlobalAchievementsResponse>(
-          "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
-          { gameid: appid },
-          { hasCredentials: false },
-        ),
-      ]);
-      if (schemaResult.status === "fulfilled") {
-        const global = globalResult.status === "fulfilled" ? globalResult.value : {};
-        return summarizeGameSchema(schemaResult.value, global);
-      }
-      const err = schemaResult.reason as unknown;
-      // GetGlobalAchievementPercentagesForApp is keyless — if it ALSO rejects
-      // for this same appid, the block is appid-specific (no achievement
-      // schema, e.g. a DLC/soundtrack — verified live), not a credentials
-      // problem specific to the schema call. If the keyless call succeeded,
-      // the schema-only failure is genuinely ambiguous (could be a bad key),
-      // so it's left to throw and surface its own accurate message.
-      if (
-        err instanceof ApiError &&
-        (err.code === "forbidden" || err.code === "bad_request" || err.code === "not_found") &&
-        globalResult.status === "rejected"
-      ) {
-        return summarizeGameSchema({}, {});
-      }
-      throw err;
-    });
+    try {
+      return await this.#cache.wrapStaleOnError(`schema:${appid}:${l}`, async () => {
+        const [schemaResult, globalResult] = await Promise.allSettled([
+          this.#get<GameSchemaResponse>("ISteamUserStats/GetSchemaForGame/v2/", {
+            appid,
+            l,
+          }),
+          // hasCredentials:false like every other keyless-by-design call site
+          // (lib/http.ts fixes hasCredentials per client instance, not per
+          // request, so a 403 here would otherwise be blamed on the configured
+          // key). Currently only ever read as a boolean below, so this is
+          // pre-emptive — but the sibling call at getGlobalAchievements passes it,
+          // and this exact inconsistency has twice survived a fix elsewhere.
+          this.#get<GlobalAchievementsResponse>(
+            "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
+            { gameid: appid },
+            { hasCredentials: false },
+          ),
+        ]);
+        if (schemaResult.status === "fulfilled") {
+          const global = globalResult.status === "fulfilled" ? globalResult.value : {};
+          return summarizeGameSchema(schemaResult.value, global);
+        }
+        const err = schemaResult.reason as unknown;
+        // GetGlobalAchievementPercentagesForApp is keyless — if it ALSO rejects
+        // for this same appid, the block is appid-specific (no achievement
+        // schema, e.g. a DLC/soundtrack — verified live), not a credentials
+        // problem specific to the schema call. If the keyless call succeeded,
+        // the schema-only failure is genuinely ambiguous (could be a bad key),
+        // so it's left to throw and surface its own accurate message.
+        if (
+          err instanceof ApiError &&
+          (err.code === "forbidden" || err.code === "bad_request" || err.code === "not_found") &&
+          globalResult.status === "rejected"
+        ) {
+          throw new NoAchievementSchema();
+        }
+        throw err;
+      });
+    } catch (e) {
+      if (e instanceof NoAchievementSchema) return summarizeGameSchema({}, {});
+      throw e;
+    }
   }
 }

@@ -39,7 +39,18 @@ export const baseCardSchema = z.strictObject({
   steam_machine: compatBadgeSchema,
   steam_frame: compatBadgeSchema,
   vr_support: vrSupportSchema,
-  tags: z.array(z.string()),
+  // One describe here covers every card tool (get_items, discover_games,
+  // get_wishlist, get_recommended_games) — the asymmetry below is otherwise
+  // reported as a bug by any caller that checks a filtered result.
+  tags: z
+    .array(z.string())
+    .describe(
+      "The game's most-weighted user tags, most-relevant first — a display sample capped well " +
+        "below the full set, not the complete list. Tag FILTERS (discover_games' and " +
+        "get_wishlist's `tags`) match against the game's COMPLETE tag list, so a filtered result " +
+        "can legitimately not show the tag you filtered on in this array. Absence here is not " +
+        "evidence the game lacks that tag.",
+    ),
   release_date: z.string().nullable(),
 });
 

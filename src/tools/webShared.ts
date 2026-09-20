@@ -8,19 +8,34 @@ import { errorResult, type ToolResult } from "../lib/result.js";
 import { STEAMID64_RE } from "../format/shared.js";
 import { reply } from "./common.js";
 
+// Appended to the key-gate message, but only for the tools that ALSO need the
+// target profile's privacy opened up. Four key-gated tools don't:
+// get_player_summary and get_player_bans read private profiles fine (which is
+// exactly why their found:false says "no such account" rather than offering a
+// privacy hint), resolve_vanity_url resolves a name rather than reading a
+// profile, and get_game_achievements takes an appid and no profile at all.
+// Telling those four to go make a profile public sends the caller after a
+// setting that would change nothing about the error they just got.
+export const PUBLIC_PROFILE_NOTE =
+  " (Note: the target profile must also be public — this tool's description says which " +
+  "privacy setting.)";
+
 // Gates every key-required player tool on STEAM_API_KEY being set; one clear
 // message instead of a round-trip 403. Lives here (not as a private closure
 // inside webPlayer.ts) so "what happens when the key is missing" is
 // discoverable next to this file's other Web-API-specific building blocks —
 // `web` is duck-typed to just what's needed, so this stays client-agnostic.
+// `note` is kept a construction-time argument rather than a per-call one so the
+// returned wrapper still matches steamIdTool's `wrap` signature exactly.
 export const requireKey =
-  (web: { configured: boolean }) =>
+  (web: { configured: boolean }, note = "") =>
   (fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> => {
     if (!web.configured) {
       return Promise.resolve(
         errorResult(
           "This tool needs a Steam Web API key. Set STEAM_API_KEY to a free key from " +
-            "https://steamcommunity.com/dev/apikey. (Note: the target profile must also be public.)",
+            "https://steamcommunity.com/dev/apikey." +
+            note,
         ),
       );
     }

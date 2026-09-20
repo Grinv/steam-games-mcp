@@ -26,17 +26,46 @@ export const appid = z
   .describe("Steam application id (appid). Get it from search_games.");
 
 // Per-call overrides of the server defaults (STEAM_COUNTRY / STEAM_LANGUAGE).
+
+// Same shape of trap as LANGUAGE_ISO_WARNING below, and same reason for being a
+// constant: get_wishlist overrides `country`'s .describe() too, so prose here
+// would reach every tool but that one. Verified live: cc=XX and cc=ZZ both pass
+// the two-letter regex and come back with US prices.
+export const COUNTRY_UNKNOWN_WARNING =
+  "Must be a real Steam store region — the two-letter shape is all that's checked here, and " +
+  "Steam answers an unrecognized code with US prices rather than an error, so a typo returns " +
+  "plausible numbers for the wrong country.";
+
 export const country = z
   .string()
   .trim()
   .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code, e.g. US, RU, DE.")
-  .describe("Country (cc) for prices/currency; overrides STEAM_COUNTRY for this call.")
+  .describe(
+    `Country (cc) for prices/currency and regional availability; overrides STEAM_COUNTRY for ` +
+      `this call. ${COUNTRY_UNKNOWN_WARNING}`,
+  )
   .optional();
+// Steam takes a language NAME, and answers an unrecognized one without erroring,
+// so a wrong value is invisible in the result. All three behaviours below are
+// verified live. Kept as one exported string because three tools override
+// `language`'s own .describe() with their own wording (get_wishlist,
+// get_game_achievements, get_player_achievements) and would otherwise each have
+// to restate — or, as happened once, silently drop — the warning.
+export const LANGUAGE_ISO_WARNING =
+  "Use Steam's own language NAME — english, russian, schinese/tchinese — not an ISO code like " +
+  "en/ru/zh. An unrecognized value is never an error: text comes back in English and any `tags` " +
+  "list comes back EMPTY, which reads as 'this game has no tags' rather than as a bad language. " +
+  "(Filtering BY tags is the one loud case — it fails outright.)";
+
 export const language = z
   .string()
   .trim()
   .min(2)
-  .describe("Store language (e.g. english, russian); overrides STEAM_LANGUAGE for this call.")
+  .describe(
+    `Store language for the text fields. ${LANGUAGE_ISO_WARNING} Overrides STEAM_LANGUAGE for ` +
+      "this call. This is the content language only — prices and regional availability follow " +
+      "`country`.",
+  )
   .optional();
 
 // Native-platform filter shared by discover_games and get_wishlist: keeps only

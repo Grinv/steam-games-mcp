@@ -6,6 +6,8 @@ import { z } from "zod";
 import { completable, type McpServer } from "@modelcontextprotocol/server";
 import type { StorefrontClient } from "../clients/storefront.js";
 import { steamId64Base } from "./webShared.js";
+import { CHECK_APPIDS_MAX } from "./webPlayer.js";
+import { OWNED_GAMES_MAX } from "../format/web.js";
 
 // How many title matches to offer as completions — a client's prompt-argument
 // UI shows these live as the user types; keep it short and fast.
@@ -32,6 +34,13 @@ const oneLine = (v: string) => v.replace(/\s+/g, " ").trim();
 // nonsense "drop any result priced above free". A price ceiling and "only
 // free-to-play" are different instructions, so say which one this is.
 const FREE_BUDGET = /^(free|f2p|free[ -]to[ -]play|0)$/i;
+// An amount, with an optional currency symbol or 3-letter code on either side:
+// "20", "19.99", "$20", "1500 RUB", "15€". Anything else is rejected by the
+// schema rather than rendered — "cheap" used to interpolate straight into "drop
+// anything priced above cheap", an instruction the agent can't act on and that
+// reads as though the server meant it.
+const BUDGET_AMOUNT = /^\p{Sc}?\s*\d+(?:[.,]\d{1,2})?\s*(?:\p{Sc}|[A-Za-z]{3})?$/u;
+const isBudget = (v: string) => FREE_BUDGET.test(oneLine(v)) || BUDGET_AMOUNT.test(oneLine(v));
 const budgetRule = (budget: string) =>
   FREE_BUDGET.test(oneLine(budget))
     ? "keep only free-to-play titles"
@@ -77,7 +86,12 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
           budget: z
             .string()
             .trim()
-            .describe("Max price, e.g. '$20', or 'free' for free-to-play only. Omit for no limit.")
+            .refine(isBudget, "Use an amount like '20', '$19.99' or '1500 RUB', or 'free'.")
+            .describe(
+              "Max price as an amount, e.g. '20' or '$19.99' — a bare word like 'cheap' is " +
+                "rejected, since it can't be applied to a price. Or 'free' for free-to-play " +
+                "only. Omit for no limit.",
+            )
             .optional(),
           tags: z
             .string()
@@ -96,13 +110,14 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
           (tags
             ? `1. Call discover_games with tags: ${oneLine(tags)} and a good review score (min_review 80+). ` +
               `discover_games has no price filter${budget ? `, so apply mine over the results yourself: ${budgetRule(budget)}` : ""}.\n` +
-              // check_appids, not the plain `games` list: that list is capped at
-              // the top 50 by playtime, so on any real library it answers "not
-              // owned" for games the player owns — this prompt's own description
-              // promises to exclude what they already own.
-              `2. Call get_owned_games${steamid ? ` for steamid ${steamid}` : ""} with check_appids set to the appids from step 1 (up to 50 of them), ` +
+              // check_appids, not the plain `games` list: that list is capped by
+              // playtime, so on any real library it answers "not owned" for games
+              // the player owns — this prompt's own description promises to
+              // exclude what they already own. Both caps come from their own
+              // schemas (not literals) so this text can't drift out of sync.
+              `2. Call get_owned_games${steamid ? ` for steamid ${steamid}` : ""} with check_appids set to the appids from step 1 (up to ${CHECK_APPIDS_MAX} of them), ` +
               "and drop every appid whose `owns` entry says owned: true. Don't use the plain `games` list for this — " +
-              "it only holds the top 50 by playtime, so it can't tell you whether I own something outside that.\n"
+              `it only holds ${OWNED_GAMES_MAX} entries by playtime, so it can't tell you whether I own something outside that.\n`
             : `1. Call get_recommended_games${steamid ? ` for steamid ${steamid}` : ""} — it infers taste from my library's playtime-weighted tags and already excludes what I own.${budget ? ` Then ${budgetRule(budget)}.` : ""}\n`) +
           "Present 3-5 picks, each with price, review %, and a one-line reason it matches my taste.",
       ),

@@ -301,6 +301,39 @@ describe("summarizeOwnedGames", () => {
     assert.equal(s.found, false);
     assert.equal(s.owns, undefined);
   });
+
+  test("sort playtime_asc surfaces least-played first, so an unplayed game survives the cap", () => {
+    // The point of the option: with the default desc ordering the never-played
+    // tail is exactly what the cap discards, which is the half of the library
+    // a "what should I play next" question is about.
+    const games = [
+      { appid: 1, name: "Sunk", playtime_forever: 20000 },
+      { appid: 2, name: "Some", playtime_forever: 600 },
+      { appid: 3, name: "Untouched", playtime_forever: 0 },
+    ];
+    const s = summarizeOwnedGames(
+      { response: { game_count: games.length, games } },
+      { max: 2, sort: "playtime_asc" },
+    ) as { games: { appid: number }[] };
+    assert.deepEqual(
+      s.games.map((g) => g.appid),
+      [3, 2],
+    );
+  });
+
+  test("defaults to playtime_desc when sort is omitted", () => {
+    const games = [
+      { appid: 1, name: "Sunk", playtime_forever: 20000 },
+      { appid: 3, name: "Untouched", playtime_forever: 0 },
+    ];
+    const s = summarizeOwnedGames({ response: { game_count: games.length, games } }) as {
+      games: { appid: number }[];
+    };
+    assert.deepEqual(
+      s.games.map((g) => g.appid),
+      [1, 3],
+    );
+  });
 });
 
 describe("summarizeFriendsWhoOwn", () => {

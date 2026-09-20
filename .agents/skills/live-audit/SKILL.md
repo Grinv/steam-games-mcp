@@ -204,6 +204,15 @@ environment supports concurrent subagents/background tasks.
   stated 100 appids and `get_prices` at 500 each
   produced ~56 KB and were rejected outright for exceeding the client's
   per-result token limit, so the caller got nothing at all.
+  **A parameter that RAISES a cap is the same check, and it is the one that
+  gets skipped** — the cap constant is reviewed, its override's ceiling isn't.
+  `get_owned_games`' `limit` shipped accepting 1000 (~95 KB on a 4652-game
+  library, nearly double the threshold that had already forced two other caps
+  down) two releases after that lesson, with its own comment claiming the bound
+  existed so "a typo can't ask for an unbounded response". So: for every
+  `limit`/`count`/`max` in an input schema, call it AT its maximum against the
+  biggest real account and measure, and treat the number as a byte budget —
+  divide the target (~28 KB here) by one measured row, don't pick a round one.
 - **Documented vs. actual shape**: for anything that looks surprising live,
   grep the field back to its `.describe()` text in `src/tools/*.ts` and its
   `format/*.schemas.ts` — does the tool's own description/outputSchema
@@ -293,6 +302,40 @@ there) for:
   malformed-SteamID64 fix, 0.10.1's `get_current_players`/`get_game` fixes).
   Check every call site that takes a user-controlled id/appid for the same
   "does a 400/404/5xx get normalized, or does raw upstream body leak through."
+- **An inference drawn from an upstream payload that cannot actually carry it.**
+  Not "the code mishandles a field" but "the field isn't there and the code
+  guessed." Confirmed: `get_prices` reported `is_free: true` for any appid
+  `appdetails?filters=price_overview` answered without a price block — but that
+  endpoint sends an identical `"data": []` for a genuinely free game AND for an
+  unreleased paid one, so freeness was never knowable from it. The result was a
+  confident wrong answer (unreleased paid titles reported as free) that
+  contradicted `get_items`, called on the same appid in the same second.
+  For every boolean or category a summarizer DERIVES rather than copies, ask
+  what the raw payload looks like in the other case it could be — and check by
+  curling the upstream for both, not by reading the shaper. Two tells that this
+  bug class is present: a sibling tool built on a different endpoint disagrees,
+  and the test fixture's own comment asserts the guess (here, `// free game: no
+price_overview`), so the suite agrees with the bug instead of catching it.
+  Same family as 0.13.0's `get_featured` "0.00 USD" fix — which is exactly why
+  it needs the whole-codebase sweep §6 asks for, not a one-site patch.
+- **A degraded fallback RETURNED from inside a cache wrapper.** A `catch` that
+  turns an upstream failure into a clean empty result is correct; putting it
+  inside `wrapStaleOnError`'s callback is not, because the callback _returning_
+  is what makes `TtlCache#dedupe` `set()` the value. Confirmed in
+  `getGlobalAchievements`/`getGameAchievements`: one 403 (Steam's edge answers
+  that under load, not only for a schema-less appid) cached "this game has no
+  achievements" for the whole TTL — exactly how the tool's own description tells
+  the model to read an empty list — and `set()` it over a good-but-stale entry,
+  destroying the fallback the wrapper exists to serve. Check every `wrapStaleOnError`
+  /`wrap` call site: does its callback have a `catch` that RETURNS rather than
+  rethrows? The fix is to move the catch outside the wrapper (`#steamLevel` is
+  the correct shape). Where the degrade decision needs state known only inside
+  the callback, carry it on the thrown rejection, never a closure flag —
+  `#dedupe` shares one in-flight promise, so only the first concurrent caller
+  would ever run the callback that sets it.
+  This class is invisible to live testing: you cannot make the upstream 403 on
+  cue, and one call in isolation returns the right answer — it is the SECOND
+  call that is wrong.
 - A shape-only validator (a regex, a bare `z.string()`) whose value then feeds
   a computation that **degrades silently instead of erroring** — `Date.parse`
   → `NaN` makes every `<`/`>` comparison false (filter matches everything), an
