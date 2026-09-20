@@ -13,7 +13,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Drop the "target profile must also be public" note from the key-gate error of the four tools that read private profiles fine. ([afeb88d](https://github.com/Grinv/steam-games-mcp/commit/afeb88d))
-- Warn in `language`'s description that an ISO code like 'ru' makes Steam answer in English rather than erroring, and that `country` drives prices and search matches. ([9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9))
+- Warn on every `language` field that an unrecognized value (an ISO code like 'ru') makes Steam answer in English and return an empty `tags` list instead of erroring. ([9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9), [7543bcb](https://github.com/Grinv/steam-games-mcp/commit/7543bcb))
 - Report one validation error instead of two for a bad `discover_games` `released_after`, and advertise `format: "date"` in its schema. ([f436189](https://github.com/Grinv/steam-games-mcp/commit/f436189))
 - Bump zod to 4.6.5; nullable output fields now emit `type: ["string", "null"]` instead of an equivalent `anyOf`. ([d614e34](https://github.com/Grinv/steam-games-mcp/commit/d614e34))
 

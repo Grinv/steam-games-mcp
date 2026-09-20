@@ -167,6 +167,16 @@ that point rather than reconstructing it from scratch.
   underlying behavior needs the same sentence, not just the one you
   happened to test first (see the `get_items`/`get_prices` gap called out
   above — same behavior, only one description states it).
+- **When you improve a SHARED param's `.describe()`, grep for the tools that
+  override it with their own text** — `language.describe("...")` at a tool's
+  own call site replaces the shared string wholesale, so those tools keep the
+  old wording and the improvement silently applies to some tools and not
+  others. Confirmed here: a warning added to the shared `language` param
+  reached six tools and skipped `get_wishlist`, `get_game_achievements` and
+  `get_player_achievements`, all three of which have the identical behaviour.
+  The fix is to export the shared sentence as a constant the overriding sites
+  append, not to copy prose into each. `grep -n '<param>\.describe('
+src/tools/*.ts` lists every override.
 - A shared/reused description or output-schema caveat must be re-verified
   against _this specific tool's_ actual query/endpoint — it can be correct
   for the sibling it was copied from and wrong here (e.g. `get_items`'s tag

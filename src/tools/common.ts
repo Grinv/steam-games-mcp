@@ -39,11 +39,10 @@ export const country = z
 // get_game_achievements, get_player_achievements) and would otherwise each have
 // to restate — or, as happened once, silently drop — the warning.
 export const LANGUAGE_ISO_WARNING =
-  "Use Steam's own language NAME — english, russian, schinese — not an ISO code (en/ru/zh) and " +
-  "not a plausible guess: 'chinese' is silently wrong, only 'schinese'/'tchinese' work. An " +
-  "unrecognized value is never an error — text comes back in English and any `tags` list comes " +
-  "back EMPTY, which reads as 'this game has no tags' rather than as a bad language. (The one " +
-  "loud case is filtering BY tags, which fails outright.)";
+  "Use Steam's own language NAME — english, russian, schinese/tchinese — not an ISO code like " +
+  "en/ru/zh. An unrecognized value is never an error: text comes back in English and any `tags` " +
+  "list comes back EMPTY, which reads as 'this game has no tags' rather than as a bad language. " +
+  "(Filtering BY tags is the one loud case — it fails outright.)";
 
 export const language = z
   .string()
