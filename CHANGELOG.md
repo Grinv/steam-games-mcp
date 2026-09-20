@@ -8,29 +8,32 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Add `limit` (1-300) and `sort` to `get_owned_games`, so a library's never-played tail can survive the 50-entry cap instead of always losing to playtime. ([459bec7](https://github.com/Grinv/steam-games-mcp/commit/459bec7), [032cb22](https://github.com/Grinv/steam-games-mcp/commit/032cb22))
+- Add `limit` (1-300) and `sort` to `get_owned_games`, so the never-played tail can survive the 50-entry cap. ([459bec7](https://github.com/Grinv/steam-games-mcp/commit/459bec7), [032cb22](https://github.com/Grinv/steam-games-mcp/commit/032cb22))
 
 ### Changed
 
-- Drop the "target profile must also be public" note from the key-gate error of the four tools that read private profiles fine. ([afeb88d](https://github.com/Grinv/steam-games-mcp/commit/afeb88d))
-- Warn on every `language` field that an unrecognized value (an ISO code like 'ru') makes Steam answer in English and return an empty `tags` list instead of erroring. ([9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9), [7543bcb](https://github.com/Grinv/steam-games-mcp/commit/7543bcb))
-- Report one validation error instead of two for a bad `discover_games` `released_after`, and advertise `format: "date"` in its schema. ([f436189](https://github.com/Grinv/steam-games-mcp/commit/f436189))
+- **Breaking:** replace `get_prices`' `is_free: true` row with `priced: false` — it was reporting unreleased paid games as free. ([8e8edcb](https://github.com/Grinv/steam-games-mcp/commit/8e8edcb))
 - Bump zod to 4.6.5; nullable output fields now emit `type: ["string", "null"]` instead of an equivalent `anyOf`. ([d614e34](https://github.com/Grinv/steam-games-mcp/commit/d614e34))
+- Warn on every `language` field that an unrecognized value answers in English and empties `tags` rather than erroring. ([9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9), [7543bcb](https://github.com/Grinv/steam-games-mcp/commit/7543bcb), [ed44f09](https://github.com/Grinv/steam-games-mcp/commit/ed44f09))
+- Warn on every `country` field that an unrecognized two-letter code returns US prices rather than erroring. ([a3f162b](https://github.com/Grinv/steam-games-mcp/commit/a3f162b))
+- Drop the "target profile must also be public" note from the key-gate error of the four tools that read private profiles fine. ([afeb88d](https://github.com/Grinv/steam-games-mcp/commit/afeb88d))
+- Report one validation error instead of two for a bad `discover_games` `released_after`, and advertise `format: "date"`. ([f436189](https://github.com/Grinv/steam-games-mcp/commit/f436189))
 
 ### Fixed
 
-- Fix `get_prices` reporting an unpriced game as `is_free: true` — Steam sends an identical empty payload for a free-to-play title and an unreleased paid one, so those rows now report `priced: false`. ([8e8edcb](https://github.com/Grinv/steam-games-mcp/commit/8e8edcb))
-- Fix `get_friend_list`/`find_friends_who_own` telling the caller a friends list is private when the SteamID64 has no account behind it at all. ([e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca))
-- Warn on every `country` field that an unrecognized-but-two-letter code returns US prices rather than an error. ([a3f162b](https://github.com/Grinv/steam-games-mcp/commit/a3f162b))
-- Disclose a set of behaviours the tool text left a calling model to guess: `get_game`'s failure modes and DLC cap, `get_items`' result ordering, the card `tags` array being a display sample while tag filters match the full list, which friends `find_friends_who_own` checks, that `discover_games`/`get_recommended_games` return base games only, and the empty-vs-private and nonexistent-appid cases across the player tools. ([8127081](https://github.com/Grinv/steam-games-mcp/commit/8127081), [e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca), [4fd509b](https://github.com/Grinv/steam-games-mcp/commit/4fd509b))
-
-- Fix `get_global_achievements`/`get_game_achievements` caching the empty list they fall back to on a 403 — a transient block then read as "this game has no achievements" for a full cache TTL, over any good list already stored. ([3d6f3a3](https://github.com/Grinv/steam-games-mcp/commit/3d6f3a3))
-- Fix `get_review_histogram` and `get_game_reviews` not disclosing that an unknown appid comes back empty rather than as an error, unlike their three siblings. ([9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9))
-- Fix `what_should_i_play` rendering a non-numeric `budget` into the nonsense instruction "drop anything priced above cheap". ([4856ddc](https://github.com/Grinv/steam-games-mcp/commit/4856ddc))
+- Fix `get_global_achievements`/`get_game_achievements` caching the empty list they fall back to on a 403, over any good list already stored. ([3d6f3a3](https://github.com/Grinv/steam-games-mcp/commit/3d6f3a3))
+- Fix `get_friend_list`/`find_friends_who_own` blaming privacy when the SteamID64 has no account behind it. ([e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca))
+- Fix `what_should_i_play` rendering a non-numeric `budget` into "drop anything priced above cheap". ([4856ddc](https://github.com/Grinv/steam-games-mcp/commit/4856ddc))
+- Fix `getPrices` throwing a TypeError for an empty appid list; unreachable through `get_prices`, whose schema rejects one. ([9c647a7](https://github.com/Grinv/steam-games-mcp/commit/9c647a7))
+- Disclose `get_game`'s two failure modes (no such appid vs. not sold in that country) and its DLC cap. ([8127081](https://github.com/Grinv/steam-games-mcp/commit/8127081), [e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca))
+- Disclose that a card's `tags` array is a display sample, while tag filters match the game's full list. ([e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca))
+- Disclose that `get_items` preserves the order of the appids passed to it, as `get_prices` already did. ([8127081](https://github.com/Grinv/steam-games-mcp/commit/8127081))
+- Disclose which 200 friends `find_friends_who_own` checks, and that an unknown appid reads as "nobody owns it". ([e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca))
+- Disclose that `discover_games` and `get_recommended_games` return base games only. ([e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca), [4fd509b](https://github.com/Grinv/steam-games-mcp/commit/4fd509b))
+- Disclose the empty-vs-private and nonexistent-appid cases the player, wishlist and review tools collapsed into one result. ([e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca), [9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9), [4fd509b](https://github.com/Grinv/steam-games-mcp/commit/4fd509b))
 - Fix `get_owned_games`' description promising "most-played first" unconditionally, which `sort='playtime_asc'` contradicts. ([032cb22](https://github.com/Grinv/steam-games-mcp/commit/032cb22))
-- Fix `discover_games` not documenting that `released_after` overrides `released_within_days` when both are given. ([9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9))
-- Fix `discover_games`' `min_review` describing itself as applied over the returned page, when every non-discount filter runs over the scanned `count` window. ([4fd509b](https://github.com/Grinv/steam-games-mcp/commit/4fd509b))
-- Fix `getPrices` throwing a TypeError instead of an empty result for an empty appid list; unreachable through `get_prices`, whose schema rejects one. ([9c647a7](https://github.com/Grinv/steam-games-mcp/commit/9c647a7))
+- Fix `discover_games` not documenting that `released_after` overrides `released_within_days`. ([9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9))
+- Fix `discover_games`' `min_review` claiming it applies over the returned page, not the scanned `count` window. ([4fd509b](https://github.com/Grinv/steam-games-mcp/commit/4fd509b))
 - Fix PRIVACY.md omitting `get_recommended_games` from the tools backed by Steam's store-card services. ([c96d7a2](https://github.com/Grinv/steam-games-mcp/commit/c96d7a2))
 
 ## [0.13.1] - 2026-08-13
