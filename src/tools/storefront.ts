@@ -177,7 +177,9 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         `checking a whole list (e.g. a wishlist) for deals. Handles up to ${PRICES_MAX} appids; if you also ` +
         `need review %, hardware compatibility or tags, use get_items instead (max ${ITEMS_MAX} appids). Rows ` +
         "come back in the same order as the given appids, one per id (unavailable ones marked " +
-        "available:false — either no such appid or not sold in that `country` — never dropped). A " +
+        "available:false — no such appid, not sold in that `country`, or a transient upstream failure " +
+        "on the chunk it fell in, so retry before concluding a game is unavailable — never " +
+        "dropped). A " +
         "priced row carries final/initial price and discount_percent. A row marked priced:false " +
         "has no price block at all, which is how BOTH free-to-play and not-yet-released titles " +
         "come back: this endpoint cannot tell them apart, so never report priced:false as 'free' " +

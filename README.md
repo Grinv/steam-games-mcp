@@ -99,8 +99,10 @@ as `io.github.Grinv/steam-games-mcp`.
 ## Getting your credentials
 
 Store, search and discovery tools need **nothing**; skip this section if that's
-all you want. The **player** tools (profile, library, achievements, your wishlist)
-need a free API key and a public profile. Three short steps:
+all you want. The **player** tools (profile, library, achievements)
+need a free API key, and most also need a public profile — though `get_wishlist`
+and `get_followed_games` need no key, and profile/ban lookups work on private
+profiles. Three short steps:
 
 1. **Get a free Steam Web API key.** Sign in at
    <https://steamcommunity.com/dev/apikey>, enter any domain (e.g. `localhost`),

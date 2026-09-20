@@ -116,9 +116,10 @@ export const getPricesOutput = z.strictObject({
       z
         .strictObject({ appid: z.number(), available: z.literal(false) })
         .describe(
-          "Steam has no store entry for this appid in the requested country — either it doesn't " +
-            "exist, or it isn't sold there (try another `country`), the same as get_items' " +
-            "available:false rows.",
+          "No usable store entry came back for this appid: it doesn't exist, it isn't sold in the " +
+            "requested country (try another `country`), or the batch chunk it fell in failed " +
+            "transiently — this tool chunks large lists, so a retry can turn these rows into " +
+            "prices. Same row shape as get_items' available:false.",
         ),
       z
         .strictObject({
