@@ -8,7 +8,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
-import { READ_ONLY, appid, language } from "./common.js";
+import { LANGUAGE_ISO_WARNING, READ_ONLY, appid, language } from "./common.js";
 import {
   PUBLIC_PROFILE_NOTE,
   requireKey as makeRequireKey,
@@ -99,7 +99,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       inputSchema: z.strictObject({
         appid,
         language: language.describe(
-          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE.",
+          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE. " +
+            LANGUAGE_ISO_WARNING,
         ),
       }),
       outputSchema: getGameAchievementsOutput,
@@ -270,7 +271,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
           .describe(
             `Steam appids to check ownership of (1-${CHECK_APPIDS_MAX}), regardless of the ${OWNED_GAMES_MAX}-entry cap ` +
               "on `games` (or of whichever end `sort` keeps). Prefer this over raising `limit`: it " +
-              "reads the FULL library at a fixed cost. Adds an `owns` field: " +
+              "reads the FULL library, and its own cost is bounded by this list's length. Adds an `owns` field: " +
               "[{appid, owned, playtime_hours}]. One upstream " +
               "gap to know about: Steam omits free-to-play titles the player owns but has NEVER " +
               "launched, so those report owned:false. A private profile reports no `owns` at all " +
@@ -404,7 +405,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         steamid,
         appid,
         language: language.describe(
-          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE.",
+          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE. " +
+            LANGUAGE_ISO_WARNING,
         ),
       }),
       outputSchema: getPlayerAchievementsOutput,

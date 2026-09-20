@@ -32,17 +32,27 @@ export const country = z
   .regex(/^[A-Za-z]{2}$/, "Two-letter ISO country code, e.g. US, RU, DE.")
   .describe("Country (cc) for prices/currency; overrides STEAM_COUNTRY for this call.")
   .optional();
+// Steam takes a language NAME, and answers an unrecognized one without erroring,
+// so a wrong value is invisible in the result. All three behaviours below are
+// verified live. Kept as one exported string because three tools override
+// `language`'s own .describe() with their own wording (get_wishlist,
+// get_game_achievements, get_player_achievements) and would otherwise each have
+// to restate — or, as happened once, silently drop — the warning.
+export const LANGUAGE_ISO_WARNING =
+  "Use Steam's own language NAME — english, russian, schinese — not an ISO code (en/ru/zh) and " +
+  "not a plausible guess: 'chinese' is silently wrong, only 'schinese'/'tchinese' work. An " +
+  "unrecognized value is never an error — text comes back in English and any `tags` list comes " +
+  "back EMPTY, which reads as 'this game has no tags' rather than as a bad language. (The one " +
+  "loud case is filtering BY tags, which fails outright.)";
+
 export const language = z
   .string()
   .trim()
   .min(2)
   .describe(
-    "Store language for the text fields, as Steam's full language NAME — english, russian, " +
-      "schinese — NOT an ISO code like en/ru/zh. An unrecognized value is not an error: most " +
-      "endpoints quietly answer in English, so the result looks right and isn't (where a `tags` " +
-      "filter is involved the call fails outright instead, since its tag dictionary comes back " +
-      "empty). Overrides STEAM_LANGUAGE for this call. This is the content language only — " +
-      "prices, and which titles a search matches, follow `country`.",
+    `Store language for the text fields. ${LANGUAGE_ISO_WARNING} Overrides STEAM_LANGUAGE for ` +
+      "this call. This is the content language only — prices and regional availability follow " +
+      "`country`.",
   )
   .optional();
 

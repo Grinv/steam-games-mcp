@@ -9,6 +9,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
 import type { StoreServiceClient } from "../clients/storeService.js";
 import {
+  LANGUAGE_ISO_WARNING,
   ITEMS_MAX,
   PRICES_MAX,
   READ_ONLY,
@@ -392,7 +393,7 @@ export function registerStoreWebTools(
           "Country (cc) for prices; overrides STEAM_COUNTRY. Implies include_details.",
         ),
         language: language.describe(
-          "Store language; overrides STEAM_LANGUAGE. Implies include_details.",
+          `Store language; overrides STEAM_LANGUAGE. Implies include_details. ${LANGUAGE_ISO_WARNING}`,
         ),
       }),
       outputSchema: getWishlistOutput,
