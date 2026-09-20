@@ -52,7 +52,10 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         "release date, developers/publishers, Metacritic, age rating, DLC, PC requirements and a " +
         "small highlighted-achievements sample (achievements_highlighted). " +
         "Identify the game by appid (from search_games) OR by name — a title is resolved to the " +
-        "closest store match. No API key required.",
+        "closest store match. Both forms error rather than returning an empty result when nothing " +
+        "matches, and an appid can fail for two different reasons: it may not exist, or it may not " +
+        "be sold in the given `country`. The error names the country and both causes — retry with " +
+        "another `country` before concluding the game doesn't exist. No API key required.",
       inputSchema: z
         .strictObject({
           appid: appid

@@ -105,8 +105,8 @@ export function registerStoreWebTools(
         "release date for a LIST of games by appid in ONE keyless call. The efficient way to price-, " +
         "rating-, tag- and compat-check a wishlist or library without a request per game. For a bigger " +
         `batch (up to ${PRICES_MAX} appids) when you only need price, use get_prices instead. An unknown/invalid ` +
-        "appid comes back as its own row marked available:false (never dropped from the list), same " +
-        "as get_prices. Each item " +
+        "appid comes back as its own row marked available:false — rows stay in the order you passed " +
+        "them, one per id, never dropped, same as get_prices. Each item " +
         "carries four compatibility fields, each verified/playable/unsupported/unknown: steam_deck " +
         "(Steam Deck), steam_os (SteamOS in general), steam_machine (the Steam Machine console " +
         "specifically), and steam_frame (Steam Frame VR headset); a `vr_support` flag " +
