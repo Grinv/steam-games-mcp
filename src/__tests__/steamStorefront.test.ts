@@ -300,7 +300,10 @@ describe("get_prices", () => {
                 },
               },
             },
-            "400": { success: true, data: [] }, // free game: no price_overview
+            // success with no price_overview. Steam answers this IDENTICALLY for a
+            // free-to-play game and for an unreleased paid one (verified live), so the
+            // row reports priced:false rather than guessing is_free:true.
+            "400": { success: true, data: [] },
             "999": { success: false },
           })
         : jsonResponse({}),
@@ -311,7 +314,13 @@ describe("get_prices", () => {
     });
     const s = res.structuredContent as {
       count: number;
-      prices: { appid: number; available: boolean; is_free?: boolean; final?: string }[];
+      prices: {
+        appid: number;
+        available: boolean;
+        is_free?: boolean;
+        priced?: boolean;
+        final?: string;
+      }[];
     };
     assert.equal(s.count, 3);
     assert.equal(s.prices[0]!.appid, 620);
@@ -320,7 +329,8 @@ describe("get_prices", () => {
     assert.equal(s.prices[0]!.final, "$1.99");
     assert.equal(s.prices[1]!.appid, 400);
     assert.equal(s.prices[1]!.available, true);
-    assert.equal(s.prices[1]!.is_free, true);
+    assert.equal(s.prices[1]!.priced, false);
+    assert.equal(s.prices[1]!.is_free, undefined, "freeness is not knowable from this endpoint");
     assert.equal(s.prices[2]!.appid, 999);
     assert.equal(s.prices[2]!.available, false);
   });

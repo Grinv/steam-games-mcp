@@ -113,8 +113,26 @@ export const getPricesOutput = z.strictObject({
   count: z.number(),
   prices: z.array(
     z.union([
-      z.strictObject({ appid: z.number(), available: z.literal(false) }),
-      z.strictObject({ appid: z.number(), available: z.literal(true), is_free: z.literal(true) }),
+      z
+        .strictObject({ appid: z.number(), available: z.literal(false) })
+        .describe(
+          "Steam has no store entry for this appid in the requested country — either it doesn't " +
+            "exist, or it isn't sold there (try another `country`), the same as get_items' " +
+            "available:false rows.",
+        ),
+      z
+        .strictObject({
+          appid: z.number(),
+          available: z.literal(true),
+          priced: z.literal(false),
+        })
+        .describe(
+          "Steam returned no price block for this appid. That is how a free-to-play title AND a " +
+            "not-yet-released or not-purchasable one both come back, and this endpoint cannot " +
+            "tell them apart — so this is NOT a claim that the game is free. Call get_items on " +
+            "the appid (its `is_free` and `coming_soon` separate the two) before reporting " +
+            "anything as free.",
+        ),
       priceFieldsSchema.extend({
         appid: z.number(),
         available: z.literal(true),

@@ -175,8 +175,12 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         `checking a whole list (e.g. a wishlist) for deals. Handles up to ${PRICES_MAX} appids; if you also ` +
         `need review %, hardware compatibility or tags, use get_items instead (max ${ITEMS_MAX} appids). Rows ` +
         "come back in the same order as the given appids, one per id (unavailable ones marked " +
-        "available:false, never dropped). Each row has the final/initial price and discount_percent " +
-        "(or is_free). No API key required. Get appids from search_games or get_wishlist.",
+        "available:false — either no such appid or not sold in that `country` — never dropped). A " +
+        "priced row carries final/initial price and discount_percent. A row marked priced:false " +
+        "has no price block at all, which is how BOTH free-to-play and not-yet-released titles " +
+        "come back: this endpoint cannot tell them apart, so never report priced:false as 'free' " +
+        "— pass those appids to get_items, whose is_free/coming_soon do separate them. " +
+        "No API key required. Get appids from search_games or get_wishlist.",
       inputSchema: z.strictObject({
         appids: z
           .array(z.int().positive())
