@@ -24,6 +24,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fix `get_global_achievements`/`get_game_achievements` caching the empty list they fall back to on a 403, over any good list already stored. ([3d6f3a3](https://github.com/Grinv/steam-games-mcp/commit/3d6f3a3))
 - Fix `get_friend_list`/`find_friends_who_own` blaming privacy when the SteamID64 has no account behind it. ([e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca))
 - Fix `what_should_i_play` rendering a non-numeric `budget` into "drop anything priced above cheap". ([4856ddc](https://github.com/Grinv/steam-games-mcp/commit/4856ddc))
+- Disclose that `get_prices`' `available:false` also covers a transiently failed batch chunk, not just an unknown or region-locked appid. ([1ef401d](https://github.com/Grinv/steam-games-mcp/commit/1ef401d))
 - Disclose `get_game`'s two failure modes (no such appid vs. not sold in that country) and its DLC cap. ([8127081](https://github.com/Grinv/steam-games-mcp/commit/8127081), [e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca))
 - Disclose that a card's `tags` array is a display sample, while tag filters match the game's full list. ([e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca))
 - Disclose that `get_items` preserves the order of the appids passed to it, as `get_prices` already did. ([8127081](https://github.com/Grinv/steam-games-mcp/commit/8127081))
