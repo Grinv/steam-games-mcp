@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-20
+
 ### Added
 
 - Add `limit` (1-300) and `sort` to `get_owned_games`, so the never-played tail can survive the 50-entry cap. ([459bec7](https://github.com/Grinv/steam-games-mcp/commit/459bec7), [032cb22](https://github.com/Grinv/steam-games-mcp/commit/032cb22))
