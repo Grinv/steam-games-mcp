@@ -217,12 +217,19 @@ export function registerStoreWebTools(
           .int()
           .nonnegative()
           .max(100)
-          .describe("Minimum positive-review %, e.g. 85. Applied over the returned page.")
+          .describe(
+            "Minimum positive-review %, e.g. 85. Like every filter here except min_discount, it is " +
+              "applied over the scanned `count` window, not server-side — raise `count` if a strict " +
+              "value returns too few.",
+          )
           .optional(),
         min_reviews: z
           .int()
           .nonnegative()
-          .describe("Minimum review count (filters out games with too few reviews).")
+          .describe(
+            "Minimum review count, e.g. 500 — filters out games too obscure to trust a % on. Applied " +
+              "over the scanned `count` window, like min_review.",
+          )
           .optional(),
         min_discount: z
           .int()

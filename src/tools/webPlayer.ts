@@ -143,7 +143,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "long they've been friends, most-recently-added first (capped at the " +
         `${FRIENDS_MAX} most-recently-added; check \`returned\` vs \`total\`). Requires STEAM_API_KEY ` +
         "and the friends list to be " +
-        "public — otherwise it returns found:false. For 'which of my friends own game X', use " +
+        "public — otherwise it returns found:false, which also covers a SteamID64 with no account " +
+        "behind it; read `reason`. For 'which of my friends own game X', use " +
         "find_friends_who_own instead — it checks each friend's full library, not just this list. " +
         "Get the SteamID64 from resolve_vanity_url.",
       inputSchema: z.strictObject({ steamid }),
@@ -164,7 +165,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "playtime by default — so a friend's rarely-played or unplayed copy is never missed (its " +
         "playtime_hours may still be low or 0). For the PLAYER'S OWN ownership instead of a friend's, use " +
         "get_owned_games's check_appids. Requires STEAM_API_KEY and the player's OWN friends list " +
-        "to be public — otherwise the whole call returns found:false. A friend's individually private " +
+        "to be public — otherwise the whole call returns found:false, which also covers a " +
+        "SteamID64 with no account behind it; read `reason`. A friend's individually private " +
         "library is a different, per-friend case: that friend is listed in private_friends (can't be " +
         "checked) rather than silently counted as a non-owner. Likewise, a friend whose own library " +
         "lookup failed (e.g. rate-limited) lands in unavailable_friends with a reason instead of " +
@@ -229,7 +231,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       description:
         "Get a player's profile by SteamID64: display name, online state, country, account age, " +
         "Steam level (a separate lookup that degrades to null on failure, independently of " +
-        "profile privacy), and the game they're currently in. Requires STEAM_API_KEY, but works even for " +
+        "profile privacy), and the game they're currently in. found:false here means exactly one " +
+        "thing — no account with that SteamID64 — since this tool reads private profiles fine. " +
+        "Requires STEAM_API_KEY, but works even for " +
         "a private profile (visibility reports 'private') — country, account age and the current " +
         "game only populate when the profile is public. For VAC/game/trade ban status instead, use " +
         "get_player_bans.",
@@ -247,7 +251,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
       description:
         "Check a player's VAC, game, community and economy (trade) ban status by SteamID64 — 'is this " +
         "player banned', useful before trading or adding a friend. Ban status is always public — this " +
-        "works even when the rest of the profile is private. Requires STEAM_API_KEY.",
+        "works even when the rest of the profile is private. `days_since_last_ban` is null for a " +
+        "player who has never been banned — Steam sends 0 there, which would otherwise read as " +
+        "'banned today'. Requires STEAM_API_KEY.",
       inputSchema: z.strictObject({ steamid }),
       outputSchema: getPlayerBansOutput,
       annotations: READ_ONLY,
@@ -352,7 +358,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "needs YOU to name the filters) — this infers taste from the player's WHOLE library instead, " +
         "for 'what should I play next' / 'recommend me something'. For 'something like THIS ONE " +
         "game' (a single named title), get its tags via get_items and call discover_games with them " +
-        "instead. Note: taste is weighted from only the player's " +
+        "instead. Recommends base games only — DLC, soundtracks and demos are never suggested, " +
+        "the same filter discover_games applies. Note: taste is weighted from only the player's " +
         `${FAVORITE_TAG_SAMPLE_SIZE} most-played owned games, and candidates come from a fixed ` +
         `${RECOMMENDATION_POOL_SIZE}-entry catalog scan, so a heavy exclude_tags/min_discount ` +
         "combination can return fewer than `limit` — there's no larger scan to fall back to. " +
