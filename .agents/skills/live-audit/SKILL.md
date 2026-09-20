@@ -302,6 +302,22 @@ there) for:
   malformed-SteamID64 fix, 0.10.1's `get_current_players`/`get_game` fixes).
   Check every call site that takes a user-controlled id/appid for the same
   "does a 400/404/5xx get normalized, or does raw upstream body leak through."
+- **An inference drawn from an upstream payload that cannot actually carry it.**
+  Not "the code mishandles a field" but "the field isn't there and the code
+  guessed." Confirmed: `get_prices` reported `is_free: true` for any appid
+  `appdetails?filters=price_overview` answered without a price block — but that
+  endpoint sends an identical `"data": []` for a genuinely free game AND for an
+  unreleased paid one, so freeness was never knowable from it. The result was a
+  confident wrong answer (unreleased paid titles reported as free) that
+  contradicted `get_items`, called on the same appid in the same second.
+  For every boolean or category a summarizer DERIVES rather than copies, ask
+  what the raw payload looks like in the other case it could be — and check by
+  curling the upstream for both, not by reading the shaper. Two tells that this
+  bug class is present: a sibling tool built on a different endpoint disagrees,
+  and the test fixture's own comment asserts the guess (here, `// free game: no
+price_overview`), so the suite agrees with the bug instead of catching it.
+  Same family as 0.13.0's `get_featured` "0.00 USD" fix — which is exactly why
+  it needs the whole-codebase sweep §6 asks for, not a one-site patch.
 - **A degraded fallback RETURNED from inside a cache wrapper.** A `catch` that
   turns an upstream failure into a clean empty result is correct; putting it
   inside `wrapStaleOnError`'s callback is not, because the callback _returning_
