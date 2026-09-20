@@ -9,6 +9,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.js";
 import type { StoreServiceClient } from "../clients/storeService.js";
 import {
+  COUNTRY_UNKNOWN_WARNING,
   LANGUAGE_ISO_WARNING,
   ITEMS_MAX,
   PRICES_MAX,
@@ -398,7 +399,7 @@ export function registerStoreWebTools(
         steam_machine: steamMachine,
         steam_frame: steamFrame,
         country: country.describe(
-          "Country (cc) for prices; overrides STEAM_COUNTRY. Implies include_details.",
+          `Country (cc) for prices; overrides STEAM_COUNTRY. Implies include_details. ${COUNTRY_UNKNOWN_WARNING}`,
         ),
         language: language.describe(
           `Store language; overrides STEAM_LANGUAGE. Implies include_details. ${LANGUAGE_ISO_WARNING}`,

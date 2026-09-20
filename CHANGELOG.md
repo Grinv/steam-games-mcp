@@ -19,6 +19,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Fix `get_prices` reporting an unpriced game as `is_free: true` — Steam sends an identical empty payload for a free-to-play title and an unreleased paid one, so those rows now report `priced: false`. ([8e8edcb](https://github.com/Grinv/steam-games-mcp/commit/8e8edcb))
+- Fix `get_friend_list`/`find_friends_who_own` telling the caller a friends list is private when the SteamID64 has no account behind it at all. ([e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca))
+- Warn on every `country` field that an unrecognized-but-two-letter code returns US prices rather than an error. ([539e566](https://github.com/Grinv/steam-games-mcp/commit/539e566))
+- Disclose a set of behaviours the tool text left a calling model to guess: `get_game`'s failure modes and DLC cap, `get_items`' result ordering, the card `tags` array being a display sample while tag filters match the full list, which friends `find_friends_who_own` checks, and the empty-vs-private and nonexistent-appid cases across the player tools. ([8127081](https://github.com/Grinv/steam-games-mcp/commit/8127081), [e5bd5ca](https://github.com/Grinv/steam-games-mcp/commit/e5bd5ca))
+
 - Fix `get_global_achievements`/`get_game_achievements` caching the empty list they fall back to on a 403 — a transient block then read as "this game has no achievements" for a full cache TTL, over any good list already stored. ([3d6f3a3](https://github.com/Grinv/steam-games-mcp/commit/3d6f3a3))
 - Fix `get_review_histogram` and `get_game_reviews` not disclosing that an unknown appid comes back empty rather than as an error, unlike their three siblings. ([9550cc9](https://github.com/Grinv/steam-games-mcp/commit/9550cc9))
 - Fix `what_should_i_play` rendering a non-numeric `budget` into the nonsense instruction "drop anything priced above cheap". ([4856ddc](https://github.com/Grinv/steam-games-mcp/commit/4856ddc))
