@@ -79,6 +79,21 @@ describe("prompts", () => {
     assert.doesNotMatch(text, /get_game_reviews/);
   });
 
+  test("every prompt renders when the client omits `arguments` entirely", async (t) => {
+    // Legal per spec, since every argument is optional. The SDK (>= 2.3.0)
+    // validates a missing `arguments` as {}, so no argsSchema needs a
+    // .default({}) wrapper — which on is_it_worth_buying would also hide the
+    // completable `game` field and drop its live title suggestions.
+    const { client, close } = await connectServer(ENV);
+    t.after(close);
+    for (const name of ["what_should_i_play", "is_it_worth_buying", "deals_digest"]) {
+      const res = await client.getPrompt({ name });
+      assert.ok(res.messages.length > 0, `${name} returned no messages`);
+    }
+    const res = await client.getPrompt({ name: "is_it_worth_buying" });
+    assert.match((res.messages[0]!.content as { text: string }).text, /which game/i);
+  });
+
   test("is_it_worth_buying asks for the game instead of failing when it's whitespace-only", async (t) => {
     // Regression: a whitespace-only string is truthy in JS, so without
     // trimming it slipped past the `game ? ... : ask` check and produced a

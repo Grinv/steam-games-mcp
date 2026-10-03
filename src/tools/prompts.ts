@@ -72,36 +72,30 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
       title: "What should I play next?",
       description:
         "Recommend games from the Steam catalog based on a player's library and taste, excluding what they already own.",
-      // .default({}) so a client that omits `arguments` entirely — legal, since
-      // every argument here is optional — gets the same result as `arguments: {}`
-      // instead of "expected object, received undefined". Safe on this prompt
-      // and deals_digest; NOT applicable to is_it_worth_buying, see there.
-      argsSchema: z
-        .strictObject({
-          steamid: steamId64Base
-            .describe(
-              "SteamID64 whose library to base taste on. Omit to use the configured STEAM_ID.",
-            )
-            .optional(),
-          budget: z
-            .string()
-            .trim()
-            .refine(isBudget, "Use an amount like '20', '$19.99' or '1500 RUB', or 'free'.")
-            .describe(
-              "Max price as an amount, e.g. '20' or '$19.99' — a bare word like 'cheap' is " +
-                "rejected, since it can't be applied to a price. Or 'free' for free-to-play " +
-                "only. Omit for no limit.",
-            )
-            .optional(),
-          tags: z
-            .string()
-            .trim()
-            .describe(
-              "Comma-separated tags to steer toward, e.g. 'Roguelike, Deckbuilding'. Omit to infer from the library.",
-            )
-            .optional(),
-        })
-        .default({}),
+      argsSchema: z.strictObject({
+        steamid: steamId64Base
+          .describe(
+            "SteamID64 whose library to base taste on. Omit to use the configured STEAM_ID.",
+          )
+          .optional(),
+        budget: z
+          .string()
+          .trim()
+          .refine(isBudget, "Use an amount like '20', '$19.99' or '1500 RUB', or 'free'.")
+          .describe(
+            "Max price as an amount, e.g. '20' or '$19.99' — a bare word like 'cheap' is " +
+              "rejected, since it can't be applied to a price. Or 'free' for free-to-play " +
+              "only. Omit for no limit.",
+          )
+          .optional(),
+        tags: z
+          .string()
+          .trim()
+          .describe(
+            "Comma-separated tags to steer toward, e.g. 'Roguelike, Deckbuilding'. Omit to infer from the library.",
+          )
+          .optional(),
+      }),
     },
     ({ steamid, budget, tags }) =>
       promptResult(
@@ -129,14 +123,6 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
       title: "Is this game worth buying?",
       description:
         "Gather price, reviews (lifetime + recent trend) and Steam Deck compatibility for a buying verdict. game is optional — if omitted, asks which game instead of failing.",
-      // Deliberately NOT wrapped in .default({}) like its two siblings, even
-      // though that would let a client omit `arguments` entirely: the SDK finds a
-      // completable field by reading `argsSchema.shape` (getSchemaShape in
-      // mcp-*.mjs), and every wrapper — .default(), .optional(), .catch() — hides
-      // that shape, so it silently stops registering the completion handler and
-      // `game` loses its live title suggestions. The suggestions are worth more
-      // than the omitted-arguments case here, which still renders the
-      // ask-me-which-game text once a client sends `arguments: {}`.
       argsSchema: z.strictObject({
         // Optional rather than required: not every MCP client elicits a
         // missing required prompt argument from the user (e.g. Claude Code
@@ -187,33 +173,30 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
     {
       title: "Today's deals digest",
       description: "A curated list of well-reviewed discounted games from Steam's catalog.",
-      // .default({}) for the omitted-`arguments` case — see what_should_i_play.
-      argsSchema: z
-        .strictObject({
-          // Digits only (or blank → default): these values are interpolated into
-          // the calling agent's instructions, so a free-form string could smuggle
-          // extra directives; a whole percentage can't. The range check is what
-          // keeps the rendered call executable — discover_games' own min_discount
-          // is 1-100 and min_review 0-100.
-          min_discount: percentArg(
-            1,
-            100,
-            "A whole percentage like '50', or blank for the default.",
-            "Minimum discount %, e.g. '50' (1-100). Default 50.",
-          ),
-          min_review: percentArg(
-            0,
-            100,
-            "A whole percentage like '85', or blank for the default.",
-            "Minimum positive-review %, e.g. '85' (0-100). Default 80.",
-          ),
-          tags: z
-            .string()
-            .trim()
-            .describe("Comma-separated tags to filter by, e.g. 'Roguelike'. Omit for any genre.")
-            .optional(),
-        })
-        .default({}),
+      argsSchema: z.strictObject({
+        // Digits only (or blank → default): these values are interpolated into
+        // the calling agent's instructions, so a free-form string could smuggle
+        // extra directives; a whole percentage can't. The range check is what
+        // keeps the rendered call executable — discover_games' own min_discount
+        // is 1-100 and min_review 0-100.
+        min_discount: percentArg(
+          1,
+          100,
+          "A whole percentage like '50', or blank for the default.",
+          "Minimum discount %, e.g. '50' (1-100). Default 50.",
+        ),
+        min_review: percentArg(
+          0,
+          100,
+          "A whole percentage like '85', or blank for the default.",
+          "Minimum positive-review %, e.g. '85' (0-100). Default 80.",
+        ),
+        tags: z
+          .string()
+          .trim()
+          .describe("Comma-separated tags to filter by, e.g. 'Roguelike'. Omit for any genre.")
+          .optional(),
+      }),
     },
     ({ min_discount, min_review, tags }) =>
       promptResult(
