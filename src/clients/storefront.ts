@@ -22,20 +22,34 @@ import {
   type SearchResponse,
   type StoreApp,
 } from "../format/storefront.js";
+import type { PurchasePrices } from "../format/store.js";
 import type { Logger } from "../lib/logger.js";
 import type { Config } from "../config.js";
 
 type AppDetailsResponse = Record<string, { success?: boolean; data?: StoreApp }>;
+
+/** The one StoreServiceClient method this client needs (clients/storeService.ts):
+ *  authoritative base-game prices, used to correct what the Storefront API says.
+ *  Declared as a narrow interface rather than importing the class, so the
+ *  Storefront client stays independent of the Web API client it's wired to. */
+export interface PurchasePriceSource {
+  getPurchasePrices(appids: number[], country?: string, language?: string): Promise<PurchasePrices>;
+}
 
 export class StorefrontClient {
   readonly #http: HttpClient;
   readonly #cache: TtlCache;
   readonly #cc: string;
   readonly #l: string;
+  // Every price this client reports is corrected through this: see
+  // format/storefront.ts's overridePrice() for what's wrong with the numbers
+  // the Storefront API itself returns.
+  readonly #pricing: PurchasePriceSource;
 
-  constructor(config: Config, logger: Logger) {
+  constructor(config: Config, logger: Logger, pricing: PurchasePriceSource) {
     this.#cc = config.country;
     this.#l = config.language;
+    this.#pricing = pricing;
     const limiter = new RateLimiter(config.storeMinIntervalMs);
     this.#http = new HttpClient({
       baseUrl: config.steamStoreBaseUrl,
@@ -62,7 +76,14 @@ export class StorefrontClient {
     country?: string,
     language?: string,
   ): Promise<Record<string, unknown>> {
-    return summarizeSearch(await this.#search(term, country, language));
+    const res = await this.#search(term, country, language);
+    // Sequential, unlike getGame/getPrices below: the appids to price only exist
+    // once the search has answered. getPurchasePrices no-ops on an empty list,
+    // so a zero-result search still costs exactly one request.
+    const appids = (res.items ?? [])
+      .map((i) => i.id)
+      .filter((id): id is number => typeof id === "number");
+    return summarizeSearch(res, await this.#pricing.getPurchasePrices(appids, country, language));
   }
 
   // Resolve a game title to its appid via store search (top match), so callers
@@ -80,9 +101,15 @@ export class StorefrontClient {
     const cc = country ?? this.#cc;
     const l = language ?? this.#l;
     return this.#cache.wrapStaleOnError(`app:${appid}:${cc}:${l}`, async () => {
-      const res = await this.#http.getJson<AppDetailsResponse>("api/appdetails", {
-        query: { appids: appid, cc, l },
-      });
+      // In parallel, not sequentially: the appid is already known, so correcting
+      // the price costs a request but no extra wall-clock. Both land inside this
+      // cache entry, so a hit still makes zero upstream calls.
+      const [res, prices] = await Promise.all([
+        this.#http.getJson<AppDetailsResponse>("api/appdetails", {
+          query: { appids: appid, cc, l },
+        }),
+        this.#pricing.getPurchasePrices([appid], cc, l),
+      ]);
       const entry = res[String(appid)];
       if (!entry?.success || !entry.data) {
         // appdetails answers {success:false} both for "no such app" and for "not
@@ -97,7 +124,7 @@ export class StorefrontClient {
             `doesn't exist, or it isn't available in that country (try another \`country\`).`,
         });
       }
-      return detailApp(entry.data);
+      return detailApp(entry.data, prices[String(appid)]);
     });
   }
 
@@ -136,13 +163,21 @@ export class StorefrontClient {
     const CHUNK = 100;
     const chunks: number[][] = [];
     for (let i = 0; i < appids.length; i += CHUNK) chunks.push(appids.slice(i, i + CHUNK));
-    const settled = await Promise.allSettled(
-      chunks.map((chunk) =>
-        this.#http.getJson<PriceDetailsResponse>("api/appdetails", {
-          query: { appids: chunk.join(","), cc, filters: "price_overview" },
-        }),
+    // appdetails still supplies availability, whether a price exists at all
+    // (priced:false otherwise) and the currency code (which GetItems never
+    // returns) for every row; the parallel lookup only corrects the amounts.
+    // getPurchasePrices never rejects (best-effort per chunk), so this outer
+    // Promise.all can't defeat the allSettled around the appdetails chunks.
+    const [settled, overrides] = await Promise.all([
+      Promise.allSettled(
+        chunks.map((chunk) =>
+          this.#http.getJson<PriceDetailsResponse>("api/appdetails", {
+            query: { appids: chunk.join(","), cc, filters: "price_overview" },
+          }),
+        ),
       ),
-    );
+      this.#pricing.getPurchasePrices(appids, cc),
+    ]);
     // Every chunk failing is an outage, not "no game has a price" — surface it
     // rather than answering with a full list of available:false rows. Guarded on
     // chunks.length, not fulfilled.length alone: an empty appids list produces
@@ -158,7 +193,7 @@ export class StorefrontClient {
     }
     const merged: PriceDetailsResponse = {};
     for (const r of fulfilled) Object.assign(merged, r.value);
-    return summarizePrices(merged, appids);
+    return summarizePrices(merged, appids, overrides);
   }
 
   // Review trend over time (monthly history + recent daily). Cached briefly.

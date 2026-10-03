@@ -37,8 +37,11 @@ const STATIC_CACHE_HINT = { ttlMs: HOUR_MS, cacheScope: "public" } as const;
 
 /** Construct a fully-registered MCP server. Shared by start() and tests. */
 export function buildServer(config: Config, logger: Logger): McpServer {
-  const store = new StorefrontClient(config, logger);
+  // web first: the Storefront client corrects every price it reports through
+  // the store-browse service the Web API client owns (see
+  // format/storefront.ts's overridePrice()).
   const web = new SteamWebClient(config, logger);
+  const store = new StorefrontClient(config, logger, web.store);
 
   const server = new McpServer(
     { name: "steam-games-mcp", version: VERSION },

@@ -9,6 +9,7 @@ import { setupServer, jsonResponse, htmlResponse, assertToolError } from "./help
 import {
   ENV,
   FOLLOWED,
+  TAGLIST,
   router,
   routerWithBrokenTagList,
   routerWithEmptyTagList,
@@ -521,6 +522,82 @@ describe("get_wishlist", () => {
     });
     const s = res.structuredContent as { items: { appid: number; name?: string }[] };
     assert.equal(s.items[0]!.name, undefined);
+  });
+});
+
+describe("bundle prices", () => {
+  // Steam's "best purchase option" is whatever it considers best value, often a
+  // bundle of this app AND another game — bundle 67187 covers appids 262060 and
+  // 2186680, so its $48.36 prices two games and undercuts Rogue Trader's own
+  // $49.99. A game's price must be what the game costs on its own.
+  const BUNDLE_BEST = {
+    bundleid: 67187,
+    formatted_final_price: "$48.36",
+    formatted_original_price: "$67.48",
+    discount_pct: 28,
+  };
+  const OWN = { packageid: 782856, formatted_final_price: "$49.99", discount_pct: 0 };
+  const card = (purchase_options: unknown[]) => ({
+    response: {
+      store_items: [
+        {
+          appid: 2186680,
+          name: "Warhammer 40,000: Rogue Trader",
+          best_purchase_option: BUNDLE_BEST,
+          purchase_options,
+          reviews: { summary_filtered: { percent_positive: 90, review_count: 100 } },
+        },
+      ],
+    },
+  });
+  const serve = (body: unknown) => (url: string) =>
+    jsonResponse(url.includes("IStoreBrowseService/GetItems") ? body : TAGLIST);
+
+  test("get_items reports the game's own package, not the bundle containing it", async (t) => {
+    const { client } = await setupServer(
+      t,
+      { STEAM_API_MIN_INTERVAL_MS: "0" },
+      serve(card([BUNDLE_BEST, OWN])),
+    );
+    const res = await client.callTool({ name: "get_items", arguments: { appids: [2186680] } });
+    const s = res.structuredContent as {
+      items: { price: { final: string; discount_pct: number } }[];
+    };
+    assert.equal(s.items[0]!.price.final, "$49.99");
+    assert.equal(s.items[0]!.price.discount_pct, 0);
+  });
+
+  test("every card request asks for all purchase options, so no follow-up is needed", async (t) => {
+    // Asked up front rather than fetched separately for the ~1% of apps that
+    // need it: measured, the extra round-trip costs as much as the bigger
+    // payload, and this way there's no second request to fail.
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    await client.callTool({ name: "get_items", arguments: { appids: [620] } });
+    const calls = mock.calls.filter((c) => c.url.includes("IStoreBrowseService/GetItems"));
+    assert.equal(calls.length, 1);
+    assert.match(calls[0]!.url, /include_all_purchase_options/);
+  });
+
+  test("a bundle-only app keeps the bundle price rather than reporting none", async (t) => {
+    // No own package exists, and a null price would read as "not sold here".
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, serve(card([])));
+    const res = await client.callTool({ name: "get_items", arguments: { appids: [2186680] } });
+    const s = res.structuredContent as { items: { price: { final: string } }[] };
+    assert.equal(s.items[0]!.price.final, "$48.36");
+  });
+
+  test("discover_games filters on the game's own discount, not the bundle's", async (t) => {
+    // The bundle is 28% off while the game itself isn't discounted at all, so a
+    // min_discount of 20 must not surface it as a deal.
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+      jsonResponse(url.includes("IStoreQueryService/Query") ? card([BUNDLE_BEST, OWN]) : TAGLIST),
+    );
+    const res = await client.callTool({
+      name: "discover_games",
+      arguments: { min_discount: 20, count: 10 },
+    });
+    const s = res.structuredContent as { returned: number };
+    assert.equal(s.returned, 0);
   });
 });
 

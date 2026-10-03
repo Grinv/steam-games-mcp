@@ -23,12 +23,21 @@ export interface StoreItem {
   name?: string;
   is_free?: boolean;
   best_purchase_option?: {
+    // Exactly one of these identifies WHAT Valve considers the best buy: a
+    // packageid (this app's own package) or a bundleid (a bundle that merely
+    // CONTAINS this app, often alongside another game). See isOwnPackage().
+    packageid?: number;
+    bundleid?: number;
     formatted_final_price?: string;
     formatted_original_price?: string;
     discount_pct?: number;
     // Each active discount carries when it ends (unix seconds); see discountEnd().
     active_discounts?: { discount_end_date?: number }[];
   };
+  // Every purchase option Steam lists for this app, requested by every card
+  // call (storeCardDataRequest's include_all_purchase_options). Same shape as
+  // best_purchase_option, and what ownPurchaseOption() picks from.
+  purchase_options?: NonNullable<StoreItem["best_purchase_option"]>[];
   reviews?: {
     summary_filtered?: {
       review_count?: number;
@@ -206,6 +215,31 @@ function discountEnd(bp: StoreItem["best_purchase_option"]): string | null {
   return ends.length ? isoDateTime(Math.min(...ends)) : null;
 }
 
+/** Whether best_purchase_option prices THIS app rather than a bundle containing
+ *  it. Valve's "best" option is whatever it considers the best value, which is
+ *  routinely a multi-game bundle: measured over Steam's top 500 US sellers,
+ *  5 of 421 priced apps came back at a bundle price — e.g. appid 2186680
+ *  (Warhammer 40,000: Rogue Trader) is $49.99 as package 782856 but reports
+ *  $48.36 as bundle 67187 "The Darkest Grimdark Bundle", alongside another
+ *  game. A bundle price is not this app's price, so anything answering "what
+ *  does this game cost" must check this first. */
+export function isOwnPackage(bp: StoreItem["best_purchase_option"]): boolean {
+  return typeof bp?.packageid === "number";
+}
+
+/** The option that prices THIS app: its own package, falling back to whatever
+ *  Steam called best. Every card request asks for all purchase options so the
+ *  own package is simply there to prefer — measured against fetching it in a
+ *  second, narrower request only for the ~1% of apps that need it, asking up
+ *  front costs ~+40 ms on a 50-app batch (inside run-to-run noise) and ~+300 ms
+ *  on a 200-entry catalog page, which is no better or worse than the extra
+ *  round-trip, so the cheaper thing is the one without a second request to fail.
+ *  The fallback covers an app with no own package at all, sold only inside a
+ *  bundle: a null price there would read as "not sold in this country". */
+export function ownPurchaseOption(it: StoreItem): StoreItem["best_purchase_option"] {
+  return (it.purchase_options ?? []).find(isOwnPackage) ?? it.best_purchase_option;
+}
+
 // Shared discount_pct/discount_end/final/original derivation from
 // best_purchase_option — used by both storeCard's flat price shape and
 // summarizeItems' nested `price` shape, so the two never drift on the
@@ -259,7 +293,7 @@ export function storeCard(
   it: StoreItemWithAppid,
   tagMap?: TagMap,
 ): z.infer<typeof storeCardSchema> {
-  const { final, ...rest } = priceFields(it.best_purchase_option);
+  const { final, ...rest } = priceFields(ownPurchaseOption(it));
   return {
     ...baseCard(it, tagMap),
     ...rest,
@@ -337,7 +371,7 @@ export function storeItemFilter(f: StoreFilters): (it: StoreItem) => boolean {
     )
       return false;
     if (typeof f.minReviews === "number" && (rev?.review_count ?? 0) < f.minReviews) return false;
-    const disc = it.best_purchase_option?.discount_pct ?? 0;
+    const disc = ownPurchaseOption(it)?.discount_pct ?? 0;
     if (typeof f.minDiscount === "number") {
       if (disc < f.minDiscount) return false;
     } else if (f.onSaleOnly && disc <= 0) {

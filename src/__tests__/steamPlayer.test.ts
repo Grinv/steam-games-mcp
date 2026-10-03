@@ -1410,14 +1410,62 @@ describe("STEAM_ID default / vanity resolution", () => {
     assert.ok(mock.calls.some((c) => c.url.includes("GetSteamLevel")));
   });
 
-  // requireSteamId's own "needs a key to resolve" branch (web.ts) is unreachable
-  // from webPlayer.ts tools — requireKey there already gates on the key first.
-  // It's only reachable via a keyless-capable tool (get_followed_games), which
-  // resolves STEAM_ID without requiring a key overall.
-  test("a vanity STEAM_ID without a key errors clearly (needs STEAM_API_KEY to resolve it)", async (t) => {
-    const { client } = await setupServer(t, { STEAM_ID: "gabe" }, router); // no STEAM_API_KEY
+  // A vanity STEAM_ID must not cost the keyless-capable tools their key
+  // independence: with a numeric STEAM_ID, get_followed_games and get_wishlist
+  // work without a key, and ResolveVanityURL (which needs one) is the only
+  // reason they wouldn't. The community profile's ?xml=1 view carries the
+  // SteamID64 keylessly, so they still work.
+  const PROFILE_XML = (steamid: string) =>
+    new Response(`<?xml version="1.0"?><profile><steamID64>${steamid}</steamID64></profile>`, {
+      status: 200,
+      headers: { "content-type": "text/xml" },
+    });
+
+  test("a vanity STEAM_ID resolves without a key, via the community profile", async (t) => {
+    const { client, mock } = await setupServer(t, { STEAM_ID: "gabe" }, (url) =>
+      url.includes("steamcommunity.com") ? PROFILE_XML("76561197960287930") : router(url),
+    ); // no STEAM_API_KEY
     const res = await client.callTool({ name: "get_followed_games", arguments: {} });
-    assertToolError(res, /STEAM_API_KEY/);
+    assert.equal(res.isError, undefined);
+    const call = mock.calls.find((c) => c.url.includes("steamcommunity.com"))!;
+    assert.match(call.url, /steamcommunity\.com\/id\/gabe\/\?xml=1$/);
+    // The official lookup is never attempted without a key to send.
+    assert.ok(!mock.calls.some((c) => c.url.includes("ResolveVanityURL")));
+  });
+
+  test("the keyless fallback also covers a key that the API rejects", async (t) => {
+    // A mistyped key 403ing ResolveVanityURL would otherwise take the keyless
+    // tools down with it, though neither needs a key of its own.
+    const { client } = await setupServer(
+      t,
+      { ...ENV, STEAM_ID: "gabe", HTTP_RETRIES: "0" },
+      (url) => {
+        if (url.includes("steamcommunity.com")) return PROFILE_XML("76561197960287930");
+        if (url.includes("ResolveVanityURL"))
+          return jsonResponse({ error: "nope" }, { status: 403 });
+        return router(url);
+      },
+    );
+    const res = await client.callTool({ name: "get_followed_games", arguments: {} });
+    assert.equal(res.isError, undefined);
+  });
+
+  test("an unresolvable vanity STEAM_ID names the vanity and the numeric way out", async (t) => {
+    // A missing profile answers HTTP 200 with an <error> body and no steamID64.
+    const { client } = await setupServer(t, { STEAM_ID: "nobody-such-vanity" }, (url) =>
+      url.includes("steamcommunity.com")
+        ? new Response(
+            "<response><error>The specified profile could not be found.</error></response>",
+            {
+              status: 200,
+              headers: { "content-type": "text/xml" },
+            },
+          )
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({ name: "get_followed_games", arguments: {} });
+    assertToolError(res, /could not resolve the STEAM_ID vanity name "nobody-such-vanity"/);
+    assertToolError(res, /17-digit SteamID64/);
   });
 
   test("a vanity STEAM_ID that fails to resolve errors clearly", async (t) => {

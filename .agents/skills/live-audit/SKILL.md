@@ -184,6 +184,28 @@ environment supports concurrent subagents/background tasks.
   "unknown" rather than a false `owned:false`? see the 0.10.1 CHANGELOG
   entry for a real prior instance of exactly this bug), a `cc`/`l` pair that
   Steam silently ignores for one endpoint but not another.
+- **The same fact from two tools must agree.** A per-tool sweep passes happily
+  while two tools answer one question differently — nothing in a single call
+  looks wrong. Prices are the live instance: `search_games`/`get_game`/
+  `get_prices` come from the Storefront (`price_overview`/`storesearch`), while
+  `get_items`/`discover_games`/the detailed wishlist come from `GetItems`'
+  purchase options, and the two disagreed by **10x** on appid 3717330 (Yakuza
+  Kiwami: Rp 20 000 vs Rp 120 000) through several audits. So call BOTH
+  families on the same appid and diff the numbers — then settle the tie against
+  what the store page and Steam's own search results actually **render**, not
+  against another JSON field: the search HTML displays `-40% Rp 200 000 Rp
+120 000` while its own `data-price-final` attribute carries the wrong
+  `2000000`, so a side channel agreeing with your code proves nothing. Choose
+  appids that hit each known trap instead of a random popular game: an
+  upgrade-SKU title whose default package group opens with an "Upgrade" sub
+  (3717330; 518790 theHunter: Call of the Wild, which also arrives
+  `is_free: true` on a $19.99 game — check the free/paid flag against the
+  purchase options, not just the amount), one whose best purchase option is a
+  **bundle with another game** (2186680 Warhammer 40,000: Rogue Trader, $48.36
+  for two games vs its own $49.99), a multi-SKU hardware app (1675200 Steam
+  Deck), a 100%-off title (2019300) and a genuinely free one (570). The check
+  generalizes past prices: review %, release date and compat are each reported
+  by more than one tool from more than one upstream.
 - **Not-found / empty-result paths**: a search returning zero results, a
   batch (`get_items`, `get_owned_games`'s `check_appids`) mixing valid +
   invalid + duplicate ids, `find_friends_who_own` when one friend's own
@@ -336,6 +358,17 @@ price_overview`), so the suite agrees with the bug instead of catching it.
   This class is invisible to live testing: you cannot make the upstream 403 on
   cue, and one call in isolation returns the right answer — it is the SECOND
   call that is wrong.
+- A price read that never establishes it prices **this app alone**. Steam
+  offers several answers to "the price" and none of them means that:
+  `appdetails`/`storesearch` fill `price_overview` from the FIRST sub of the
+  default package group (an upgrade SKU sitting there wins), and `GetItems`'
+  `best_purchase_option` is whatever Valve deems best value — routinely a
+  bundle containing this app _and another game_. Every read must go through
+  `isOwnPackage()`/`ownPurchaseOption()` in `format/storeCard.ts` (a
+  `packageid`, never a `bundleid`), so grep any new `best_purchase_option` /
+  `price_overview` dereference for one that skips them — **including inside
+  filters**, where it's silent: `discover_games`' `min_discount` measured
+  against a bundle's discount surfaces full-price games as deals.
 - A shape-only validator (a regex, a bare `z.string()`) whose value then feeds
   a computation that **degrades silently instead of erroring** — `Date.parse`
   → `NaN` makes every `<`/`>` comparison false (filter matches everything), an
@@ -424,6 +457,26 @@ tested `original_price === undefined` and went green, but Steam sends an
 explicit `null`, so live output still read `0.00 USD`. Correct the raw
 response interface from the observed payload too (it declared `number |
 undefined`, a shape Steam never sends).
+
+**When the bug is "we read the wrong upstream field", measure how often the
+wrong one is actually wrong before switching sources — and check what the
+replacement gets wrong.** Generalizing from the one example that exposed the bug
+produces a worse bug: over Steam's top 500 US sellers (421 priced), the
+Storefront price is wrong for 2 apps while `GetItems`' "best" option is a
+multi-game bundle for 5, so the obvious "use the modern API" fix broke more
+prices than it fixed. Sample a few hundred ids, diff the two sources, and read
+the disagreements one by one — they are usually several distinct causes wearing
+one symptom, needing a rule (here: prefer an option naming a `packageid`)
+rather than a swap.
+
+**Measure the cost you cite to justify a design, in the unit that matters.** A
+narrow follow-up request was justified here on payload size (~2.2 KB → ~10.2 KB
+per item) without anyone timing it; measured interleaved, asking up front cost
+~+40 ms on a 50-item batch — inside run-to-run noise — against ~+300 ms for the
+extra round-trip, so the "optimization" was a pessimization plus an extra
+failure path. Interleave the A/B runs (5 each, compare medians AND minimums):
+sequential blocks drift enough on this API to invent a difference that isn't
+there, and a 300-item page showed no difference at all.
 
 **Fixing one site doesn't close the class — sweep every sibling for the same
 pattern.** A confirmed finding is a description of a mistake the codebase is

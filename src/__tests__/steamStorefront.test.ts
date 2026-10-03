@@ -17,6 +17,7 @@ import { APP, ENV, router } from "./steamFixtures.js";
 import { PRICES_MAX } from "../tools/common.js";
 import { StorefrontClient } from "../clients/storefront.js";
 import { loadConfig } from "../config.js";
+import { PRICE_LOOKUP_CHUNK } from "../clients/storeService.js";
 
 test("the server advertises store and player tools", async (t) => {
   const { client } = await setupServer(t, ENV, router);
@@ -461,7 +462,9 @@ describe("get_prices", () => {
   test("getPrices answers an empty appid list instead of throwing on settled[0]", async (t) => {
     const mock = mockFetch(() => jsonResponse({}));
     installFetch(t, mock);
-    const store = new StorefrontClient(loadConfig({}), silentLogger());
+    const store = new StorefrontClient(loadConfig({}), silentLogger(), {
+      getPurchasePrices: async () => ({}),
+    });
     assert.deepEqual(await store.getPrices([]), { count: 0, prices: [] });
     assert.equal(mock.calls.length, 0, "no chunks means no upstream call");
   });
@@ -570,5 +573,300 @@ describe("genuine upstream failures propagate as actionable tool errors", () => 
     );
     const res = await client.callTool({ name: "get_game", arguments: { appid: 620 } });
     assertToolError(res, /invalid json/i);
+  });
+});
+
+// The upgrade-SKU trap: Steam's Storefront API fills appdetails' price_overview
+// and storesearch's price from the FIRST sub of an app's default package group,
+// which for appid 3717330 (Yakuza Kiwami, cc=ID) is the Rp 20 000 upgrade for
+// owners of the Legacy version rather than the Rp 200 000 → Rp 120 000 base
+// game. Numbers taken from live responses on 2026-08-25; see
+// format/storefront.ts's overridePrice() for the full write-up.
+const TRAP_APPID = 3717330;
+const TRAP_PRICE_OVERVIEW = {
+  currency: "IDR",
+  final_formatted: "Rp 20 000",
+  initial_formatted: "", // Steam empties this when it thinks there's no discount
+  discount_percent: 0,
+};
+const TRAP_APP = { name: "Yakuza Kiwami", steam_appid: TRAP_APPID, is_free: false };
+const TRAP_ITEMS = {
+  response: {
+    store_items: [
+      {
+        appid: TRAP_APPID,
+        name: "Yakuza Kiwami",
+        best_purchase_option: {
+          packageid: 1308688, // the base game, not the Rp 20 000 upgrade sub
+          formatted_final_price: "Rp 120 000",
+          formatted_original_price: "Rp 200 000",
+          discount_pct: 40,
+        },
+      },
+    ],
+  },
+};
+
+/** Answer all three Storefront endpoints with the trap app, and GetItems with
+ *  whatever the test wants to see happen to the correction. */
+function trapRouter(items: unknown = TRAP_ITEMS, itemsStatus = 200) {
+  return (url: string) => {
+    if (url.includes("IStoreBrowseService/GetItems"))
+      return jsonResponse(items, { status: itemsStatus });
+    if (url.includes("/api/storesearch"))
+      return jsonResponse({
+        total: 1,
+        items: [
+          {
+            type: "app",
+            name: "Yakuza Kiwami",
+            id: TRAP_APPID,
+            price: { currency: "IDR", initial: 2000000, final: 2000000 },
+          },
+        ],
+      });
+    if (url.includes("/api/appdetails"))
+      return jsonResponse({
+        [String(TRAP_APPID)]: {
+          success: true,
+          data: { ...TRAP_APP, price_overview: TRAP_PRICE_OVERVIEW },
+        },
+      });
+    return jsonResponse({});
+  };
+}
+
+type PriceShape = { currency: string; final: string; initial: string; discount_percent: number };
+
+describe("price_overview correction", () => {
+  test("get_game reports the base game, not the upgrade SKU price_overview names", async (t) => {
+    const { client } = await setupServer(t, ENV, trapRouter());
+    const res = await client.callTool({ name: "get_game", arguments: { appid: TRAP_APPID } });
+    const s = res.structuredContent as { price: PriceShape };
+    assert.equal(s.price.final, "Rp 120 000");
+    assert.equal(s.price.initial, "Rp 200 000");
+    assert.equal(s.price.discount_percent, 40);
+    // GetItems returns no currency code, so this one still comes from appdetails.
+    assert.equal(s.price.currency, "IDR");
+  });
+
+  test("search_games corrects the same trap", async (t) => {
+    const { client } = await setupServer(t, ENV, trapRouter());
+    const res = await client.callTool({ name: "search_games", arguments: { term: "kiwami" } });
+    const s = res.structuredContent as { results: { price: PriceShape }[] };
+    assert.equal(s.results[0]!.price.final, "Rp 120 000");
+    assert.equal(s.results[0]!.price.initial, "Rp 200 000");
+    assert.equal(s.results[0]!.price.discount_percent, 40);
+    assert.equal(s.results[0]!.price.currency, "IDR");
+  });
+
+  test("a zero-result search costs no price lookup", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, (url) =>
+      url.includes("/api/storesearch") ? jsonResponse({ total: 0, items: [] }) : jsonResponse({}),
+    );
+    const res = await client.callTool({ name: "search_games", arguments: { term: "zzzznope" } });
+    assert.equal(res.isError, undefined);
+    assert.equal(
+      mock.calls.filter((c) => c.url.includes("IStoreBrowseService/GetItems")).length,
+      0,
+    );
+  });
+
+  test("get_prices corrects the amounts and keeps currency, is_free and available", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(TRAP_ITEMS);
+      if (url.includes("/api/appdetails"))
+        return jsonResponse({
+          [String(TRAP_APPID)]: { success: true, data: { price_overview: TRAP_PRICE_OVERVIEW } },
+        });
+      return jsonResponse({});
+    });
+    const res = await client.callTool({ name: "get_prices", arguments: { appids: [TRAP_APPID] } });
+    const s = res.structuredContent as {
+      prices: (PriceShape & { available: boolean; is_free: boolean })[];
+    };
+    assert.equal(s.prices[0]!.available, true);
+    assert.equal(s.prices[0]!.is_free, false);
+    assert.equal(s.prices[0]!.final, "Rp 120 000");
+    assert.equal(s.prices[0]!.initial, "Rp 200 000");
+    assert.equal(s.prices[0]!.discount_percent, 40);
+    assert.equal(s.prices[0]!.currency, "IDR");
+  });
+
+  test("a row Steam prices at nothing is left alone, not given the lookup's price", async (t) => {
+    // appdetails omits price_overview for a free (or not-yet-priced) game;
+    // GetItems still quoting a purchase option (a paid bundle/upgrade sub) must
+    // not invent a price for it — overridePrice() only corrects a row that
+    // already has one, so the row stays priced:false.
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(TRAP_ITEMS);
+      if (url.includes("/api/appdetails"))
+        return jsonResponse({ [String(TRAP_APPID)]: { success: true, data: [] } });
+      return jsonResponse({});
+    });
+    const res = await client.callTool({ name: "get_prices", arguments: { appids: [TRAP_APPID] } });
+    const s = res.structuredContent as { prices: { priced?: boolean; final?: string }[] };
+    assert.equal(s.prices[0]!.priced, false);
+    assert.equal(s.prices[0]!.final, undefined);
+  });
+
+  test("a bundle price never overrides — it prices a set of games, not this one", async (t) => {
+    // Measured on Steam's top 500 US sellers: 5 of 421 priced apps report a
+    // bundle as their best purchase option, e.g. appid 2186680 at $48.36 for
+    // "The Darkest Grimdark Bundle" when the game itself is $49.99. Trusting
+    // those would swap a rare wrong price for a commoner one.
+    const { client } = await setupServer(
+      t,
+      ENV,
+      trapRouter({
+        response: {
+          store_items: [
+            {
+              appid: TRAP_APPID,
+              best_purchase_option: {
+                bundleid: 67187, // a bundle containing this app, no packageid
+                formatted_final_price: "Rp 99 000",
+                discount_pct: 60,
+              },
+            },
+          ],
+        },
+      }),
+    );
+    const res = await client.callTool({ name: "get_game", arguments: { appid: TRAP_APPID } });
+    const s = res.structuredContent as { price: PriceShape };
+    assert.equal(s.price.final, "Rp 20 000");
+    assert.equal(s.price.discount_percent, 0);
+  });
+
+  test("a paid own package outranks appdetails flagging the game free", async (t) => {
+    // appdetails calls theHunter: Call of the Wild (appid 518790) free because
+    // its default group opens with the free upgrade for Classic owners, so
+    // get_game reported a $19.99 game as free until the override outranked it.
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("IStoreBrowseService/GetItems"))
+        return jsonResponse({
+          response: {
+            store_items: [
+              {
+                appid: 518790,
+                best_purchase_option: { packageid: 121558, formatted_final_price: "$19.99" },
+              },
+            ],
+          },
+        });
+      if (url.includes("/api/appdetails"))
+        return jsonResponse({
+          "518790": {
+            success: true,
+            data: {
+              name: "theHunter: Call of the Wild",
+              steam_appid: 518790,
+              is_free: true,
+              price_overview: { currency: "USD", final_formatted: "Free", discount_percent: 0 },
+            },
+          },
+        });
+      return jsonResponse({});
+    });
+    const res = await client.callTool({ name: "get_game", arguments: { appid: 518790 } });
+    const s = res.structuredContent as {
+      is_free: boolean;
+      price: PriceShape & { is_free: boolean };
+    };
+    assert.equal(s.price.final, "$19.99");
+    assert.equal(s.price.is_free, false);
+    // The two must agree — a price block saying $19.99 next to is_free:true is
+    // worse than either answer alone.
+    assert.equal(s.is_free, false);
+  });
+
+  test("a genuinely free game GetItems prices at $0.00 gets no override", async (t) => {
+    // Dokimon Quest (appid 2019300): free, and GetItems says so alongside a
+    // $0.00 own package. Overriding would render "Free" as "$0.00".
+    const { client } = await setupServer(
+      t,
+      ENV,
+      trapRouter({
+        response: {
+          store_items: [
+            {
+              appid: TRAP_APPID,
+              is_free: true,
+              best_purchase_option: { packageid: 1789456, formatted_final_price: "$0.00" },
+            },
+          ],
+        },
+      }),
+    );
+    const res = await client.callTool({ name: "get_game", arguments: { appid: TRAP_APPID } });
+    const s = res.structuredContent as { price: PriceShape };
+    assert.equal(s.price.final, "Rp 20 000");
+  });
+
+  test("get_game keeps the Storefront price when the lookup has no option for the appid", async (t) => {
+    const { client } = await setupServer(t, ENV, trapRouter({ response: { store_items: [] } }));
+    const res = await client.callTool({ name: "get_game", arguments: { appid: TRAP_APPID } });
+    const s = res.structuredContent as { price: PriceShape };
+    assert.equal(s.price.final, "Rp 20 000");
+    assert.equal(s.price.discount_percent, 0);
+  });
+
+  test("get_game still answers when the price lookup fails outright", async (t) => {
+    // The correction is an enrichment: losing it must cost the price's accuracy,
+    // never the whole tool call.
+    const { client } = await setupServer(
+      t,
+      { ...ENV, HTTP_RETRIES: "0" },
+      trapRouter({ error: "nope" }, 500),
+    );
+    const res = await client.callTool({ name: "get_game", arguments: { appid: TRAP_APPID } });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { name: string; price: PriceShape };
+    assert.equal(s.name, "Yakuza Kiwami");
+    assert.equal(s.price.final, "Rp 20 000");
+  });
+
+  test("a malformed lookup payload costs the correction, not the tool call", async (t) => {
+    // The shaper throws on a payload its schema rejects; the outer Promise.all
+    // in getGame/getPrices would otherwise turn that into a failed tool call.
+    const { client } = await setupServer(
+      t,
+      ENV,
+      trapRouter({
+        response: {
+          store_items: [
+            {
+              appid: TRAP_APPID,
+              best_purchase_option: { packageid: 1308688, formatted_final_price: 12000 },
+            },
+          ],
+        },
+      }),
+    );
+    const res = await client.callTool({ name: "get_game", arguments: { appid: TRAP_APPID } });
+    assert.equal(res.isError, undefined);
+    assert.equal((res.structuredContent as { price: PriceShape }).price.final, "Rp 20 000");
+  });
+
+  test(`the price lookup chunks at ${PRICE_LOOKUP_CHUNK} appids`, async (t) => {
+    const { client, mock } = await setupServer(t, ENV, () => jsonResponse({}));
+    const appids = Array.from({ length: PRICES_MAX }, (_, i) => i + 1);
+    await client.callTool({ name: "get_prices", arguments: { appids } });
+    const lookups = mock.calls.filter((c) => c.url.includes("IStoreBrowseService/GetItems"));
+    assert.equal(lookups.length, Math.ceil(PRICES_MAX / PRICE_LOOKUP_CHUNK));
+    // Every requested appid appears across the chunks exactly once.
+    const sent = lookups.flatMap(
+      (c) =>
+        (
+          JSON.parse(new URL(c.url).searchParams.get("input_json")!) as {
+            ids: { appid: number }[];
+          }
+        ).ids,
+    );
+    assert.deepEqual(
+      sent.map((i) => i.appid),
+      appids,
+    );
   });
 });

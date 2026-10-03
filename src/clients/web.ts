@@ -58,6 +58,11 @@ import type { Config } from "../config.js";
 
 type Query = Record<string, string | number | boolean | undefined>;
 
+// The community site, used for exactly one thing: resolving a vanity STEAM_ID
+// without a key (see #vanityViaCommunity). Not a config knob — it isn't an API
+// this server otherwise talks to, and there's nothing to point elsewhere.
+const STEAM_COMMUNITY_BASE_URL = "https://steamcommunity.com";
+
 // Failures that say nothing about the resource itself — retrying may well
 // succeed. A catch that flattens these into a definitive "not found"/"no data"
 // answer tells the agent to stop asking about something that does exist.
@@ -104,6 +109,9 @@ export class SteamWebClient {
   readonly #store: StoreServiceClient;
   // Memoised result of resolving a vanity STEAM_ID default to a SteamID64.
   #resolvedDefault: string | undefined;
+  // steamcommunity.com, for the keyless vanity fallback below only — a third
+  // host, so it can't share #http (api.steampowered.com) or its rate limiter.
+  readonly #community: HttpClient;
   /** True when a Steam Web API key is configured; player tools short-circuit otherwise. */
   readonly configured: boolean;
 
@@ -121,6 +129,13 @@ export class SteamWebClient {
       retries: config.httpRetries,
       beforeRequest: () => limiter.acquire(),
       hasCredentials: this.configured,
+    });
+    this.#community = new HttpClient({
+      baseUrl: STEAM_COMMUNITY_BASE_URL,
+      logger,
+      timeoutMs: config.httpTimeoutMs,
+      retries: config.httpRetries,
+      hasCredentials: false,
     });
     this.#cache = new TtlCache(config.cacheTtlMs);
     // Shares this #http/#cache (one rate limiter, one cache) rather than owning
@@ -161,26 +176,46 @@ export class SteamWebClient {
     }
     if (STEAMID64_RE.test(raw)) return raw;
     if (this.#resolvedDefault) return this.#resolvedDefault;
-    if (!this.configured) {
+    // The official lookup when a key is set, the keyless community profile
+    // otherwise — and as a backstop when the keyed attempt fails, since a
+    // mistyped key 403ing here would otherwise take get_wishlist and
+    // get_followed_games down with it, and neither needs a key of its own.
+    const steamid =
+      (this.configured ? await this.#vanityViaApi(raw).catch(() => undefined) : undefined) ??
+      (await this.#vanityViaCommunity(raw).catch(() => undefined));
+    if (!steamid) {
       throw new ApiError({
         code: "bad_request",
         message:
-          `STEAM_ID is a vanity name ("${raw}") which needs a Steam Web API key to resolve. ` +
-          "Set STEAM_API_KEY, or set STEAM_ID to a 17-digit SteamID64 instead.",
-      });
-    }
-    const res = await this.#get<VanityResponse>("ISteamUser/ResolveVanityURL/v1/", {
-      vanityurl: raw,
-    });
-    const steamid = res.response?.steamid;
-    if (res.response?.success !== RESULT_OK || !steamid) {
-      throw new ApiError({
-        code: "bad_request",
-        message: `could not resolve the STEAM_ID vanity name "${raw}" to a SteamID64.`,
+          `could not resolve the STEAM_ID vanity name "${raw}" to a SteamID64 — check the ` +
+          "spelling (it's the part after /id/ in the profile URL, and the profile must exist), " +
+          "or set STEAM_ID to a 17-digit SteamID64 instead.",
       });
     }
     this.#resolvedDefault = steamid;
     return steamid;
+  }
+
+  async #vanityViaApi(vanity: string): Promise<string | undefined> {
+    const res = await this.#get<VanityResponse>("ISteamUser/ResolveVanityURL/v1/", {
+      vanityurl: vanity,
+    });
+    return res.response?.success === RESULT_OK ? res.response.steamid : undefined;
+  }
+
+  /** Keyless vanity resolution: a public profile's `?xml=1` view carries the
+   *  SteamID64, so a vanity STEAM_ID doesn't cost the keyless-capable tools
+   *  (get_wishlist, get_followed_games) their independence from the key — with a
+   *  numeric STEAM_ID they work without one, and they should either way.
+   *  Matched with a regex rather than parsed: one known element in a
+   *  fixed-shape document isn't worth an XML dependency. A missing profile
+   *  answers HTTP 200 with an <error> body and no steamID64, which simply
+   *  yields undefined. */
+  async #vanityViaCommunity(vanity: string): Promise<string | undefined> {
+    const xml = await this.#community.getText(`id/${encodeURIComponent(vanity)}/`, {
+      query: { xml: 1 },
+    });
+    return /<steamID64>(\d{17})<\/steamID64>/.exec(xml)?.[1];
   }
 
   // ---- player data (key required) -------------------------------------------

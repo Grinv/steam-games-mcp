@@ -12,6 +12,8 @@
 
 const STORE = process.env.STEAM_STORE_BASE_URL ?? "https://store.steampowered.com";
 const API = process.env.STEAM_API_BASE_URL ?? "https://api.steampowered.com";
+// Not configurable in the server either — see clients/web.ts's constant.
+const COMMUNITY = "https://steamcommunity.com";
 const KEY = process.env.STEAM_API_KEY;
 const SPACING_MS = 400;
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -290,6 +292,22 @@ const checks = [
       const body = await res.json();
       if (typeof body.response?.metadata?.total_matching_records !== "number")
         throw new Error("missing metadata.total_matching_records");
+    },
+  },
+  {
+    name: "community profile XML (keyless vanity resolution)",
+    run: async () => {
+      // The one non-API host this server uses: clients/web.ts resolves a vanity
+      // STEAM_ID through <steamID64> here when no key is set, so get_wishlist and
+      // get_followed_games keep working without one. Uses Valve's own well-known
+      // vanity ("gabelogannewell") rather than a personal profile.
+      const res = await fetch(`${COMMUNITY}/id/gabelogannewell/?xml=1`, {
+        headers: { Accept: "*/*" },
+      });
+      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+      const xml = await res.text();
+      if (!/<steamID64>\d{17}<\/steamID64>/.test(xml))
+        throw new Error("missing <steamID64> in the profile XML");
     },
   },
 ];

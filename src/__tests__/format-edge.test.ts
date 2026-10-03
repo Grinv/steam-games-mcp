@@ -23,6 +23,7 @@ import {
   ACHIEVEMENTS_MAX,
   GAME_SCHEMA_ACHIEVEMENTS_MAX,
 } from "../format/webAchievements.js";
+import { summarizePurchasePrices } from "../format/store.js";
 
 // Steam frequently omits optional fields; these exercise the sparse-payload
 // fallbacks (?? null / || null / ?? []) so a thin upstream response degrades
@@ -206,6 +207,47 @@ describe("summarizeSearch", () => {
     const s = summarizeSearch({}) as { total: number; results: unknown[] };
     assert.equal(s.total, 0);
     assert.deepEqual(s.results, []);
+  });
+});
+
+describe("summarizePurchasePrices", () => {
+  test("an undiscounted option falls back to final for initial", () => {
+    const s = summarizePurchasePrices({
+      response: {
+        store_items: [
+          {
+            appid: 1,
+            best_purchase_option: { packageid: 7, formatted_final_price: "$9.99", discount_pct: 0 },
+          },
+        ],
+      },
+    });
+    assert.deepEqual(s["1"], { final: "$9.99", initial: "$9.99", discount_percent: 0 });
+  });
+
+  test("items with no own-package option or no appid are skipped, not emitted as nulls", () => {
+    // Skipping is what makes overridePrice() leave the Storefront answer standing
+    // for a free/unreleased/region-locked app instead of blanking its price.
+    const s = summarizePurchasePrices({
+      response: {
+        store_items: [
+          { appid: 1, name: "Free game", is_free: true },
+          {
+            appid: 2,
+            best_purchase_option: { bundleid: 9, formatted_final_price: "$1.00" }, // a bundle
+          },
+          {
+            name: "No appid",
+            best_purchase_option: { packageid: 7, formatted_final_price: "$1.00" },
+          },
+        ],
+      },
+    });
+    assert.deepEqual(s, {});
+  });
+
+  test("empty response → no overrides", () => {
+    assert.deepEqual(summarizePurchasePrices({}), {});
   });
 });
 

@@ -16,12 +16,15 @@ import { wishlistNotFound } from "./shared.schemas.js";
 import {
   discoverGamesOutput,
   getItemsOutput,
+  purchasePricesSchema,
   recommendedGamesFound,
   wishlistDetailedFound,
 } from "./store.schemas.js";
 import {
   baseCard,
   isBaseGame,
+  isOwnPackage,
+  ownPurchaseOption,
   matchesAnyTag,
   priceFields,
   resolveTags,
@@ -107,7 +110,7 @@ export function summarizeItems(
       if (!it || (!it.name && !it.best_purchase_option && !it.reviews && !it.is_free)) {
         return { appid, available: false };
       }
-      const bp = it.best_purchase_option;
+      const bp = ownPurchaseOption(it);
       return {
         ...baseCard(it, tagMap),
         // Always present, so `available` discriminates every row the way
@@ -125,6 +128,43 @@ export function summarizeItems(
       };
     }),
   });
+}
+
+/** The base-game purchase price of each returned appid, keyed by appid, for
+ *  overlaying onto a Storefront-API price (see format/storefront.ts's
+ *  overridePrice() for why that needs correcting). An appid is simply absent
+ *  when GetItems has no purchase option for it — free, unreleased or not sold
+ *  in the requested country — which the caller reads as "keep what the
+ *  Storefront said" rather than as "no price". */
+export type PurchasePrices = z.infer<typeof purchasePricesSchema>;
+
+export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
+  const out: Record<string, z.infer<typeof purchasePricesSchema>[string]> = {};
+  for (const it of r.response?.store_items ?? []) {
+    if (typeof it.appid !== "number") continue;
+    // A bundle price prices a set of games, not this one — correcting a
+    // Storefront price with it would trade a rare wrong answer for a commoner
+    // one (see isOwnPackage()). Skipping leaves the Storefront price standing,
+    // which in every measured bundle case was the right base-game price.
+    if (!isOwnPackage(it.best_purchase_option)) continue;
+    // GetItems' own is_free is the reliable one, and it's what separates a
+    // genuinely free app from one appdetails only THINKS is free: Dokimon Quest
+    // (appid 2019300) is free and priced $0.00 here, while theHunter: Call of
+    // the Wild (518790) carries no is_free and a real $19.99 package. Skipping
+    // the free ones keeps an override meaning "GetItems prices this app as a
+    // paid package of its own", which is what lets it outrank appdetails'
+    // is_free flag in format/storefront.ts's price().
+    if (it.is_free) continue;
+    const { discount_pct, final, original } = priceFields(it.best_purchase_option);
+    if (!final) continue;
+    out[String(it.appid)] = {
+      final,
+      // priceFields already falls back to final; the ?? only satisfies TS.
+      initial: original ?? final,
+      discount_percent: discount_pct,
+    };
+  }
+  return purchasePricesSchema.parse(out);
 }
 
 // ---- IWishlistService/GetWishlistSortedFiltered (enriched wishlist) ----------
@@ -243,7 +283,7 @@ export function summarizeRecommendations(
         !(excludeLower.length && matchesAnyTag(it.tags, tagMap, excludeLower)) &&
         // Client-side discount backstop: like summarizeDiscover, Steam's
         // server-side min_discount_percent no-ops at 100, so re-check here.
-        (minDiscount === undefined || (it.best_purchase_option?.discount_pct ?? 0) >= minDiscount),
+        (minDiscount === undefined || (ownPurchaseOption(it)?.discount_pct ?? 0) >= minDiscount),
     )
     .map((it) => {
       const tags = resolveTags(it.tags, tagMap);
