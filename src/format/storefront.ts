@@ -352,6 +352,10 @@ export function summarizeReviews(
 
 interface FeaturedItem {
   id?: number;
+  // 0 = app. top_sellers also carries bundles (type 2, verified live
+  // 2026-10-03: id 72233 is "Destiny 2: The Collection", a /bundle/ page whose
+  // /app/ URL redirects to the store front), where `id` is a bundle id.
+  type?: number;
   name?: string;
   discounted?: boolean;
   discount_percent?: number;
@@ -378,6 +382,9 @@ function featuredItems(items: FeaturedItem[] | undefined): z.infer<typeof featur
   const seen = new Set<number>();
   const out: z.infer<typeof featuredItemSchema>[] = [];
   for (const i of items ?? []) {
+    // Keep apps only: a bundle's id rendered as `appid` sends the agent to a
+    // broken store_url and makes get_game/get_items fail on it.
+    if (i.type !== undefined && i.type !== 0) continue;
     if (i.id !== undefined) {
       if (seen.has(i.id)) continue;
       seen.add(i.id);

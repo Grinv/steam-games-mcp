@@ -6,12 +6,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Add `get_charts`, keyless: Steam's weekly top sellers, the most-played top 100 and the live concurrent-players top 100, with ranks, movement and appids to pass to `get_items`.
+
 ### Changed
 
 - Bump the MCP TypeScript SDK to 2.3.0; a prompt called with no `arguments` at all now renders instead of failing validation, including `is_it_worth_buying`.
 
 ### Fixed
 
+- Fix `get_featured` listing a bundle among `top_sellers` under its bundle id as an `appid`, with a store link that redirected to the front page; bundles are now left out.
 - Fix a vanity `STEAM_ID` making `get_wishlist` and `get_followed_games` demand an API key, which neither needs for a numeric SteamID64 — the name is now resolved through the keyless community profile, which also covers a key the API rejects.
 - Strip surrounding quotes from environment values, so a config written shell-style (`"STEAM_API_KEY": "'${STEAM_API_KEY}'"`) no longer sends them to Steam and collects a 401/403 that explains nothing.
 - Fix a game being priced at the cost of a bundle it merely belongs to: Warhammer 40,000: Rogue Trader read as $48.36, the total for a two-game bundle, instead of its own $49.99. Steam's "best purchase option" is whatever it deems best value, so the game's own package is now resolved separately.

@@ -62,6 +62,10 @@
     },
     { "name": "get_current_players", "description": "Live concurrent player count." },
     {
+      "name": "get_charts",
+      "description": "Top sellers, most played and live top players on Steam."
+    },
+    {
       "name": "get_wishlist",
       "description": "A player's wishlist: appids, or full store cards with prices, reviews, compat and tags via include_details (public profiles)."
     },

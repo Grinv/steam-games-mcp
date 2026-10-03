@@ -64,11 +64,12 @@ export interface SteamLevelResponse {
   response?: { player_level?: number };
 }
 
-// ECommunityVisibilityState. Without auth (which is how this server calls it),
-// GetPlayerSummaries only ever returns 1 (not visible to us) or 3 (public) —
-// the full 1-5 enum's finer friends/friends-of-friends states all collapse to
-// "not visible" from an anonymous request's point of view, so 3 vs. not-3 is
-// the only distinction the payload actually carries.
+// ECommunityVisibilityState. 3 is public; anything else means this server
+// can't read the profile's data. Steam doesn't stick to 1 for that: a
+// friends-only profile came back as 2 (verified live 2026-10-03 on
+// 76561197960287930), and the 1-5 enum has further friends-of-friends states.
+// So test `=== 3`, never `!== 1` — public vs. not-public is the only
+// distinction this server can act on.
 const VISIBILITY_PUBLIC = 3;
 
 export function summarizePlayer(

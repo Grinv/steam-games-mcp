@@ -70,7 +70,7 @@ describe("e2e (real built bundle over stdio)", () => {
     await client.connect(transport); // real initialize handshake over a spawned process
 
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 25, "every tool should register in the built bundle");
+    assert.equal(tools.length, 26, "every tool should register in the built bundle");
 
     // A player tool without a key must short-circuit with the actionable message
     // (no network) — proving the key gate works through the real binary.
@@ -107,7 +107,7 @@ describe("e2e (real built bundle over stdio)", () => {
     await client.connect(transport);
 
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 25, "every tool should register under the modern era too");
+    assert.equal(tools.length, 26, "every tool should register under the modern era too");
     assert.deepEqual(client.getServerVersion(), { name: "steam-games-mcp", version: VERSION });
 
     const res = await client.callTool({ name: "get_owned_games", arguments: {} });
@@ -232,7 +232,7 @@ describe("e2e (real built bundle over stdio)", () => {
   // `npm test` gate (that's what `check:api` is for).
   async function assertRepresentativeSlice(client: Client): Promise<void> {
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 25, "every tool should register");
+    assert.equal(tools.length, 26, "every tool should register");
 
     const { prompts } = await client.listPrompts();
     assert.equal(prompts.length, 3, "every prompt should register");

@@ -1,5 +1,5 @@
 // Keyless-capable Steam Web API tools: news, global achievement %, current
-// players, and the modern store-service card tools (get_items, discover_games,
+// players, charts, and the modern store-service card tools (get_items, discover_games,
 // get_wishlist, get_followed_games). All work without STEAM_API_KEY; the key is
 // still sent when present (see AGENTS.md's keyless caveat). Split out of a single
 // tools/web.ts once it grew past ~550 lines — see tools/webPlayer.ts for the
@@ -41,6 +41,7 @@ import {
   getGameNewsOutput,
   wishlistLightFound,
 } from "../format/web.schemas.js";
+import { getChartsOutput, chartSchema } from "../format/charts.schemas.js";
 import { getGlobalAchievementsOutput } from "../format/webAchievements.schemas.js";
 
 // get_wishlist dispatches to the light summarizer (format/web.ts) or the
@@ -311,6 +312,40 @@ export function registerStoreWebTools(
       annotations: READ_ONLY,
     },
     ({ appid: id }) => reply(() => web.getCurrentPlayers(id)),
+  );
+
+  server.registerTool(
+    "get_charts",
+    {
+      title: "Get Steam charts",
+      description:
+        "Get what is popular on Steam right now as a ranked list. `chart` picks one: top_sellers " +
+        "(weekly best-sellers, with weeks on chart), most_played (top 100 by peak players on the " +
+        "last full day, with the rank a week earlier) or concurrent_players (top 100 by players " +
+        "in game right now, live). Use for 'what's hot / top selling / most played on Steam'; for " +
+        "one known game's live count use get_current_players, for the store front page's curated " +
+        "sections (also hardware and bundles) use get_featured, to FILTER the catalog by discount, " +
+        "tags or compat use discover_games. Returns only rank, appid, name, store_url and chart " +
+        "metrics (no price/reviews/Deck status) — pass the appids to get_items for those. " +
+        "`last_week_rank` null means a new entry; concurrent_players has none. Player-chart names " +
+        "come from a best-effort lookup and may be null. Results are cached for a few minutes. " +
+        "All three are global rankings (the same in every country). No API key required.",
+      inputSchema: z.strictObject({
+        chart: chartSchema.describe(
+          "top_sellers = weekly best-sellers; most_played = yesterday's peak players; " +
+            "concurrent_players = live players now.",
+        ),
+        limit: z
+          .int()
+          .positive()
+          .max(100)
+          .describe("How many top entries to return (1-100). Default 20.")
+          .default(20),
+      }),
+      outputSchema: getChartsOutput,
+      annotations: READ_ONLY,
+    },
+    ({ chart, limit }) => reply(() => store.getCharts(chart, { limit })),
   );
 
   server.registerTool(

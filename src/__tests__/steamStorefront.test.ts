@@ -26,6 +26,7 @@ test("the server advertises store and player tools", async (t) => {
     "search_games",
     "get_game",
     "get_specials",
+    "get_charts",
     "get_player_summary",
     "resolve_vanity_url",
   ]) {
@@ -283,6 +284,30 @@ test("get_featured returns all four store sections, defaulting missing ones to e
   // an absent section degrades to [] rather than throwing/undefined.
   assert.deepEqual(s.new_releases, []);
   assert.deepEqual(s.coming_soon, []);
+});
+
+test("get_featured drops bundle entries, whose id isn't an appid", async (t) => {
+  // Live top_sellers carries bundles as type 2 (e.g. 72233, Destiny 2: The
+  // Collection); emitting that id as an appid gives a store_url that redirects
+  // to the front page and an appid get_game can't resolve.
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("/api/featuredcategories")
+      ? jsonResponse({
+          top_sellers: {
+            items: [
+              { id: 620, type: 0, name: "Portal 2", final_price: 999, currency: "USD" },
+              { id: 72233, type: 2, name: "Destiny 2: The Collection", final_price: 2054 },
+            ],
+          },
+        })
+      : router(url),
+  );
+  const res = await client.callTool({ name: "get_featured", arguments: {} });
+  const s = res.structuredContent as { top_sellers: { appid: number }[] };
+  assert.deepEqual(
+    s.top_sellers.map((i) => i.appid),
+    [620],
+  );
 });
 
 describe("get_prices", () => {

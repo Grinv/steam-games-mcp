@@ -40,7 +40,7 @@ Valve/Steam hosts, carrying only what that specific call needs:
   `get_featured`).
 - **Steam Web API** (`api.steampowered.com`), used for player data
   (profiles, libraries, achievements, friends) and several keyless endpoints:
-  news, global achievement rates, current player counts, a player's wishlist
+  news, global achievement rates, current player counts, the top-sellers / most-played / live-players charts, a player's wishlist
   and followed games, and the modern store-card services behind `get_items`,
   `discover_games`, `get_recommended_games` and `get_wishlist`'s detailed
   cards. When `STEAM_API_KEY`

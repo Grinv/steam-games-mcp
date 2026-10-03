@@ -141,6 +141,7 @@ Key: **–** no credentials · **K** Steam Web API key.
 | `get_game_news`           | –   | Recent news / patch notes                                                                                                                                        |
 | `get_global_achievements` | –   | Global achievement unlock rates (rarity) — top 200                                                                                                               |
 | `get_current_players`     | –   | Live concurrent player count                                                                                                                                     |
+| `get_charts`              | –   | What's popular now: weekly top sellers, most played, live concurrent top 100 (ranks + appids; price/reviews via `get_items`)                                     |
 | `get_wishlist`            | –   | A player's wishlist — appids, or full cards + on-sale filter with `include_details` (public profiles)                                                            |
 | `get_followed_games`      | –   | A player's followed games (Steam's "follow" feature, separate from the wishlist) — appids (public profiles)                                                      |
 | `get_game_achievements`   | K   | Achievement list (names, descriptions) + rarity — first 150, definition order                                                                                    |
