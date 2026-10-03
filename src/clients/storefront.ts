@@ -100,32 +100,37 @@ export class StorefrontClient {
   ): Promise<Record<string, unknown>> {
     const cc = country ?? this.#cc;
     const l = language ?? this.#l;
-    return this.#cache.wrapStaleOnError(`app:${appid}:${cc}:${l}`, async () => {
-      // In parallel, not sequentially: the appid is already known, so correcting
-      // the price costs a request but no extra wall-clock. Both land inside this
-      // cache entry, so a hit still makes zero upstream calls.
-      const [res, prices] = await Promise.all([
-        this.#http.getJson<AppDetailsResponse>("api/appdetails", {
+    // In parallel, not sequentially: the appid is already known, so correcting
+    // the price costs a request but no extra wall-clock. The price lookup stays
+    // OUTSIDE this cache entry: getPurchasePrices degrades a failed GetItems to
+    // "no corrections" rather than throwing, so inside the wrapper that
+    // degraded answer would be cached — serving the uncorrected Storefront
+    // price for the whole TTL, over any good stale entry. It caches its own
+    // successful responses instead, so a warm hit still makes no upstream call.
+    const [data, prices] = await Promise.all([
+      this.#cache.wrapStaleOnError(`app:${appid}:${cc}:${l}`, async () => {
+        const res = await this.#http.getJson<AppDetailsResponse>("api/appdetails", {
           query: { appids: appid, cc, l },
-        }),
-        this.#pricing.getPurchasePrices([appid], cc, l),
-      ]);
-      const entry = res[String(appid)];
-      if (!entry?.success || !entry.data) {
-        // appdetails answers {success:false} both for "no such app" and for "not
-        // sold in this country", so naming only the first sends the agent off to
-        // re-search a perfectly good appid. Confirmed live: appid 1174180 (Red
-        // Dead Redemption 2) is a full record under cc=US and success:false
-        // under cc=RU.
-        throw new ApiError({
-          code: "not_found",
-          message:
-            `No Steam app with id ${appid} in region ${cc.toUpperCase()} — either the appid ` +
-            `doesn't exist, or it isn't available in that country (try another \`country\`).`,
         });
-      }
-      return detailApp(entry.data, prices[String(appid)]);
-    });
+        const entry = res[String(appid)];
+        if (!entry?.success || !entry.data) {
+          // appdetails answers {success:false} both for "no such app" and for "not
+          // sold in this country", so naming only the first sends the agent off to
+          // re-search a perfectly good appid. Confirmed live: appid 1174180 (Red
+          // Dead Redemption 2) is a full record under cc=US and success:false
+          // under cc=RU.
+          throw new ApiError({
+            code: "not_found",
+            message:
+              `No Steam app with id ${appid} in region ${cc.toUpperCase()} — either the appid ` +
+              `doesn't exist, or it isn't available in that country (try another \`country\`).`,
+          });
+        }
+        return entry.data;
+      }),
+      this.#pricing.getPurchasePrices([appid], cc, l),
+    ]);
+    return detailApp(data, prices[String(appid)]);
   }
 
   // Not cached: reviews are paginated and change as users post. `reviewLanguage`

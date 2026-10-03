@@ -675,6 +675,33 @@ describe("price_overview correction", () => {
     assert.equal(s.price.currency, "IDR");
   });
 
+  test("a failed price lookup isn't cached into get_game: the next call corrects it", async (t) => {
+    // getPurchasePrices degrades a failed GetItems to "no corrections" instead
+    // of throwing. Inside get_game's cache entry that degraded answer used to
+    // be stored, pinning the upgrade-SKU price for the whole TTL.
+    let itemsUp = false;
+    const base = trapRouter();
+    const { client, mock } = await setupServer(t, ENV, (url) =>
+      url.includes("IStoreBrowseService/GetItems") && !itemsUp
+        ? jsonResponse({}, { status: 500 })
+        : base(url),
+    );
+    const call = async () =>
+      (
+        (await client.callTool({ name: "get_game", arguments: { appid: TRAP_APPID } }))
+          .structuredContent as { price: PriceShape }
+      ).price;
+    assert.equal((await call()).final, "Rp 20 000");
+    itemsUp = true;
+    assert.equal((await call()).final, "Rp 120 000");
+    // appdetails itself stayed cached; only the price lookup was retried.
+    assert.equal(mock.calls.filter((c) => c.url.includes("/api/appdetails")).length, 1);
+    // ...and a successful lookup is cached in turn: no further GetItems call.
+    const before = mock.calls.length;
+    assert.equal((await call()).final, "Rp 120 000");
+    assert.equal(mock.calls.length, before);
+  });
+
   test("search_games corrects the same trap", async (t) => {
     const { client } = await setupServer(t, ENV, trapRouter());
     const res = await client.callTool({ name: "search_games", arguments: { term: "kiwami" } });

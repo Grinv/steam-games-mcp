@@ -279,18 +279,26 @@ export class StoreServiceClient {
     const chunks: number[][] = [];
     for (let i = 0; i < appids.length; i += PRICE_LOOKUP_CHUNK)
       chunks.push(appids.slice(i, i + PRICE_LOOKUP_CHUNK));
+    // `wrap`, not `wrapStaleOnError`: it caches only a request that succeeded,
+    // so a failed chunk is retried on the next call instead of pinning "no
+    // corrections" for the TTL (callers such as getGame rely on that, since
+    // they keep this lookup outside their own cache entry for that reason).
     const settled = await Promise.allSettled(
       chunks.map((chunk) =>
-        this.#get<StoreItemsResponse>(
-          "IStoreBrowseService/GetItems/v1/",
-          {
-            input_json: JSON.stringify({
-              ids: chunk.map((appid) => ({ appid })),
-              context,
-              data_request: {},
-            }),
-          },
-          { hasCredentials: false },
+        this.#cache.wrap(
+          `purchase:${context.country_code}:${context.language}:${chunk.join(",")}`,
+          () =>
+            this.#get<StoreItemsResponse>(
+              "IStoreBrowseService/GetItems/v1/",
+              {
+                input_json: JSON.stringify({
+                  ids: chunk.map((appid) => ({ appid })),
+                  context,
+                  data_request: {},
+                }),
+              },
+              { hasCredentials: false },
+            ),
         ),
       ),
     );
