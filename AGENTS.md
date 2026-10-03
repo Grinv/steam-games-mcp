@@ -134,6 +134,10 @@ dist/src-*.mjs`'s `standardSchemaToJsonSchema`) — one of these types reaching
   scripts (use the Node helper scripts).
 - **Commits:** author/committer `Grinv <4070730+Grinv@users.noreply.github.com>`;
   do **not** add a `Co-Authored-By` trailer.
+- **Work directly on `main`** — single-developer repo, so no feature branches
+  (a forgotten branch silently drifts: one sat unmerged for a month and needed
+  a conflicted rebase to land). Commit straight to `main`; only branch if the
+  maintainer explicitly asks for one.
 - **CodeQL** (`.github/workflows/codeql.yml`) scans `javascript-typescript` on
   push/PR to main plus a weekly cron — no local equivalent command; findings
   surface under the repo's **Security → Code scanning** tab.
