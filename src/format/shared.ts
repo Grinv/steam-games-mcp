@@ -51,12 +51,33 @@ export function hours(minutes: number | undefined): number | null {
   return typeof minutes === "number" ? Math.round((minutes / 60) * 10) / 10 : null;
 }
 
-// Strip HTML tags from store descriptions / requirements blobs.
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+// Steam's text fields arrive HTML-escaped (Portal 2's short_description:
+// `The &quot;Perpetual Testing Initiative&quot;`). One pass, so `&amp;quot;`
+// decodes to the literal `&quot;` it encodes rather than to `"`. Unknown
+// entities are left as they are.
+function decodeEntities(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] !== "#") return NAMED_ENTITIES[e.toLowerCase()] ?? m;
+    const code = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1));
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : m;
+  });
+}
+
+// Strip HTML tags from store descriptions / requirements blobs, then decode
+// entities (after, so an escaped `&lt;b&gt;` stays text instead of becoming a
+// tag to strip).
 export function stripHtml(s: string | undefined): string | null {
   if (!s) return null;
   return (
-    s
-      .replace(/<[^>]+>/g, " ")
+    decodeEntities(s.replace(/<[^>]+>/g, " "))
       .replace(/\s+/g, " ")
       .trim() || null
   );

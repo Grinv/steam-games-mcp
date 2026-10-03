@@ -160,7 +160,7 @@ export function detailApp(a: StoreApp, override?: PriceOverride): z.infer<typeof
     appid: a.steam_appid,
     name: a.name,
     type: a.type ?? null,
-    short_description: a.short_description || null,
+    short_description: stripHtml(a.short_description),
     // Deliberately not `a.is_free` alone: see price()'s note on appdetails
     // flagging a paid game free. These two must never disagree.
     is_free: override ? false : (a.is_free ?? false),

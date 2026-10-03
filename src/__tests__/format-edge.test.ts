@@ -24,11 +24,25 @@ import {
   GAME_SCHEMA_ACHIEVEMENTS_MAX,
 } from "../format/webAchievements.js";
 import { summarizePurchasePrices } from "../format/store.js";
-import { storeReleaseDay } from "../format/shared.js";
+import { storeReleaseDay, stripHtml } from "../format/shared.js";
 
 // Steam frequently omits optional fields; these exercise the sparse-payload
 // fallbacks (?? null / || null / ?? []) so a thin upstream response degrades
 // gracefully instead of crashing or emitting undefined.
+
+describe("stripHtml", () => {
+  test("decodes HTML entities Steam leaves in text fields", () => {
+    assert.equal(
+      stripHtml("The &quot;Perpetual Testing Initiative&quot; &amp; co&#39;s &#x2014; new"),
+      `The "Perpetual Testing Initiative" & co's \u2014 new`,
+    );
+  });
+
+  test("decodes in one pass and keeps escaped markup as text", () => {
+    assert.equal(stripHtml("&amp;quot; &lt;b&gt;bold&lt;/b&gt; <i>x</i>"), "&quot; <b>bold</b> x");
+    assert.equal(stripHtml("&bogus; &#0;"), "&bogus; &#0;");
+  });
+});
 
 describe("storeReleaseDay", () => {
   test("reports the store's Pacific-time date, not the timestamp's UTC day", () => {
