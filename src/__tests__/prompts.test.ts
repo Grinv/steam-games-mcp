@@ -184,7 +184,7 @@ describe("prompts", () => {
     // also what keeps free text out of the rendered message entirely.
     const { client, close } = await connectServer(ENV);
     t.after(close);
-    for (const budget of ["cheap", "not much", "20 dollars please", ""]) {
+    for (const budget of ["cheap", "not much", "20 dollars please"]) {
       await assert.rejects(
         () => client.getPrompt({ name: "what_should_i_play", arguments: { budget } }),
         /budget/,
@@ -195,6 +195,24 @@ describe("prompts", () => {
     for (const budget of ["20", "19.99", "$20", "1500 RUB", "15€"]) {
       const res = await client.getPrompt({ name: "what_should_i_play", arguments: { budget } });
       assert.match((res.messages[0]!.content as { text: string }).text, /priced above/, budget);
+    }
+  });
+
+  test("what_should_i_play treats a blank budget or steamid as not given", async (t) => {
+    // Prompt arguments are strings, and a client's form can send "" for a field
+    // the user left empty; that used to fail validation outright.
+    const { client, close } = await connectServer(ENV);
+    t.after(close);
+    const blanks: Record<string, string>[] = [
+      { budget: "" },
+      { budget: "   " },
+      { steamid: "" },
+      { steamid: "  " },
+    ];
+    for (const args of blanks) {
+      const res = await client.getPrompt({ name: "what_should_i_play", arguments: args });
+      const text = (res.messages[0]!.content as { text: string }).text;
+      assert.doesNotMatch(text, /priced above|free-to-play|for steamid/, JSON.stringify(args));
     }
   });
 

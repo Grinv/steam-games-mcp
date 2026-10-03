@@ -72,16 +72,30 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
       title: "What should I play next?",
       description:
         "Recommend games from the Steam catalog based on a player's library and taste, excluding what they already own.",
+      // Blank (empty or whitespace-only) means "not given" for every argument
+      // here, as in deals_digest: prompt arguments are strings, and a client's
+      // form can send "" for a field the user left empty.
       argsSchema: z.strictObject({
-        steamid: steamId64Base
+        steamid: z
+          .string()
+          .trim()
+          .superRefine((v, ctx) => {
+            if (v === "") return;
+            const r = steamId64Base.safeParse(v);
+            if (!r.success) ctx.addIssue({ code: "custom", message: r.error.issues[0]!.message });
+          })
           .describe(
-            "SteamID64 whose library to base taste on. Omit to use the configured STEAM_ID.",
+            "SteamID64 whose library to base taste on. Omit (or leave blank) to use the " +
+              "configured STEAM_ID.",
           )
           .optional(),
         budget: z
           .string()
           .trim()
-          .refine(isBudget, "Use an amount like '20', '$19.99' or '1500 RUB', or 'free'.")
+          .refine(
+            (v) => v === "" || isBudget(v),
+            "Use an amount like '20', '$19.99' or '1500 RUB', or 'free'.",
+          )
           .describe(
             "Max price as an amount, e.g. '20' or '$19.99' — a bare word like 'cheap' is " +
               "rejected, since it can't be applied to a price. Or 'free' for free-to-play " +
