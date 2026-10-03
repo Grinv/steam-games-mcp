@@ -297,7 +297,10 @@ export class SteamWebClient {
       include_appinfo: true,
       include_played_free_games: true,
     });
-    return summarizeOwnedGames(res, { checkAppids, ...opts });
+    // Deduped: each `owns` row answers one appid, so a repeated one only
+    // repeated the row.
+    const unique = checkAppids && [...new Set(checkAppids)];
+    return summarizeOwnedGames(res, { checkAppids: unique, ...opts });
   }
 
   async getRecentlyPlayed(steamid: string): Promise<Record<string, unknown>> {
@@ -515,7 +518,11 @@ export class SteamWebClient {
   // high enough that a normal friend list still resolves in a few round-trips.
   static readonly #FRIEND_LOOKUP_CONCURRENCY = 10;
 
-  async findFriendsWhoOwn(steamid: string, appids: number[]): Promise<Record<string, unknown>> {
+  async findFriendsWhoOwn(steamid: string, requested: number[]): Promise<Record<string, unknown>> {
+    // Deduped before anything else: the shaper emits one match per listed
+    // appid and adds each friend once per listing, so [620, 620] used to
+    // report every owner twice in each of two identical matches.
+    const appids = [...new Set(requested)];
     const res = await this.#friendsRaw(steamid);
     if (res === null) return notFound(PRIVATE_FRIENDS_REASON);
     const allIds = friendIdsOf(res);

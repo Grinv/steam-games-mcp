@@ -191,6 +191,28 @@ describe("get_owned_games", () => {
     ]);
   });
 
+  test("get_owned_games: a repeated check_appids entry gets one owns row", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetOwnedGames")
+        ? jsonResponse({
+            response: {
+              game_count: 1,
+              games: [{ appid: 620, name: "Portal 2", playtime_forever: 600 }],
+            },
+          })
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_owned_games",
+      arguments: { steamid: "76561197960287930", check_appids: [620, 620, 999] },
+    });
+    const s = res.structuredContent as { owns: { appid: number }[] };
+    assert.deepEqual(
+      s.owns.map((o) => o.appid),
+      [620, 999],
+    );
+  });
+
   test(`get_owned_games rejects a limit past ${OWNED_GAMES_LIMIT_MAX} before calling the upstream`, async (t) => {
     // The ceiling is a response-size budget, not an upstream one: measured live,
     // an owned-games row is ~95 chars, so the previous 1000 produced a ~95 KB
@@ -942,6 +964,23 @@ describe("find_friends_who_own", () => {
     const byId = new Map(s.matches[0]!.owners.map((o) => [o.steamid, o.name]));
     assert.equal(byId.get(inChunk1), `Friend ${inChunk1}`);
     assert.equal(byId.get(inChunk2), null);
+  });
+
+  test("find_friends_who_own counts each owner once when an appid is repeated", async (t) => {
+    // [620, 620] used to give two identical matches, each listing every owner twice.
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("GetFriendList")) return jsonResponse(FRIENDLIST);
+      if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
+      if (url.includes("GetOwnedGames")) return jsonResponse(OWNED);
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [620, 620], steamid: "76561197960287930" },
+    });
+    const s = res.structuredContent as { matches: { appid: number; owners: unknown[] }[] };
+    assert.equal(s.matches.length, 1);
+    assert.equal(s.matches[0]!.owners.length, 2);
   });
 
   test("find_friends_who_own caps how many friends it looks up, and says how many that was", async (t) => {
