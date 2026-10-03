@@ -59,7 +59,12 @@ export interface Config {
 // unsubstituted placeholder (e.g. "${user_config.steam_id}") rather than "".
 // Such a value is non-empty, so without this it would be taken as a real key /
 // SteamID — making web.configured true and sending garbage to Steam (→ 403).
-const UNSUBSTITUTED_PLACEHOLDER = /^\$\{[^}]*\}$/;
+// The unbraced shell form ($STEAM_API_KEY) and the Windows one (%STEAM_API_KEY%)
+// are just as literal when a JSON config never ran them through a shell, and no
+// real value here can take either shape: keys are hex, SteamIDs digits, vanity
+// names exclude `$`/`%`, and the base URLs start with a scheme. Matched against
+// the trimmed value, so a placeholder padded inside its quotes still counts.
+const UNSUBSTITUTED_PLACEHOLDER = /^(?:\$\{[^}]*\}|\$[A-Za-z_]\w*|%[A-Za-z_]\w*%)$/;
 
 // One layer of surrounding quotes, as left by shell-style quoting inside a JSON
 // config ("STEAM_API_KEY": "'${STEAM_API_KEY}'") or by a copy-pasted `export`
@@ -76,7 +81,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     Object.entries(env)
       .map(([k, v]) => [k, typeof v === "string" ? v.replace(SURROUNDING_QUOTES, "$2") : v])
       .filter(
-        ([, v]) => typeof v === "string" && v.trim() !== "" && !UNSUBSTITUTED_PLACEHOLDER.test(v),
+        ([, v]) =>
+          typeof v === "string" && v.trim() !== "" && !UNSUBSTITUTED_PLACEHOLDER.test(v.trim()),
       ),
   );
   const parsed = EnvSchema.parse(cleaned);

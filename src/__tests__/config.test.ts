@@ -40,6 +40,13 @@ describe("loadConfig", () => {
     assert.equal(c.steamApiKey, undefined);
   });
 
+  test("unbraced, Windows-style and padded placeholders are unset too", () => {
+    // $VAR without braces used to go to Steam as a literal key (→ 403).
+    for (const v of ["$STEAM_API_KEY", "%STEAM_API_KEY%", "' ${STEAM_API_KEY} '", "  $KEY  "]) {
+      assert.equal(loadConfig({ STEAM_API_KEY: v }).steamApiKey, undefined, v);
+    }
+  });
+
   test("quotes inside a value are left alone", () => {
     // Only one matching, surrounding pair is stripped — an apostrophe in the
     // middle of a value is content, not quoting.
