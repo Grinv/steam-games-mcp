@@ -237,6 +237,11 @@ export function isOwnPackage(bp: StoreItem["best_purchase_option"]): boolean {
  *  The fallback covers an app with no own package at all, sold only inside a
  *  bundle: a null price there would read as "not sold in this country". */
 export function ownPurchaseOption(it: StoreItem): StoreItem["best_purchase_option"] {
+  // A free app has no price of its own: Steam sends no best_purchase_option for
+  // it, and every package in purchase_options is a paid ADD-ON (verified live
+  // 2026-10-03: Counter-Strike 2's Prime Status Upgrade, $14.99; AION 2's
+  // founder's packs). Picking one priced CS2 at $14.99 next to is_free:true.
+  if (it.is_free) return it.best_purchase_option;
   return (it.purchase_options ?? []).find(isOwnPackage) ?? it.best_purchase_option;
 }
 

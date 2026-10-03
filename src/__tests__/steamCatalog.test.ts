@@ -586,6 +586,30 @@ describe("bundle prices", () => {
     assert.equal(s.items[0]!.price.final, "$48.36");
   });
 
+  test("a free-to-play app isn't priced at one of its paid add-on packages", async (t) => {
+    // Live shape (Counter-Strike 2): is_free, no best_purchase_option, and the
+    // Prime Status Upgrade as a packageid-bearing purchase option.
+    const f2p = {
+      response: {
+        store_items: [
+          {
+            appid: 730,
+            name: "Counter-Strike 2",
+            is_free: true,
+            purchase_options: [
+              { packageid: 54029, formatted_final_price: "$14.99", discount_pct: 0 },
+            ],
+          },
+        ],
+      },
+    };
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, serve(f2p));
+    const res = await client.callTool({ name: "get_items", arguments: { appids: [730] } });
+    const s = res.structuredContent as { items: { is_free: boolean; price: unknown }[] };
+    assert.equal(s.items[0]!.is_free, true);
+    assert.deepEqual(s.items[0]!.price, { is_free: true });
+  });
+
   test("discover_games filters on the game's own discount, not the bundle's", async (t) => {
     // The bundle is 28% off while the game itself isn't discounted at all, so a
     // min_discount of 20 must not surface it as a deal.
