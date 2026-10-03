@@ -12,6 +12,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Lower `discover_games`' and the detailed `get_wishlist`'s card cap from 60 to 50: grown store cards had pushed both to 33-35 KB, the edge of what MCP clients accept. Filters still apply before the cap, and `matched` reports the full count. ([7500a64](https://github.com/Grinv/steam-games-mcp/commit/7500a64))
 - Bump the MCP TypeScript SDK to 2.3.0; a prompt called with no `arguments` at all now renders instead of failing validation, including `is_it_worth_buying`.
 
 ### Fixed
