@@ -21,6 +21,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Strip surrounding quotes from environment values, so a config written shell-style (`"STEAM_API_KEY": "'${STEAM_API_KEY}'"`) no longer sends them to Steam and collects a 401/403 that explains nothing.
 - Fix a game being priced at the cost of a bundle it merely belongs to: Warhammer 40,000: Rogue Trader read as $48.36, the total for a two-game bundle, instead of its own $49.99. Steam's "best purchase option" is whatever it deems best value, so the game's own package is now resolved separately.
 - Fix every Storefront-sourced price naming the first package of a game's default group instead of its base game: Yakuza Kiwami read as Rp 20 000, the upgrade sold to owners of the Legacy version, rather than Rp 200 000 → Rp 120 000 (−40%), and theHunter: Call of the Wild read as free. Prices now come from the store-browse service, using only an option that prices the game itself — Steam's "best" option is often a bundle with another game.
+- Fix `get_items`, `discover_games` and the detailed wishlist pricing a free-to-play game at one of its paid add-ons: Counter-Strike 2 read as free and $14.99 at once, the Prime Status Upgrade. ([ed60431](https://github.com/Grinv/steam-games-mcp/commit/ed60431))
+- Fix store-card release dates landing a day late for games released in the Pacific evening: Portal 2 read 2011-04-19, while the store page shows Apr 18. ([dbca8f3](https://github.com/Grinv/steam-games-mcp/commit/dbca8f3))
+- Fix `find_friends_who_own` counting every owner twice, in two identical matches, when an appid is listed twice; `get_owned_games`' `check_appids` likewise repeated its row. ([53ceb3b](https://github.com/Grinv/steam-games-mcp/commit/53ceb3b))
+- Decode HTML entities in `get_game`'s `short_description` and in news excerpts and system requirements, which read `&quot;` for a quote. ([659e49f](https://github.com/Grinv/steam-games-mcp/commit/659e49f))
+- Fix `what_should_i_play` rejecting a blank `budget` or `steamid`, which a client's prompt form can send for a field left empty; blank now means not given, as in the other prompts. ([d72bdc8](https://github.com/Grinv/steam-games-mcp/commit/d72bdc8))
+- Treat an unsubstituted `$STEAM_API_KEY`, `%STEAM_API_KEY%` or space-padded placeholder in the config as unset, instead of sending it to Steam as a key and collecting a 403. ([ba0323f](https://github.com/Grinv/steam-games-mcp/commit/ba0323f))
 
 ## [0.14.0] - 2026-09-20
 
