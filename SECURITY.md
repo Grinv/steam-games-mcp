@@ -23,9 +23,9 @@
 - **No data is kept between requests beyond a small TTL cache** (`CACHE_TTL_MS`,
   default 5 minutes) of non-personal store/catalog responses (game details,
   review histogram, tag dictionary, the featured/specials payload, the
-  top-sellers / most-played / live-players charts, the purchase-option lookups
-  that correct Storefront prices, global achievement percentages and a game's
-  achievement schema). Player-specific responses (profile, library,
+  top-sellers / most-played / live-players charts, `get_game`'s price
+  correction, global achievement percentages and a game's achievement
+  schema). Player-specific responses (profile, library,
   achievements, friends) are never cached, with two exceptions:
   `get_player_summary`'s numeric Steam level is cached for up to
   `CACHE_TTL_MS` keyed by SteamID, since it's non-sensitive and rarely

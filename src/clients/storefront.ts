@@ -33,7 +33,12 @@ type AppDetailsResponse = Record<string, { success?: boolean; data?: StoreApp }>
  *  Declared as a narrow interface rather than importing the class, so the
  *  Storefront client stays independent of the Web API client it's wired to. */
 export interface PurchasePriceSource {
-  getPurchasePrices(appids: number[], country?: string, language?: string): Promise<PurchasePrices>;
+  getPurchasePrices(
+    appids: number[],
+    country?: string,
+    language?: string,
+    opts?: { cache?: boolean },
+  ): Promise<PurchasePrices>;
 }
 
 export class StorefrontClient {
@@ -128,7 +133,7 @@ export class StorefrontClient {
         }
         return entry.data;
       }),
-      this.#pricing.getPurchasePrices([appid], cc, l),
+      this.#pricing.getPurchasePrices([appid], cc, l, { cache: true }),
     ]);
     return detailApp(data, prices[String(appid)]);
   }

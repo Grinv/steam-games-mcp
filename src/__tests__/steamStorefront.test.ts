@@ -702,6 +702,37 @@ describe("price_overview correction", () => {
     assert.equal(mock.calls.length, before);
   });
 
+  test("get_prices never serves a cached correction over its fresh Storefront row", async (t) => {
+    // get_prices fetches appdetails fresh; a correction cached for the TTL
+    // would hide a sale that started since the last call.
+    let discount = 0;
+    const items = () => ({
+      response: {
+        store_items: [
+          {
+            ...TRAP_ITEMS.response.store_items[0],
+            best_purchase_option: {
+              ...TRAP_ITEMS.response.store_items[0]!.best_purchase_option,
+              discount_pct: discount,
+            },
+          },
+        ],
+      },
+    });
+    const base = trapRouter();
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("IStoreBrowseService/GetItems") ? jsonResponse(items()) : base(url),
+    );
+    const pct = async () =>
+      (
+        (await client.callTool({ name: "get_prices", arguments: { appids: [TRAP_APPID] } }))
+          .structuredContent as { prices: { discount_percent: number }[] }
+      ).prices[0]!.discount_percent;
+    assert.equal(await pct(), 0);
+    discount = 40;
+    assert.equal(await pct(), 40);
+  });
+
   test("search_games corrects the same trap", async (t) => {
     const { client } = await setupServer(t, ENV, trapRouter());
     const res = await client.callTool({ name: "search_games", arguments: { term: "kiwami" } });

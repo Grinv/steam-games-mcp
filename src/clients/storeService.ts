@@ -266,10 +266,15 @@ export class StoreServiceClient {
   // has, so a chunk that fails just leaves its appids on the Storefront price
   // rather than failing the whole tool call. HttpClient already logs the
   // underlying failure.
+  //
+  // `cache` is for getGame only, whose appdetails entry is itself cached:
+  // get_prices and search_games fetch their Storefront rows fresh, and a cached
+  // correction laid over a fresh row would hide a sale that just started.
   async getPurchasePrices(
     appids: number[],
     country?: string,
     language?: string,
+    opts: { cache?: boolean } = {},
   ): Promise<PurchasePrices> {
     if (appids.length === 0) return {};
     const context = {
@@ -279,43 +284,41 @@ export class StoreServiceClient {
     const chunks: number[][] = [];
     for (let i = 0; i < appids.length; i += PRICE_LOOKUP_CHUNK)
       chunks.push(appids.slice(i, i + PRICE_LOOKUP_CHUNK));
-    // Only a request that succeeded is cached, so a failed chunk is retried on
-    // the next call instead of pinning "no corrections" for the TTL (getGame
-    // keeps this lookup outside its own cache entry for that reason). Stale-on-
-    // error so that during an outage getGame's stale appdetails entry is still
-    // served WITH its correction, not with the raw Storefront price.
+    // Shaped inside the load, so a payload that fails its schema rejects like
+    // a failed request: it costs only this chunk's corrections, and with
+    // `cache` it is never stored (only a resolved load is). Caching the shaped
+    // map rather than the raw response also keeps the entry ~50 B, not ~1 KB.
+    const load = async (chunk: number[]) =>
+      summarizePurchasePrices(
+        await this.#get<StoreItemsResponse>(
+          "IStoreBrowseService/GetItems/v1/",
+          {
+            input_json: JSON.stringify({
+              ids: chunk.map((appid) => ({ appid })),
+              context,
+              data_request: {},
+            }),
+          },
+          { hasCredentials: false },
+        ),
+      );
+    // Stale-on-error so that during an outage getGame's stale appdetails entry
+    // is still served WITH its correction, not with the raw Storefront price.
+    // A failure is never cached, so it's retried on the next call.
     const settled = await Promise.allSettled(
       chunks.map((chunk) =>
-        this.#cache.wrapStaleOnError(
-          `purchase:${context.country_code}:${context.language}:${chunk.join(",")}`,
-          () =>
-            this.#get<StoreItemsResponse>(
-              "IStoreBrowseService/GetItems/v1/",
-              {
-                input_json: JSON.stringify({
-                  ids: chunk.map((appid) => ({ appid })),
-                  context,
-                  data_request: {},
-                }),
-              },
-              { hasCredentials: false },
-            ),
-        ),
+        opts.cache
+          ? this.#cache.wrapStaleOnError(
+              `purchase:${context.country_code}:${context.language}:${chunk.join(",")}`,
+              () => load(chunk),
+            )
+          : load(chunk),
       ),
     );
+    // Never rejects: the outer Promise.all in StorefrontClient.getPrices/getGame
+    // would otherwise turn an enrichment's failure into a failed tool call.
     const merged: PurchasePrices = {};
-    for (const r of settled) {
-      if (r.status !== "fulfilled") continue;
-      try {
-        Object.assign(merged, summarizePurchasePrices(r.value));
-      } catch {
-        // The shaper throws on a payload that doesn't match its schema. Here that
-        // must cost only this chunk's corrections, exactly like a failed request:
-        // the outer Promise.all in StorefrontClient.getPrices/getGame would
-        // otherwise turn an enrichment's schema hiccup into a failed tool call.
-        continue;
-      }
-    }
+    for (const r of settled) if (r.status === "fulfilled") Object.assign(merged, r.value);
     return merged;
   }
 
