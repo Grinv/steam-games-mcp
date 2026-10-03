@@ -15,7 +15,7 @@ import {
   routerWithEmptyTagList,
 } from "./steamFixtures.js";
 import { ITEMS_MAX } from "../tools/common.js";
-import { DISCOVER_MAX } from "../format/store.js";
+import { DISCOVER_MAX, WISHLIST_DETAIL_MAX } from "../format/store.js";
 
 // Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant
@@ -238,6 +238,34 @@ describe("get_wishlist", () => {
     assert.equal(s.items[0]!.name, "Portal 2");
     assert.equal(s.items[0]!.discount_pct, 80);
     assert.deepEqual(s.items[0]!.tags, ["Puzzle"]); // tagid 10 → Puzzle
+  });
+
+  test(`get_wishlist include_details caps its cards at ${WISHLIST_DETAIL_MAX}, reporting the true match count`, async (t) => {
+    // A store card is ~550-580 B, so an unfiltered detailed wishlist of 60
+    // measured ~35 KB, at the edge of what MCP clients accept.
+    const items = Array.from({ length: 80 }, (_, i) => ({
+      appid: 2000 + i,
+      priority: i + 1,
+      store_item: {
+        appid: 2000 + i,
+        name: `Game ${i}`,
+        visible: true,
+        best_purchase_option: { packageid: 1, formatted_final_price: "$9.99" },
+      },
+    }));
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+      url.includes("GetWishlistSortedFiltered")
+        ? jsonResponse({ response: { items } })
+        : router(url),
+    );
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353", include_details: true },
+    });
+    const s = res.structuredContent as { matched: number; returned: number; items: unknown[] };
+    assert.equal(s.matched, 80);
+    assert.equal(s.returned, WISHLIST_DETAIL_MAX);
+    assert.equal(s.items.length, WISHLIST_DETAIL_MAX);
   });
 
   test("get_wishlist include_details: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {

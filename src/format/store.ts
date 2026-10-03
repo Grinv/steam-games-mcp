@@ -49,9 +49,13 @@ export interface StoreQueryResponse {
 // Catalog-wide deal discovery. The server filters by min discount; review
 // thresholds (percent / count) and discount-desc sorting are applied here over
 // the returned page, since the Query API ignores those filters/sorts.
-// Matches WISHLIST_DETAIL_MAX: same store-card shape, and 60 of them measured
-// ~34 KB, which real MCP clients accept.
-export const DISCOVER_MAX = 60;
+// Matches WISHLIST_DETAIL_MAX: same store-card shape. 60 cards once measured
+// ~34 KB, which real MCP clients accept (~56 KB is rejected outright), but by
+// 2026-10-03 a card had grown to ~550-580 B and 60 measured 33-35 KB — at that
+// accepted ceiling, with nothing left for the next field Steam adds. 50 lands
+// near 28 KB. Applied after filtering, and `matched` keeps the pre-cap count,
+// so only an unfiltered or very broad query sees the difference.
+export const DISCOVER_MAX = 50;
 
 export function summarizeDiscover(
   r: StoreQueryResponse,
@@ -177,7 +181,8 @@ export interface WishlistDetailedResponse {
     items?: { appid?: number; priority?: number; date_added?: number; store_item?: StoreItem }[];
   };
 }
-export const WISHLIST_DETAIL_MAX = 60;
+// Same budget as DISCOVER_MAX above (same card shape).
+export const WISHLIST_DETAIL_MAX = 50;
 export function summarizeWishlistDetailed(
   r: WishlistDetailedResponse,
   tagMap?: TagMap,
