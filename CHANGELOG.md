@@ -6,6 +6,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Bump the MCP TypeScript SDK to 2.3.0; a prompt called with no `arguments` at all now renders instead of failing validation, including `is_it_worth_buying`.
+
 ## [0.14.0] - 2026-09-20
 
 ### Added

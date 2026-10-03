@@ -5,7 +5,7 @@
   wrapper (e.g. an MCP tool) would be useful, or whether it's worth raising as
   feedback upstream to Anthropic.
 
-- On MCP TypeScript SDK v2 stable (`@modelcontextprotocol/{server,client,core,codemod}@2.0.0`),
+- On MCP TypeScript SDK v2 (`@modelcontextprotocol/{server,client,core,codemod}@2.3.0`),
   split from the old `@modelcontextprotocol/sdk` package. `src/server.ts` uses
   `serveStdio` (SEP-2577 era negotiation) over stdio only — no HTTP/SSE/OAuth
   transport, so the Express/Hono/Workers-adapter parts of the SDK don't apply
