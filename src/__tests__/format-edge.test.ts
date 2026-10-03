@@ -24,7 +24,7 @@ import {
   GAME_SCHEMA_ACHIEVEMENTS_MAX,
 } from "../format/webAchievements.js";
 import { summarizePurchasePrices } from "../format/store.js";
-import { storeReleaseDay, stripHtml } from "../format/shared.js";
+import { storeDayStart, storeReleaseDay, stripHtml } from "../format/shared.js";
 
 // Steam frequently omits optional fields; these exercise the sparse-payload
 // fallbacks (?? null / || null / ?? []) so a thin upstream response degrades
@@ -50,6 +50,16 @@ describe("storeReleaseDay", () => {
     assert.equal(storeReleaseDay(1303186800), "2011-04-18");
     // Midday PT: same day in both zones.
     assert.equal(storeReleaseDay(Date.UTC(2024, 0, 15, 20) / 1000), "2024-01-15");
+  });
+
+  test("storeDayStart is the Pacific midnight that storeReleaseDay counts from", () => {
+    for (const day of ["2026-01-01", "2026-07-01", "2026-03-08", "2026-11-01"]) {
+      const t = storeDayStart(day);
+      assert.equal(storeReleaseDay(t), day, day);
+      assert.notEqual(storeReleaseDay(t - 1), day, day);
+    }
+    assert.equal(storeDayStart("2026-01-01"), Date.UTC(2026, 0, 1, 8) / 1000); // PST
+    assert.equal(storeDayStart("2026-07-01"), Date.UTC(2026, 6, 1, 7) / 1000); // PDT
   });
 
   test("is null for a missing or zero timestamp", () => {

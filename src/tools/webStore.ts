@@ -41,6 +41,7 @@ import {
   getGameNewsOutput,
   wishlistLightFound,
 } from "../format/web.schemas.js";
+import { storeDayStart } from "../format/shared.js";
 import { getChartsOutput, chartSchema } from "../format/charts.schemas.js";
 import { getGlobalAchievementsOutput } from "../format/webAchievements.schemas.js";
 
@@ -279,7 +280,8 @@ export function registerStoreWebTools(
       // Resolve the recency cutoff (unix seconds): explicit date wins, else a
       // rolling window of N days from now.
       let releasedAfter: number | undefined;
-      if (released_after) releasedAfter = Math.floor(Date.parse(released_after) / 1000);
+      // Pacific midnight, the day boundary release_date is reported in.
+      if (released_after) releasedAfter = storeDayStart(released_after);
       else if (released_within_days)
         releasedAfter = Math.floor(Date.now() / 1000) - released_within_days * 86400;
       return reply(() =>

@@ -117,6 +117,19 @@ export function storeReleaseDay(ts: number | undefined): string | null {
   return `${part.year}-${part.month}-${part.day}`;
 }
 
+/** Unix seconds at which a store calendar day (YYYY-MM-DD) begins, i.e. its
+ *  Pacific midnight — the cutoff matching storeReleaseDay(), so a game shown
+ *  with release_date D always passes a released_after of D and never one of
+ *  D+1. Pacific midnight is 07:00 or 08:00 UTC depending on DST. */
+export function storeDayStart(day: string): number {
+  const utcMidnight = Date.parse(`${day}T00:00:00Z`) / 1000;
+  for (const h of [7, 8]) {
+    const t = utcMidnight + h * 3600;
+    if (storeReleaseDay(t) === day && storeReleaseDay(t - 1) !== day) return t;
+  }
+  return utcMidnight + 8 * 3600; // unreachable for a real date; PST as a fallback
+}
+
 // Unix seconds → full ISO 8601 UTC (e.g. 2026-07-09T17:00:00Z), or null. Used
 // where the time of day matters (e.g. when a discount ends), not just the date.
 export function isoDateTime(ts: number | undefined): string | null {
