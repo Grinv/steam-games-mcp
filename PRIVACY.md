@@ -30,8 +30,8 @@ The only inputs it handles are:
 
 ## Usage and third-party sharing
 
-Each tool call results in an outbound HTTPS request to exactly one of two
-Valve/Steam hosts, carrying only what that specific call needs:
+Each tool call results in outbound HTTPS requests to Valve/Steam hosts only,
+carrying only what that specific call needs:
 
 - **Steam Storefront API** (`store.steampowered.com`), needs no key. Carries
   only the search term/appid(s) and the `cc`/`l` (country/language) query
@@ -47,8 +47,12 @@ Valve/Steam hosts, carrying only what that specific call needs:
   is set, it travels as a `key` query parameter on every request to this
   host, per Valve's own API convention, never as a header, never logged
   (see Storage and retention below).
+- **Steam Community** (`steamcommunity.com`), only when the server config's
+  `STEAM_ID` is a vanity name rather than a SteamID64: its public profile
+  page (`/id/<name>/?xml=1`) is read once to resolve that name without a key.
+  Carries the vanity name only, never the API key.
 
-Both hosts are operated by Valve Corporation and governed by
+All three hosts are operated by Valve Corporation and governed by
 [Steam's own Privacy Policy](https://store.steampowered.com/privacy_agreement/)
 once your request reaches them. `steam-games-mcp` sends data to no other
 destination: no analytics vendor, no logging service, no server operated by
@@ -69,11 +73,14 @@ settings.
 - **Caching**: successful API responses are cached in the server process's
   own memory only (never written to disk), for a short configurable TTL
   (`CACHE_TTL_MS`, default 5 minutes) to cut latency and avoid hammering the
-  Storefront/Web APIs. Not every endpoint is cached (e.g. reviews, batch
-  prices and live player counts are always fetched fresh); player-specific
-  data is never cached, with one exception: `get_player_summary`'s numeric
-  Steam level is cached for up to `CACHE_TTL_MS`, keyed by SteamID, since
-  it's non-sensitive and rarely changes. The cache is cleared entirely when
+  Storefront/Web APIs. Not every endpoint is cached (e.g. reviews, the
+  `get_prices` batch and `get_current_players`' count are always fetched
+  fresh, while `get_charts`' rankings, live chart included, can be up to one
+  TTL old); player-specific data is never cached, with two exceptions:
+  `get_player_summary`'s numeric Steam level is cached for up to
+  `CACHE_TTL_MS`, keyed by SteamID, since it's non-sensitive and rarely
+  changes; and a vanity-name `STEAM_ID` from the server config is remembered
+  as its resolved SteamID64 until the process exits. The cache is cleared entirely when
   the process exits and is never shared across machines or users.
 - **Logging**: operational logs go to stderr only (never a file, never a
   remote endpoint, and there is no MCP `logging` capability wired up), with
@@ -82,15 +89,15 @@ settings.
   plain query parameter on the wire. Log verbosity is controlled by
   `LOG_LEVEL` (default `info`); logs live only as long as your MCP client
   keeps that stderr stream around.
-- Beyond the cache TTL and the running process's lifetime, `steam-games-mcp`
-  retains nothing. There is no persistent storage layer of any kind.
+- Beyond the cache TTL (and, for the resolved `STEAM_ID` above, the running
+  process's lifetime), `steam-games-mcp` retains nothing. There is no persistent storage layer of any kind.
 
 ## Changes to this policy
 
 Material changes will be noted in [CHANGELOG.md](CHANGELOG.md) and reflected
 here, at the same URL, with the effective date below updated.
 
-_Last updated: 2026-07-30._
+_Last updated: 2026-10-03._
 
 ## Contact
 

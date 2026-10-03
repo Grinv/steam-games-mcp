@@ -7,10 +7,14 @@
 - **Never writes, trades, posts, launches games, or makes purchases.** Every
   tool is annotated `readOnlyHint: true`; there is no code path that sends
   anything to Steam beyond a GET request.
-- **Only two hosts, both fixed at startup.** Requests go to the configured
+- **Three Valve hosts, all fixed at startup.** Requests go to the configured
   `STEAM_API_BASE_URL` (default `api.steampowered.com`) or
-  `STEAM_STORE_BASE_URL` (default `store.steampowered.com`). There is no tool
-  parameter that lets a caller redirect a request to an arbitrary host.
+  `STEAM_STORE_BASE_URL` (default `store.steampowered.com`), plus
+  `steamcommunity.com` (not configurable) for one thing only: resolving a
+  vanity-name `STEAM_ID` from the server config to a SteamID64 without a key.
+  That request carries the vanity name and nothing else — never the API key.
+  There is no tool parameter that lets a caller redirect a request to an
+  arbitrary host.
 - **Your key stays yours.** `STEAM_API_KEY` is read once from the environment
   at startup, sent only as a query parameter on requests to the Steam Web API,
   and never written to disk, cached, or included in a tool result. Logging
@@ -18,12 +22,17 @@
   or the client (see `src/lib/errors.ts`'s `redact`).
 - **No data is kept between requests beyond a small TTL cache** (`CACHE_TTL_MS`,
   default 5 minutes) of non-personal store/catalog responses (game details,
-  review histogram, tag dictionary, the featured/specials payload, global
-  achievement percentages and a game's achievement schema). Player-specific responses (profile,
-  library, achievements, friends) are never cached, with one exception:
+  review histogram, tag dictionary, the featured/specials payload, the
+  top-sellers / most-played / live-players charts, the purchase-option lookups
+  that correct Storefront prices, global achievement percentages and a game's
+  achievement schema). Player-specific responses (profile, library,
+  achievements, friends) are never cached, with two exceptions:
   `get_player_summary`'s numeric Steam level is cached for up to
   `CACHE_TTL_MS` keyed by SteamID, since it's non-sensitive and rarely
-  changes.
+  changes; and a vanity-name `STEAM_ID` from the server config, once resolved,
+  is remembered as its SteamID64 for the life of the process (it's the
+  operator's own configured default, and resolving it again on every call
+  would only add requests).
 - **Typed, validated inputs.** Every tool's parameters are a Zod schema;
   malformed input is rejected before any request is made.
 
