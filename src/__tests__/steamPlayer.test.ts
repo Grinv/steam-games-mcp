@@ -1468,6 +1468,16 @@ describe("STEAM_ID default / vanity resolution", () => {
     assertToolError(res, /17-digit SteamID64/);
   });
 
+  test("a vanity STEAM_ID that Steam couldn't be reached for isn't blamed on its spelling", async (t) => {
+    const { client } = await setupServer(t, { STEAM_ID: "gabe", HTTP_RETRIES: "0" }, (url) =>
+      url.includes("steamcommunity.com") ? jsonResponse({}, { status: 503 }) : router(url),
+    ); // no key: the community profile is the only attempt
+    const res = await client.callTool({ name: "get_followed_games", arguments: {} });
+    assert.equal(res.isError, true);
+    const text = (res.content as { text: string }[])[0]!.text;
+    assert.doesNotMatch(text, /check the spelling/);
+  });
+
   test("a vanity STEAM_ID that fails to resolve errors clearly", async (t) => {
     const { client } = await setupServer(t, { ...ENV, STEAM_ID: "nobody-such-vanity" }, (url) =>
       url.includes("ResolveVanityURL")
