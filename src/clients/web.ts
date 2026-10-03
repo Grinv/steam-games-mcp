@@ -180,18 +180,22 @@ export class SteamWebClient {
     // otherwise — and as a backstop when the keyed attempt fails, since a
     // mistyped key 403ing here would otherwise take get_wishlist and
     // get_followed_games down with it, and neither needs a key of its own.
-    // A failed attempt is remembered only if it was transient: a 429/5xx/timeout
-    // says nothing about the name, so reporting it as "check the spelling"
-    // would send the operator to fix a STEAM_ID that is fine.
+    // The community profile is always the last word: if it answers "no such
+    // profile", that's definitive even when the keyed attempt hit a 429. Only
+    // when that final attempt itself failed transiently (429/5xx/timeout, which
+    // says nothing about the name) is the error rethrown rather than reported
+    // as "check the spelling" of a STEAM_ID that may well be fine.
     let transient: ApiError | undefined;
     const attempt = (p: Promise<string | undefined>) =>
       p.catch((e: unknown) => {
         if (e instanceof ApiError && TRANSIENT_CODES.includes(e.code)) transient = e;
         return undefined;
       });
-    const steamid =
-      (this.configured ? await attempt(this.#vanityViaApi(raw)) : undefined) ??
-      (await attempt(this.#vanityViaCommunity(raw)));
+    let steamid = this.configured ? await attempt(this.#vanityViaApi(raw)) : undefined;
+    if (!steamid) {
+      transient = undefined;
+      steamid = await attempt(this.#vanityViaCommunity(raw));
+    }
     if (!steamid && transient) throw transient;
     if (!steamid) {
       throw new ApiError({

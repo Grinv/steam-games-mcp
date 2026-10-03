@@ -1517,6 +1517,27 @@ describe("STEAM_ID default / vanity resolution", () => {
     assert.doesNotMatch(text, /check the spelling/);
   });
 
+  test("a definitive 'no such profile' wins over a keyed attempt that hit a 429", async (t) => {
+    const { client } = await setupServer(
+      t,
+      { ...ENV, STEAM_ID: "nobody-such-vanity", HTTP_RETRIES: "0" },
+      (url) => {
+        if (url.includes("ResolveVanityURL")) return jsonResponse({}, { status: 429 });
+        if (url.includes("steamcommunity.com"))
+          return new Response(
+            "<response><error>The specified profile could not be found.</error></response>",
+            {
+              status: 200,
+              headers: { "content-type": "text/xml" },
+            },
+          );
+        return router(url);
+      },
+    );
+    const res = await client.callTool({ name: "get_followed_games", arguments: {} });
+    assertToolError(res, /could not resolve the STEAM_ID vanity name "nobody-such-vanity"/);
+  });
+
   test("a vanity STEAM_ID that fails to resolve errors clearly", async (t) => {
     const { client } = await setupServer(t, { ...ENV, STEAM_ID: "nobody-such-vanity" }, (url) =>
       url.includes("ResolveVanityURL")
