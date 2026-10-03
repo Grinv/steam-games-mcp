@@ -34,7 +34,10 @@ Check every one of these, not just a sample:
 - `docs/notes.md`, `docs/clients.md` and any other `docs/*.md` for stale
   phrasing (e.g. describing something as "once published"/"upcoming" that
   already shipped).
-- `PRIVACY.md` and `SECURITY.md`: re-verify every specific claim against the
+- `PRIVACY.md` and `SECURITY.md`: grep `src/clients/` for every host the code
+  contacts and diff it against their host lists (keyless vanity resolution
+  added `steamcommunity.com` while both still said "two hosts"). Then
+  re-verify every other specific claim against the
   actual current code, don't just skim for plausibility — which credentials
   exist and how each is transmitted/redacted, what is and isn't cached (incl.
   cache key/TTL), the current list of read-only vs. write/mutating tools, and

@@ -120,7 +120,8 @@ live testing.
     `resolve_vanity_url`, `get_recommended_games`, and a few more in
     `src/tools/webPlayer.ts`) require `STEAM_API_KEY`. Confirm whether the
     session actually has one configured (`env | grep STEAM_API_KEY`, or just
-    call one and read the error) before assuming a "set STEAM_API_KEY" error
+    call one and read the error; an unfilled `${VAR}`/`$VAR`/`%VAR%` must count
+    as unset, not as a key) before assuming a "set STEAM_API_KEY" error
     is a bug rather than the intended keyless-session message — but also
     confirm the message itself is accurate and actionable per AGENTS.md.
     Store/catalog tools (`search_games`, `get_game`, `get_specials`,
@@ -205,10 +206,12 @@ environment supports concurrent subagents/background tasks.
   for two games vs its own $49.99), a multi-SKU hardware app (1675200 Steam
   Deck), a 100%-off title (2019300) and a genuinely free one (570). The check
   generalizes past prices: review %, release date and compat are each reported
-  by more than one tool from more than one upstream.
+  by more than one tool from more than one upstream (release dates: Valve
+  stamps Pacific time, so a UTC day is a day late for evening releases).
 - **Not-found / empty-result paths**: a search returning zero results, a
   batch (`get_items`, `get_owned_games`'s `check_appids`) mixing valid +
-  invalid + duplicate ids, `find_friends_who_own` when one friend's own
+  invalid + duplicate ids (assert a duplicate doesn't double counts —
+  `find_friends_who_own` listed every owner twice), `find_friends_who_own` when one friend's own
   lookup errors transiently (should degrade into `unavailable_friends`, not
   sink the whole call — see the just-shipped fix in `git log`), an appid
   queried that's actually a non-game "app" (soundtrack/tool/demo) so a
@@ -234,7 +237,8 @@ environment supports concurrent subagents/background tasks.
   existed so "a typo can't ask for an unbounded response". So: for every
   `limit`/`count`/`max` in an input schema, call it AT its maximum against the
   biggest real account and measure, and treat the number as a byte budget —
-  divide the target (~28 KB here) by one measured row, don't pick a round one.
+  divide the target (~28 KB here; 34 KB was measured accepted and 56 KB
+  rejected, so 28-34 KB is margin, not failure) by one measured row, don't pick a round one.
 - **Documented vs. actual shape**: for anything that looks surprising live,
   grep the field back to its `.describe()` text in `src/tools/*.ts` and its
   `format/*.schemas.ts` — does the tool's own description/outputSchema
@@ -243,6 +247,7 @@ environment supports concurrent subagents/background tasks.
   non-Latin scripts in `search_games`, whitespace-only terms, a malformed
   `cc` (country code) or `l` (language) value that's shaped like a real one
   but isn't, SQL/HTML-injection-shaped strings in any free-text param — check
+  text fields don't come back still HTML-escaped (`&quot;`), and that
   the error message doesn't leak raw upstream HTML/markup (a real prior bug
   class in this repo, see `CHANGELOG.md` 0.10.2) or misattribute a transport
   error to "not found"/"private profile" when it's actually a 5xx/network
@@ -274,7 +279,9 @@ interaction, it may already be intentional and covered) isn't a finding.
 
 The same caution runs the other way: a finding produced by reading source
 _without_ calling any live tool (e.g. a background/sub-agent doing a
-static-only pass) is a hypothesis, not a confirmed bug — Steam's actual
+static-only pass) is a hypothesis, not a confirmed bug — and so is a cheaper
+sub-agent's all-clear (one reported `server.json`'s nonexistent tools array as
+matching and missed a stale host list), so spot-check its concrete claims. Steam's actual
 upstream behavior sometimes contradicts what the code's shape implies (e.g.
 whether a malformed id 400s cleanly vs. leaks raw HTML is something you have
 to observe, not infer). Before reporting any source-only finding, spend one
@@ -342,7 +349,9 @@ price_overview`), so the suite agrees with the bug instead of catching it.
   it needs the whole-codebase sweep §6 asks for, not a one-site patch.
 - **A degraded fallback RETURNED from inside a cache wrapper.** A `catch` that
   turns an upstream failure into a clean empty result is correct; putting it
-  inside `wrapStaleOnError`'s callback is not, because the callback _returning_
+  inside `wrapStaleOnError`'s callback is not — nor is calling a callee there
+  that swallows its own failure (`getPurchasePrices` → `{}` cached `get_game`'s
+  uncorrected price) — because the callback _returning_
   is what makes `TtlCache#dedupe` `set()` the value. Confirmed in
   `getGlobalAchievements`/`getGameAchievements`: one 403 (Steam's edge answers
   that under load, not only for a schema-less appid) cached "this game has no
@@ -363,7 +372,8 @@ price_overview`), so the suite agrees with the bug instead of catching it.
   `appdetails`/`storesearch` fill `price_overview` from the FIRST sub of the
   default package group (an upgrade SKU sitting there wins), and `GetItems`'
   `best_purchase_option` is whatever Valve deems best value — routinely a
-  bundle containing this app _and another game_. Every read must go through
+  bundle containing this app _and another game_ — and every package of a
+  free-to-play app is a paid add-on (CS2's Prime). Every read must go through
   `isOwnPackage()`/`ownPurchaseOption()` in `format/storeCard.ts` (a
   `packageid`, never a `bundleid`), so grep any new `best_purchase_option` /
   `price_overview` dereference for one that skips them — **including inside
@@ -427,7 +437,9 @@ false` at its own call site — otherwise a 403 there gets misattributed to
   `lib/http.ts`'s `toHttpError` (e.g. an HTML error page); (2) the `allSettled`
   must not sit inside an _outer_ `Promise.all` alongside another call that can
   reject (e.g. `#playerSummaries`), which silently defeats the whole fix the
-  moment that call fails. Grep every sibling batching/chunking function in the
+  moment that call fails; (3) a blanket `.catch(() => undefined)` must not turn
+  a 429/5xx/timeout into a definitive answer (a vanity `STEAM_ID` read "check
+  the spelling"). Grep every sibling batching/chunking function in the
   same file for the identical un-fixed twin.
 
 ## 5. Docs/metadata consistency
