@@ -659,7 +659,7 @@ describe("get_items", () => {
     assert.equal(a.vr_support, "none"); // fixture carries no vr_support key
     // tagids 10,20 resolved via GetTagList, ordered by weight (900 > 500).
     assert.deepEqual(a.tags, ["Puzzle", "Co-op"]);
-    assert.equal(a.release_date, "2011-04-19");
+    assert.equal(a.release_date, "2011-04-18");
     // 999 is absent from store_items → available:false.
     assert.equal(s.items.find((i) => i.appid === 999)!.available, false);
   });
@@ -835,7 +835,7 @@ describe("discover_games", () => {
     assert.equal(s.deals.length, 1);
     assert.equal(s.deals[0]!.appid, 620);
     assert.equal(s.deals[0]!.steam_deck, "verified");
-    assert.equal(s.deals[0]!.release_date, "2011-04-19");
+    assert.equal(s.deals[0]!.release_date, "2011-04-18");
   });
 
   test("discover_games recency cutoff excludes older releases", async (t) => {

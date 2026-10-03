@@ -24,10 +24,25 @@ import {
   GAME_SCHEMA_ACHIEVEMENTS_MAX,
 } from "../format/webAchievements.js";
 import { summarizePurchasePrices } from "../format/store.js";
+import { storeReleaseDay } from "../format/shared.js";
 
 // Steam frequently omits optional fields; these exercise the sparse-payload
 // fallbacks (?? null / || null / ?? []) so a thin upstream response degrades
 // gracefully instead of crashing or emitting undefined.
+
+describe("storeReleaseDay", () => {
+  test("reports the store's Pacific-time date, not the timestamp's UTC day", () => {
+    // Portal 2: 2011-04-19 04:20 UTC; the store page shows Apr 18, 2011.
+    assert.equal(storeReleaseDay(1303186800), "2011-04-18");
+    // Midday PT: same day in both zones.
+    assert.equal(storeReleaseDay(Date.UTC(2024, 0, 15, 20) / 1000), "2024-01-15");
+  });
+
+  test("is null for a missing or zero timestamp", () => {
+    assert.equal(storeReleaseDay(undefined), null);
+    assert.equal(storeReleaseDay(0), null);
+  });
+});
 
 describe("detailApp", () => {
   test("a near-empty app yields null/[] fallbacks, never throws", () => {

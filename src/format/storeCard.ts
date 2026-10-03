@@ -7,7 +7,7 @@
 // card/filter primitives live in one place, separate from the response shapers
 // that consume them. Zod schemas in store.schemas.ts.
 import { z } from "zod";
-import { isoDateTime, isoDay, storeUrl } from "./shared.js";
+import { isoDateTime, storeReleaseDay, storeUrl } from "./shared.js";
 import {
   baseCardSchema,
   compatBadgeSchema,
@@ -288,7 +288,7 @@ export function baseCard(it: StoreItemWithAppid, tagMap?: TagMap): z.infer<typeo
     steam_frame: compat(it.platforms?.steam_frame_compat_category),
     vr_support: vrSupport(it.platforms),
     tags: resolveTags(it.tags, tagMap),
-    release_date: isoDay(it.release?.steam_release_date),
+    release_date: storeReleaseDay(it.release?.steam_release_date),
   };
 }
 

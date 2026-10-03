@@ -77,6 +77,25 @@ export function isoDay(ts: number | undefined): string | null {
   return ts ? new Date(ts * 1000).toISOString().slice(0, 10) : null;
 }
 
+// A store release timestamp → the calendar date the Steam store shows for it.
+// Valve stamps release dates in Pacific time, so the UTC day of the timestamp
+// is a day late for anything released after ~16:00 PT: Portal 2's
+// 1303186800 is 2011-04-19 04:20 UTC, and the store page says Apr 18, 2011.
+// Assembled from parts rather than trusting a locale's own YYYY-MM-DD layout.
+const PACIFIC_DAY = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+export function storeReleaseDay(ts: number | undefined): string | null {
+  if (!ts) return null;
+  const part = Object.fromEntries(
+    PACIFIC_DAY.formatToParts(new Date(ts * 1000)).map((p) => [p.type, p.value]),
+  );
+  return `${part.year}-${part.month}-${part.day}`;
+}
+
 // Unix seconds → full ISO 8601 UTC (e.g. 2026-07-09T17:00:00Z), or null. Used
 // where the time of day matters (e.g. when a discount ends), not just the date.
 export function isoDateTime(ts: number | undefined): string | null {
