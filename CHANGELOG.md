@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-04
+
 ### Added
 
 - Add `get_charts`: Steam's weekly top sellers, most-played and live concurrent-players top 100, keyless. ([b10a976](https://github.com/Grinv/steam-games-mcp/commit/b10a976))
