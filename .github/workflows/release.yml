@@ -115,6 +115,25 @@ jobs:
           curl -sL -o mcp-publisher.tar.gz "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
           echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum -c -
           tar xzf mcp-publisher.tar.gz mcp-publisher
+      # The registry validates the npm package by fetching this exact version,
+      # and a just-published one can 404 for a few seconds: v0.15.0's first run
+      # published to npm at 00:55:18 and was rejected by the registry at
+      # 00:55:19 ("version '0.15.0' was not found"). Wait for npm to serve it
+      # (up to 2 min) before logging in, so the short-lived token isn't spent
+      # waiting. Also a no-op wait on a re-run where npm publish was skipped.
+      - name: Wait for the npm version to be visible
+        run: |
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          for i in $(seq 1 24); do
+            if npm view "steam-games-mcp@${PKG_VERSION}" version >/dev/null 2>&1; then
+              echo "steam-games-mcp@${PKG_VERSION} is visible on npm"
+              exit 0
+            fi
+            echo "waiting for steam-games-mcp@${PKG_VERSION} on npm (${i}/24)…"
+            sleep 5
+          done
+          echo "::error::steam-games-mcp@${PKG_VERSION} still not visible on npm after 2 minutes; the MCP Registry would reject it. Re-run this job once it appears."
+          exit 1
       - name: Authenticate to MCP Registry (GitHub OIDC)
         run: ./mcp-publisher login github-oidc
       - name: Publish to MCP Registry
