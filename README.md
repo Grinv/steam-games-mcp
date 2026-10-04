@@ -37,6 +37,7 @@ Once it's connected, just ask your agent in natural language.
 "Any recent patch notes for No Man's Sky?"
 "How rare is each achievement in Elden Ring?"
 "How many people are playing Counter-Strike 2 right now?"
+"What are the most played games on Steam right now?"
 "Get current prices for appids 620, 413150 and 1145360."
 "For appids 1245620 and 1086940, show price, review % and Deck / SteamOS / Machine / Frame status."
 ```
@@ -190,7 +191,7 @@ npm run build        # type-check + bundle to dist/index.js
 npm test             # node:test (mocked, offline)
 npm run lint
 npm run format
-npm run check:api    # live upstream health-check (Storefront keyless; player check needs STEAM_API_KEY)
+npm run check:api    # live upstream health-check (key-gated checks need STEAM_API_KEY; a public STEAM_ID verifies player fields)
 npm run inspector    # run under the MCP Inspector
 ```
 

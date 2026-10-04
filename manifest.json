@@ -134,7 +134,7 @@
     "steam_id": {
       "type": "string",
       "title": "Default Steam ID",
-      "description": "Optional. Your 17-digit SteamID64 or vanity name (the part after /id/ in your profile URL). Lets the player tools default to you, so you can ask 'my wishlist' without passing an ID. A vanity name needs the API key to resolve.",
+      "description": "Optional. Your 17-digit SteamID64 or vanity name (the part after /id/ in your profile URL). Lets the player tools default to you, so you can ask 'my wishlist' without passing an ID. A vanity name is resolved automatically, with or without the API key.",
       "required": false
     },
     "steam_country": {

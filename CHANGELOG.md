@@ -8,26 +8,26 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Add `get_charts`, keyless: Steam's weekly top sellers, the most-played top 100 and the live concurrent-players top 100, with ranks, movement and appids to pass to `get_items`.
+- Add `get_charts`: Steam's weekly top sellers, most-played and live concurrent-players top 100, keyless. ([b10a976](https://github.com/Grinv/steam-games-mcp/commit/b10a976))
 
 ### Changed
 
-- `search_games` prices now use the store's own formatting (`$1.99`, `¥1,700`), matching `get_game`, `get_items` and `get_prices`, instead of `1.99 USD`; a row whose price couldn't be checked against the store-browse service keeps the old form.
-- Lower `discover_games`' and the detailed `get_wishlist`'s card cap from 60 to 50: grown store cards had pushed both to 33-35 KB, the edge of what MCP clients accept. Filters still apply before the cap, and `matched` reports the full count. ([7500a64](https://github.com/Grinv/steam-games-mcp/commit/7500a64))
-- Bump the MCP TypeScript SDK to 2.3.0; a prompt called with no `arguments` at all now renders instead of failing validation, including `is_it_worth_buying`.
+- Lower the card cap of `discover_games` and the detailed `get_wishlist` from 60 to 50, keeping responses well under client size limits. ([7500a64](https://github.com/Grinv/steam-games-mcp/commit/7500a64))
+- Format `search_games` prices the way the store does (`$1.99`, `¥1,700`) instead of `1.99 USD`, matching the other price tools. ([e68d714](https://github.com/Grinv/steam-games-mcp/commit/e68d714))
+- Resolve a vanity `STEAM_ID` through `steamcommunity.com` when no key is set — a new outbound host, now listed in PRIVACY.md. ([ea7b8e1](https://github.com/Grinv/steam-games-mcp/commit/ea7b8e1), [04a24ce](https://github.com/Grinv/steam-games-mcp/commit/04a24ce))
+- Bump the MCP TypeScript SDK to 2.3.0, so every prompt renders when called with no `arguments` at all. ([c219dd6](https://github.com/Grinv/steam-games-mcp/commit/c219dd6))
 
 ### Fixed
 
-- Fix `get_featured` listing a bundle among `top_sellers` under its bundle id as an `appid`, with a store link that redirected to the front page; bundles are now left out.
-- Fix a vanity `STEAM_ID` making `get_wishlist` and `get_followed_games` demand an API key, which neither needs for a numeric SteamID64 — the name is now resolved through the keyless community profile, which also covers a key the API rejects.
-- Strip surrounding quotes from environment values, so a config written shell-style (`"STEAM_API_KEY": "'${STEAM_API_KEY}'"`) no longer sends them to Steam and collects a 401/403 that explains nothing.
-- Fix a game being priced at the cost of a bundle it merely belongs to: Warhammer 40,000: Rogue Trader read as $48.36, the total for a two-game bundle, instead of its own $49.99. Steam's "best purchase option" is whatever it deems best value, so the game's own package is now resolved separately.
-- Fix every Storefront-sourced price naming the first package of a game's default group instead of its base game: Yakuza Kiwami read as Rp 20 000, the upgrade sold to owners of the Legacy version, rather than Rp 200 000 → Rp 120 000 (−40%), and theHunter: Call of the Wild read as free. Prices now come from the store-browse service, using only an option that prices the game itself — Steam's "best" option is often a bundle with another game.
-- Fix store-card release dates landing a day late for games released in the Pacific evening: Portal 2 read 2011-04-19, while the store page shows Apr 18. `discover_games`' `released_after` now cuts at the same Pacific midnight. ([dbca8f3](https://github.com/Grinv/steam-games-mcp/commit/dbca8f3), [c580a42](https://github.com/Grinv/steam-games-mcp/commit/c580a42))
-- Fix `find_friends_who_own` counting every owner twice, in two identical matches, when an appid is listed twice; `get_owned_games`' `check_appids` likewise repeated its row. ([53ceb3b](https://github.com/Grinv/steam-games-mcp/commit/53ceb3b))
-- Decode HTML entities in `get_game`'s `short_description` and in news excerpts and system requirements, which read `&quot;` for a quote. ([659e49f](https://github.com/Grinv/steam-games-mcp/commit/659e49f))
-- Fix `what_should_i_play` rejecting a blank `budget` or `steamid`, which a client's prompt form can send for a field left empty; blank now means not given, as in the other prompts. ([d72bdc8](https://github.com/Grinv/steam-games-mcp/commit/d72bdc8))
-- Treat an unsubstituted `$STEAM_API_KEY`, `%STEAM_API_KEY%` or space-padded placeholder in the config as unset, instead of sending it to Steam as a key and collecting a 403. ([ba0323f](https://github.com/Grinv/steam-games-mcp/commit/ba0323f))
+- Fix Storefront prices naming an upgrade SKU instead of the game (Yakuza Kiwami at Rp 20 000; theHunter: Call of the Wild as free). ([e68d714](https://github.com/Grinv/steam-games-mcp/commit/e68d714), [8f7e8e5](https://github.com/Grinv/steam-games-mcp/commit/8f7e8e5), [a4e0da9](https://github.com/Grinv/steam-games-mcp/commit/a4e0da9), [00e6d8b](https://github.com/Grinv/steam-games-mcp/commit/00e6d8b))
+- Fix store cards pricing a game at a bundle it belongs to, e.g. Rogue Trader at $48.36 for two games instead of its own $49.99. ([e68d714](https://github.com/Grinv/steam-games-mcp/commit/e68d714))
+- Fix `get_wishlist` and `get_followed_games` demanding an API key when `STEAM_ID` is a vanity name. ([ea7b8e1](https://github.com/Grinv/steam-games-mcp/commit/ea7b8e1), [25e1a17](https://github.com/Grinv/steam-games-mcp/commit/25e1a17), [aa9322c](https://github.com/Grinv/steam-games-mcp/commit/aa9322c))
+- Fix `get_featured` listing a bundle among `top_sellers` as if its bundle id were an appid. ([b10a976](https://github.com/Grinv/steam-games-mcp/commit/b10a976))
+- Fix store-card release dates landing a day late for evening (Pacific) releases; `released_after` now cuts at Pacific midnight too. ([dbca8f3](https://github.com/Grinv/steam-games-mcp/commit/dbca8f3), [c580a42](https://github.com/Grinv/steam-games-mcp/commit/c580a42))
+- Fix `find_friends_who_own` counting every owner twice when an appid is listed twice. ([53ceb3b](https://github.com/Grinv/steam-games-mcp/commit/53ceb3b))
+- Decode HTML entities such as `&quot;` in game descriptions, news excerpts and system requirements. ([659e49f](https://github.com/Grinv/steam-games-mcp/commit/659e49f))
+- Fix `what_should_i_play` rejecting a blank `budget` or `steamid`, which a client's prompt form can send for an empty field. ([d72bdc8](https://github.com/Grinv/steam-games-mcp/commit/d72bdc8))
+- Treat quoted values and unfilled `${VAR}`, `$VAR` or `%VAR%` placeholders in the config as intended, instead of sending them to Steam. ([ea7b8e1](https://github.com/Grinv/steam-games-mcp/commit/ea7b8e1), [ba0323f](https://github.com/Grinv/steam-games-mcp/commit/ba0323f))
 
 ## [0.14.0] - 2026-09-20
 

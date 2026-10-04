@@ -16,7 +16,9 @@ Check every one of these, not just a sample:
   copy of the tool's full `.describe()`/`description` text in
   `src/tools/*.ts` — don't "fix" them to match verbatim, that's not a bug. Do
   re-read them for accuracy if a tool's _behavior_ changed in a way the short
-  summary now misrepresents.
+  summary now misrepresents — `manifest.json`'s `user_config` descriptions too
+  (`steam_id` kept saying a vanity name needs the key after keyless
+  resolution shipped).
 - Tool `description`/field `.describe()` text in `src/tools/*.ts` itself:
   does it still match the actual `inputSchema`/`outputSchema` and the real
   behavior? Cross-check new/edited descriptions against the
