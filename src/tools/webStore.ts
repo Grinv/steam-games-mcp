@@ -206,7 +206,7 @@ export function registerStoreWebTools(
         steam_frame: steamFrame,
         platform,
         tags: z
-          .array(z.string().nonempty())
+          .array(z.string().trim().nonempty())
           .nonempty()
           .describe(
             "Keep only games carrying ALL of these user tags (case-insensitive), e.g. " +
@@ -413,7 +413,7 @@ export function registerStoreWebTools(
           )
           .optional(),
         tags: z
-          .array(z.string().nonempty())
+          .array(z.string().trim().nonempty())
           .nonempty()
           .describe(
             "Keep only wishlist items carrying ALL of these user tags (case-insensitive), e.g. " +

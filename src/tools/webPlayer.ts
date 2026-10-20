@@ -375,7 +375,7 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
           .describe("How many recommendations to return (1-25). Default 10.")
           .default(10),
         exclude_tags: z
-          .array(z.string().nonempty())
+          .array(z.string().trim().nonempty())
           .nonempty()
           .describe(
             "Drop any candidate carrying ANY of these tags (case-insensitive), e.g. " +

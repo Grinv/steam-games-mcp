@@ -167,19 +167,23 @@ export function registerPrompts(server: McpServer, store: StorefrontClient): voi
         ).optional(),
       }),
     },
-    ({ game }) =>
-      promptResult(
+    ({ game }) => {
+      // Quoted twice below, so a `"` in the name would close the quote early
+      // and let the rest read as instructions; swap it for a single quote.
+      const g = game && oneLine(game).replaceAll('"', "'");
+      return promptResult(
         "Buying verdict for a game",
-        game
-          ? `Should I buy "${game}"?\n\n` +
-              `1. Call get_game with name "${game}" (or its appid, if that's what was given) for price, discount and platforms.\n` +
+        g
+          ? `Should I buy "${g}"?\n\n` +
+              `1. Call get_game with name "${g}" (or its appid, if that's what was given) for price, discount and platforms.\n` +
               "2. Call get_game_reviews for the overall verdict and a few recent reviews.\n" +
               "3. Call get_review_histogram to see whether reception is improving or declining recently.\n" +
               "4. Call get_items for its appid to check Steam Deck/SteamOS/Machine/Frame compatibility and popular tags.\n" +
               "5. Summarize: price/discount, lifetime review % + recent trend, Deck compatibility, and a clear " +
               "buy-now / wait-for-a-deal / skip verdict with your reasoning."
           : "Ask me which game I'm considering before doing anything else — I didn't say which one.",
-      ),
+      );
+    },
   );
 
   server.registerPrompt(
