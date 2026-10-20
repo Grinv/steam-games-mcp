@@ -16,6 +16,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** `search_games` returns games only by default (`games_only: false` includes DLC, soundtracks and demos), and drops `price.currency`. ([0084dd2](https://github.com/Grinv/steam-games-mcp/commit/0084dd2), [decf45e](https://github.com/Grinv/steam-games-mcp/commit/decf45e))
 - `search_games` reports Steam's full match count as `total`, the real item `type` instead of `app`, and the game's own price instead of a bundle's. ([decf45e](https://github.com/Grinv/steam-games-mcp/commit/decf45e))
 - `discover_games` filters by tags, Steam Deck/Machine/Frame, review rating and release date across the whole catalog, not only the top `count` popular games; `min_review` now skips unrated games. ([5c1c1b2](https://github.com/Grinv/steam-games-mcp/commit/5c1c1b2))
+- `get_recommended_games` picks candidates from games carrying the player's favorite tags, not just the most popular games, which mostly helps niche tastes. ([e03ffcf](https://github.com/Grinv/steam-games-mcp/commit/e03ffcf))
 - `get_game` looks up a `name` with the same search as `search_games`, so the two agree (e.g. "portal" now resolves to Portal, not Portal 2). ([002d745](https://github.com/Grinv/steam-games-mcp/commit/002d745))
 - Bump the MCP TypeScript SDK to 2.3.1 and zod to 4.6.7. ([af58a4b](https://github.com/Grinv/steam-games-mcp/commit/af58a4b))
 - Speed up `get_recommended_games` by sending its three upstream requests at once. ([3074c37](https://github.com/Grinv/steam-games-mcp/commit/3074c37))
