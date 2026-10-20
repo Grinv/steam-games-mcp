@@ -14,7 +14,6 @@ interface RequestOptions {
   timeoutMs?: number;
   /** Max retry attempts for retryable failures (network/timeout/5xx/429). */
   retries?: number;
-  signal?: AbortSignal;
   /** Per-request override of HttpClientOptions.hasCredentials — for a call that
    *  opportunistically attaches a credential without needing one (e.g. a
    *  keyless-by-design endpoint sent a key anyway because one happens to be
@@ -108,22 +107,17 @@ export class HttpClient {
     options: RequestOptions,
     timeoutMs: number,
   ): Promise<string | undefined> {
-    // AbortSignal.any bridges the caller's own signal (if given) into our
-    // timeout controller's, so fetch aborts on whichever fires first — no
-    // manual addEventListener/removeEventListener needed to forward it.
     // Deliberately NOT AbortSignal.timeout(): its internal timer is unref'd
     // by design (won't keep the event loop alive on its own) — confirmed by
     // a test whose mocked fetch has no other pending I/O, which hung forever
     // instead of firing. A plain (ref'd) setTimeout doesn't have that risk.
+    // The timer stays armed until the body is read, not just the headers: an
+    // upstream that sends headers and then stalls mid-body would otherwise
+    // hang res.text() forever.
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const signal = options.signal
-      ? AbortSignal.any([options.signal, controller.signal])
-      : controller.signal;
-
-    let res: Response;
     try {
-      res = await fetch(url, {
+      const res = await fetch(url, {
         method: options.method ?? "GET",
         headers: {
           "User-Agent": USER_AGENT,
@@ -132,13 +126,15 @@ export class HttpClient {
           ...options.headers,
         },
         ...(options.body === undefined ? {} : { body: options.body }),
-        signal,
+        signal: controller.signal,
       });
-    } catch (err) {
-      if (options.signal?.aborted) {
-        // Caller cancelled — propagate as a non-retryable abort.
-        throw new ApiError({ code: "network", message: "Request aborted by caller", cause: err });
+      if (!res.ok) {
+        throw await toHttpError(res, options.hasCredentials ?? this.#opts.hasCredentials);
       }
+      if (res.status === 204) return undefined;
+      return await res.text();
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
       if (controller.signal.aborted) {
         throw new ApiError({
           code: "timeout",
@@ -151,11 +147,6 @@ export class HttpClient {
     } finally {
       clearTimeout(timer);
     }
-
-    if (!res.ok) throw await toHttpError(res, options.hasCredentials ?? this.#opts.hasCredentials);
-
-    if (res.status === 204) return undefined;
-    return await res.text();
   }
 
   #buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -221,12 +212,9 @@ function backoffMs(attempt: number, err: ApiError): number {
   const hinted = (err.cause as { retryAfterMs?: number } | undefined)?.retryAfterMs;
   if (typeof hinted === "number" && hinted > 0) return Math.min(hinted, MAX_BACKOFF_MS);
   const base = Math.min(MAX_BACKOFF_MS, 500 * 2 ** attempt);
-  return base + Math.floor(base * 0.25 * deterministicJitter(attempt));
-}
-
-// Jitter without Math.random: small deterministic spread by attempt index.
-function deterministicJitter(attempt: number): number {
-  return ((attempt * 2654435761) % 1000) / 1000;
+  // Random, not derived from `attempt`: concurrent requests failing together
+  // (e.g. a burst answered with 429) must not all retry at the same instant.
+  return base + Math.floor(base * 0.25 * Math.random());
 }
 
 function parseRetryAfter(header: string | null): number | undefined {

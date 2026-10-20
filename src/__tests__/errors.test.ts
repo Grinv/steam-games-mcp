@@ -7,7 +7,6 @@ test("classifyStatus maps HTTP codes to error codes and retryability", () => {
   assert.equal(classifyStatus(401).retryable, false);
   assert.equal(classifyStatus(403).code, "forbidden");
   assert.equal(classifyStatus(404).code, "not_found");
-  assert.equal(classifyStatus(304).code, "not_modified");
   assert.equal(classifyStatus(405).code, "bad_request");
   assert.equal(classifyStatus(422).code, "bad_request");
   assert.equal(classifyStatus(429).code, "rate_limited");

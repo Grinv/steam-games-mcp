@@ -79,11 +79,11 @@ npm run inspector      # run under the MCP Inspector
   surface (commit messages, GitHub issue/PR comments and bodies), regardless of
   what language the working conversation happens to be in.
 - Runtime floor is **Node ≥ 20.11** (global `fetch`, stable `node:test`,
-  `context.mock.timers` used throughout `__tests__/`, `AbortSignal.any()` in
-  `lib/http.ts`, and `import.meta.dirname` in the `scripts/*.mjs` helpers —
-  need 20.4+/20.3+/20.11+ respectively, so `>=20` alone would understate the
-  real requirement); tsup targets `node20` (esbuild's Node targets are
-  major-version-only, so this doesn't need to track the patch floor). `.nvmrc`
+  `context.mock.timers` used throughout `__tests__/`, and `import.meta.dirname`
+  in the `scripts/*.mjs` helpers — need 20.4+/20.11+ respectively, so `>=20`
+  alone would understate the real requirement); tsup targets `node20`
+  (esbuild's Node targets are major-version-only, so this doesn't need to track
+  the patch floor). `.nvmrc`
   pins the maintainer's local dev version (currently `22`) for convenience, not
   the supported floor — CI's `node: [20, 22, 24]` matrix is what actually
   enforces `>=20.11`. Note `@types/node` tracks current Node, not the floor, so

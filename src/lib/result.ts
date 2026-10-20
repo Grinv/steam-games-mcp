@@ -89,8 +89,6 @@ export function messageFor(err: ApiError): string {
       // `bad_request` below does, instead of discarding it for a generic
       // string that was silently swallowing that detail on every not-found.
       return `No matching resource was found (404)${detailOf(err)}`;
-    case "not_modified":
-      return "The content has not changed since the last request (304).";
     case "rate_limited":
       // Steam's Store/Community endpoints are observed live to answer a rate
       // limit as HTTP 420 as well as the documented 429 — report whichever

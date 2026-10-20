@@ -110,27 +110,28 @@ describe("retry/backoff behavior", () => {
     );
   });
 
-  test("a caller-cancelled request (external AbortSignal) is a network error, not retryable", async (t) => {
-    // Distinct from our own internal timeout abort: cancelling on purpose
-    // should never be retried, so `retryable` must stay false here even
-    // though the same DOMException shape is involved.
-    const controller = new AbortController();
+  test("times out a body that stalls after the headers arrive", async (t) => {
+    // Headers sent, then the body never finishes — real fetch errors the
+    // body stream on abort, which this stream mimics. Before the fix the
+    // timer was cleared once headers arrived, so res.text() hung forever.
     const mock = mockFetch(
       (_url, init) =>
-        new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener("abort", () =>
-            reject(new DOMException("aborted", "AbortError")),
-          );
-        }),
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('{"a":'));
+              init?.signal?.addEventListener("abort", () =>
+                controller.error(new DOMException("aborted", "AbortError")),
+              );
+            },
+          }),
+          { status: 200 },
+        ),
     );
     installFetch(t, mock);
-    const promise = client({ retries: 2 }).getJson("cancel-me", { signal: controller.signal });
-    controller.abort();
     await assert.rejects(
-      () => promise,
-      (err: unknown) =>
-        err instanceof ApiError && err.code === "network" && err.retryable === false,
+      () => client({ retries: 0, timeoutMs: 30 }).getJson("stalled-body"),
+      (err: unknown) => err instanceof ApiError && err.code === "timeout",
     );
-    assert.equal(mock.calls.length, 1); // never retried
   });
 });
