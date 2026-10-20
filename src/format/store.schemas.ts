@@ -150,16 +150,15 @@ export const discoverGamesOutput = z.strictObject({
     .number()
     .nullable()
     .describe(
-      "Count from whichever filters Steam actually applies server-side — min_discount, and (if " +
-        "released_after/released_within_days was set) excluding not-yet-released games — or the " +
-        "whole catalog's size if neither was given. NOT the number of games matching tags/" +
-        "platform/compat/review/the exact release-date cutoff, which have no server-side filter " +
-        "and this tool applies only over the scanned `count`-sized window below. Don't read this " +
-        "as 'N games match all my filters' — use `returned` for that instead.",
+      "Steam's count of catalog games matching the server-side filters (min_discount, release " +
+        "date, tags, min_review's rating bucket, one hardware filter). Filters with no " +
+        "server-side form (steam_os, platform, min_reviews, a second hardware filter) and the " +
+        "exact review-% check are not reflected, so this can overstate; `matched` is exact for " +
+        "the fetched page.",
     ),
   matched: z
     .number()
-    .describe("How many results survived every filter, out of the scanned window (see `count`)."),
+    .describe("How many results in the fetched page (see `count`) survived every filter."),
   returned: z
     .number()
     .describe(

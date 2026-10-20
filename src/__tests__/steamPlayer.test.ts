@@ -478,6 +478,19 @@ describe("get_recommended_games", () => {
     assert.equal(input.query.filters.price_filters.min_discount_percent, 30);
   });
 
+  test("get_recommended_games: the pool is games-only and excludes exclude_tags server-side", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, recoRouter);
+    await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930", exclude_tags: ["souls-like", "Not A Tag"] },
+    });
+    const queryCall = mock.calls.find((c) => c.url.includes("IStoreQueryService/Query"))!;
+    const input = JSON.parse(new URL(queryCall.url).searchParams.get("input_json")!);
+    assert.deepEqual(input.query.filters.type_filters, { include_games: true });
+    // An unknown name excludes nothing, so only the resolved id goes upstream.
+    assert.deepEqual(input.query.filters.tagids_exclude, [3]);
+  });
+
   test("get_recommended_games reports found:false for a private profile", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetOwnedGames") ? jsonResponse({ response: {} }) : jsonResponse({}),

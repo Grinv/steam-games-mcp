@@ -66,6 +66,83 @@ const storeCardDataRequest = (tagCount: number) => ({
   include_all_purchase_options: true,
 });
 
+// ---- server-side catalog filters (IStoreQueryService/Query) -----------------
+//
+// Query takes CStoreQueryFilters and applies them across the WHOLE catalog, so
+// a filtered page holds the most popular games that match rather than the
+// matches that happen to sit inside the top `count` (verified live 2026-10-20:
+// Roguelike + Indie + Deck Verified + Very Positive found 155 games
+// server-side, 0 inside a 50-game popularity window). Every value below was
+// verified live. Each filter stays a superset of what summarizeDiscover then
+// re-checks exactly (review %, the Pacific release day, every compat dimension),
+// so the client-side pass is unchanged; it just starts from real matches.
+
+// compatibility_filter.device per compat dimension. There is no device for
+// SteamOS in general, and Steam takes ONE compatibility_filter, so a second
+// requested dimension is left to the client-side pass.
+const COMPAT_DEVICE = [
+  ["steamDeck", 1],
+  ["steamFrame", 2],
+  ["steamMachine", 3],
+] as const satisfies readonly [keyof CompatFilters, number][];
+// "playable" here means playable OR verified, like COMPAT_MIN in storeCard.ts.
+const COMPAT_CATEGORIES = { verified: [3], playable: [2, 3] } as const;
+
+// The lowest EUserReviewScore bucket whose every game reaches `pct` positive:
+// Positive (7) and up are all 80%+, Mostly Positive (6) 70-79%, Mixed (5)
+// 40-69%, Mostly Negative (4) 20-39%. Only games with a Steam rating (10+
+// reviews) carry a bucket at all, so min_review leaves out unrated games.
+function reviewScoreFloor(pct: number): number {
+  if (pct >= 80) return 7;
+  if (pct >= 70) return 6;
+  if (pct >= 40) return 5;
+  if (pct >= 20) return 4;
+  return 1;
+}
+
+// Case-insensitive tag name → tagid (undefined for a name Steam doesn't have).
+function tagIdLookup(tagMap: TagMap): (name: string) => number | undefined {
+  const byName = new Map(Object.entries(tagMap).map(([id, n]) => [n.toLowerCase(), Number(id)]));
+  return (name) => byName.get(name.toLowerCase());
+}
+
+// Required tags → tagids, or null when any isn't a Steam tag (it can't match
+// anything, so there's no point querying).
+function tagIdsFor(names: string[], tagMap: TagMap): number[] | null {
+  const ids = names.map(tagIdLookup(tagMap));
+  return ids.every((id): id is number => id !== undefined) ? ids : null;
+}
+
+function catalogFilters(
+  p: {
+    minDiscount?: number;
+    releasedOnly?: boolean;
+    releasedAfter?: number;
+    minReview?: number;
+  } & CompatFilters,
+  tagIds: number[] | undefined,
+): Record<string, unknown> {
+  const filters: Record<string, unknown> = { type_filters: { include_games: true } };
+  if (typeof p.minDiscount === "number")
+    filters.price_filters = { min_discount_percent: p.minDiscount };
+  if (p.releasedOnly) filters.released_only = true;
+  // release_date_type 1 = released on/after start_date.
+  if (p.releasedAfter !== undefined)
+    filters.release_date_filter = { release_date_type: 1, start_date: p.releasedAfter };
+  if (typeof p.minReview === "number" && p.minReview > 0)
+    filters.review_score_filter = { min_score: reviewScoreFloor(p.minReview) };
+  const compat = COMPAT_DEVICE.find(([key]) => p[key] !== undefined);
+  if (compat)
+    filters.compatibility_filter = {
+      device: compat[1],
+      categories: COMPAT_CATEGORIES[p[compat[0]]!],
+    };
+  // One group per tag: groups are ANDed (each tag required), a group's own
+  // tagids are ORed (verified live).
+  if (tagIds?.length) filters.tagids_must_match = tagIds.map((id) => ({ tagids: [id] }));
+  return filters;
+}
+
 // getRecommendedGames tuning: how many of the player's most-played owned games
 // feed the tag-weighting step, how many of the resulting top tags are surfaced
 // as `based_on_tags`, and how big a catalog page is scored against them.
@@ -452,25 +529,32 @@ export class StoreServiceClient {
     // The tool schema's own min(1).max(25) already bounds this — no need to
     // re-clamp here, just fall back for direct (non-tool) callers.
     const count = opts.count ?? 10;
-    // Same server-side price filter #queryCatalog uses for discover_games — cuts
-    // the candidate pool down to matching deals instead of scoring 150 items and
-    // discarding most of them locally for a "good discounts only" request.
-    const filters: Record<string, unknown> = {};
-    if (typeof opts.minDiscount === "number")
-      filters.price_filters = { min_discount_percent: opts.minDiscount };
-    const poolPromise = this.#get<StoreQueryResponse>(
-      "IStoreQueryService/Query/v1/",
-      {
-        input_json: JSON.stringify({
-          query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
-          context: { language: l, country_code: cc, steam_realm: 1 },
-          data_request: storeCardDataRequest(20),
-        }),
-      },
-      { hasCredentials: false },
-    );
+    // Server-side filters, as #queryCatalog's: games only, the price floor and
+    // the excluded tags all cut the candidate pool before it is scored, instead
+    // of spending its 300 slots on items summarizeRecommendations would only
+    // discard locally (it still re-checks every one of them).
+    const pool = (excludeIds: number[]) => {
+      const filters: Record<string, unknown> = { type_filters: { include_games: true } };
+      if (typeof opts.minDiscount === "number")
+        filters.price_filters = { min_discount_percent: opts.minDiscount };
+      if (excludeIds.length) filters.tagids_exclude = excludeIds;
+      return this.#get<StoreQueryResponse>(
+        "IStoreQueryService/Query/v1/",
+        {
+          input_json: JSON.stringify({
+            query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
+            context: { language: l, country_code: cc, steam_realm: 1 },
+            data_request: storeCardDataRequest(20),
+          }),
+        },
+        { hasCredentials: false },
+      );
+    };
+    // Excluded tags need their ids, i.e. the (cached) dictionary, first;
+    // otherwise the pool goes out right away with the other two requests.
+    let poolPromise = opts.excludeTags?.length ? undefined : pool([]);
     samplePromise.catch(() => {});
-    poolPromise.catch(() => {});
+    poolPromise?.catch(() => {});
     const tagMap = await tagMapPromise;
     if (tagMap === null) {
       // Same "fail loudly, don't silently degrade" rule as
@@ -498,6 +582,13 @@ export class StoreServiceClient {
       .slice(0, BASED_ON_TAGS_LIMIT)
       .map(([tag]) => tag);
 
+    if (!poolPromise) {
+      const idOf = tagIdLookup(tagMap);
+      // An unknown name excludes nothing, here and client-side alike.
+      poolPromise = pool(
+        (opts.excludeTags ?? []).map(idOf).filter((id): id is number => id !== undefined),
+      );
+    }
     const poolRes = await poolPromise;
     const ownedAppids = new Set(ownedGames.map((g) => g.appid));
     return summarizeRecommendations(
@@ -513,13 +604,11 @@ export class StoreServiceClient {
   }
 
   // Shared catalog discovery over the keyless store query backend (discoverGames
-  // is a thin preset over this). The Query API can't filter/sort on reviews,
-  // Deck or release date, so those are applied in
-  // summarizeDiscover over the returned page — which is why we sort by
-  // popularity (sort:10): without a sort the page is appid-ordered and fills
-  // with obscure, Deck-untested shovelware, making the post-filters return
-  // nothing useful. Popularity puts real games (with Deck ratings + review
-  // counts) into the window.
+  // is a thin preset over this). Most filters run server-side (catalogFilters);
+  // the rest (SteamOS, native platform, min_reviews, a second compat dimension)
+  // and the exact re-checks run in summarizeDiscover over the returned page.
+  // Sorted by popularity (sort:10) so that page holds the best-known matches:
+  // without a sort it is appid-ordered and fills with obscure shovelware.
   async #queryCatalog(
     p: {
       minDiscount?: number;
@@ -536,10 +625,31 @@ export class StoreServiceClient {
     } & CompatFilters,
   ): Promise<Record<string, unknown>> {
     const l = p.language ?? this.#l;
-    const filters: Record<string, unknown> = {};
-    if (typeof p.minDiscount === "number")
-      filters.price_filters = { min_discount_percent: p.minDiscount };
-    if (p.releasedOnly) filters.released_only = true;
+    // Tag ids for the server-side filter need the dictionary BEFORE the query
+    // (cached per language, so usually free); without tags the two still load
+    // in parallel inside #fetchWithTags.
+    const filterTagMap = p.tags?.length
+      ? this.#requireTagMapIfFiltering(p.tags, await this.#tagNames(l), l)
+      : undefined;
+    const tagIds = p.tags?.length && filterTagMap ? tagIdsFor(p.tags, filterTagMap) : undefined;
+    const post = {
+      // Passed through so summarizeDiscover's storeItemFilter re-checks the
+      // discount client-side: Steam's server-side min_discount_percent filter
+      // silently no-ops at exactly 100 (returns the full catalog), so without
+      // this backstop min_discount:100 would leak full-price games.
+      minDiscount: p.minDiscount,
+      minReview: p.minReview,
+      minReviews: p.minReviews,
+      steamDeck: p.steamDeck,
+      steamOs: p.steamOs,
+      steamMachine: p.steamMachine,
+      steamFrame: p.steamFrame,
+      platform: p.platform,
+      releasedAfter: p.releasedAfter,
+      tags: p.tags,
+    };
+    if (tagIds === null) return summarizeDiscover({}, { ...post, tagMap: filterTagMap });
+    const filters = catalogFilters(p, tagIds);
     const input = {
       query: { start: p.start ?? 0, count: p.count ?? 50, sort: 10, filters },
       context: {
@@ -557,23 +667,7 @@ export class StoreServiceClient {
       l,
       p.tags,
     );
-    return summarizeDiscover(res, {
-      // Passed through so summarizeDiscover's storeItemFilter re-checks the
-      // discount client-side: Steam's server-side min_discount_percent filter
-      // silently no-ops at exactly 100 (returns the full catalog), so without
-      // this backstop min_discount:100 would leak full-price games.
-      minDiscount: p.minDiscount,
-      minReview: p.minReview,
-      minReviews: p.minReviews,
-      steamDeck: p.steamDeck,
-      steamOs: p.steamOs,
-      steamMachine: p.steamMachine,
-      steamFrame: p.steamFrame,
-      platform: p.platform,
-      releasedAfter: p.releasedAfter,
-      tags: p.tags,
-      tagMap,
-    });
+    return summarizeDiscover(res, { ...post, tagMap });
   }
 
   // Catalog-wide game discovery: browse by discount, recency, hardware

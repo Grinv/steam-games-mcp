@@ -202,14 +202,15 @@ export function registerStoreWebTools(
         "No appids needed — unlike get_items, which prices a list you already have. For 'games like " +
         "X' from a SINGLE named title, get its tags via get_items and pass them here; for taste " +
         "inferred from the player's WHOLE library instead, use get_recommended_games (key-gated). " +
-        "Note: min_discount is filtered server-side and re-checked client-side (so it holds at any " +
-        "value); setting released_after/released_within_days excludes not-yet-released games " +
-        "server-side, but the exact date cutoff — plus compat, platform, review and tag filtering — " +
-        "has no server-side support in the Steam catalog API, so those are scanned popularity-first " +
-        "and applied afterward over that same window — great for popular titles; a niche match may " +
-        `fall outside the top \`count\` (raise count for stricter filters). At most ${DISCOVER_MAX} results come ` +
-        "back per call, best discount first: compare `returned` against `matched` to see whether the " +
-        "list was capped, and narrow the filters or page with `start` for the rest.",
+        "Filtering: min_discount, released_after/released_within_days, tags, min_review and ONE of " +
+        "steam_deck/steam_machine/steam_frame are applied by Steam across the whole catalog, so a " +
+        "niche combination still finds its games, most popular first (`total_matching` is Steam's " +
+        "count of them). steam_os, platform, min_reviews and a second hardware filter have no " +
+        "server-side form and are applied afterwards to the `count` entries fetched, so those can " +
+        "return fewer — raise `count` for them. min_review only counts games with a Steam rating " +
+        `(10+ reviews). At most ${DISCOVER_MAX} results come back per call, best discount first: ` +
+        "compare `returned` against `matched` to see whether the list was capped, and narrow the " +
+        "filters or page with `start` for the rest.",
       inputSchema: z.strictObject({
         // z.iso.date(), not a ^\d{4}-\d{2}-\d{2}$ regex: a shape-only check lets
         // well-formed nonsense through, and both ways it produced a wrong answer
@@ -254,8 +255,7 @@ export function registerStoreWebTools(
           .describe(
             "Keep only games carrying ALL of these user tags (case-insensitive), e.g. " +
               "['Roguelike','Deckbuilding']. Use exact Steam tag names — a misspelled/unrecognized " +
-              "one isn't an error, it just matches nothing. Applied over the scanned popularity " +
-              "window, so raise `count` when combining niche tags.",
+              "one isn't an error, it just matches nothing. Filtered by Steam across the whole catalog.",
           )
           .optional(),
         min_review: z
@@ -263,17 +263,18 @@ export function registerStoreWebTools(
           .nonnegative()
           .max(100)
           .describe(
-            "Minimum positive-review %, e.g. 85. Like every filter here except min_discount, it is " +
-              "applied over the scanned `count` window, not server-side — raise `count` if a strict " +
-              "value returns too few.",
+            "Minimum positive-review %, e.g. 85. Filtered by Steam across the catalog (by its " +
+              "rating bucket) and re-checked exactly; only games with a Steam rating (10+ reviews) " +
+              "qualify.",
           )
           .optional(),
         min_reviews: z
           .int()
           .nonnegative()
           .describe(
-            "Minimum review count, e.g. 500 — filters out games too obscure to trust a % on. Applied " +
-              "over the scanned `count` window, like min_review.",
+            "Minimum review count, e.g. 500 — filters out games too obscure to trust a % on. No " +
+              "server-side form: applied to the `count` entries fetched, so raise `count` if it " +
+              "returns too few.",
           )
           .optional(),
         min_discount: z
@@ -290,10 +291,11 @@ export function registerStoreWebTools(
           .positive()
           .max(200)
           .describe(
-            "How many catalog entries to SCAN (1-200). Default 50. Not a result count — the " +
-              "filters below are applied over this window, so a strict combination can return far " +
-              "fewer than this; raise it for stricter filters. (Tools that cap what they RETURN " +
-              "call that `limit`.)",
+            "How many matching catalog entries to fetch (1-200). Default 50. Most filters run " +
+              "server-side, so these already match them; steam_os, platform, min_reviews and a " +
+              "second hardware filter are then applied to this page and can leave fewer — raise " +
+              "it for those. Not the result cap (see the tool description). (Tools that cap what " +
+              "they RETURN call that `limit`.)",
           )
           .default(50),
         start: z

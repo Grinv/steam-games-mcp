@@ -123,9 +123,10 @@ export function summarizeDiscover(
   r: StoreQueryResponse,
   opts: StoreFilters,
 ): z.infer<typeof discoverGamesOutput> {
-  // Filters run over the returned page — Steam's Query API silently ignores review,
-  // Deck/compat, native-platform, tag and release-date filters, so they only narrow
-  // the popularity-first scan window.
+  // Re-checks every filter exactly over the returned page. Most already ran
+  // server-side (clients/storeService.ts's catalogFilters) under their correct
+  // CStoreQueryFilters names; SteamOS, native platform, min_reviews and a
+  // second compat dimension have no server-side form and are applied only here.
   const keep = storeItemFilter(opts);
   const rows = (r.response?.store_items ?? [])
     .filter(

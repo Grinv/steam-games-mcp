@@ -1040,6 +1040,46 @@ describe("discover_games", () => {
     assert.deepEqual(s.deals[0]!.tags, ["Puzzle", "Co-op"]);
   });
 
+  test("discover_games sends tags, compat, review floor, release date and games-only to Steam", async (t) => {
+    // Server-side, so the page holds real matches from the whole catalog
+    // instead of whatever matches sit inside the top-`count` popularity window.
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    await client.callTool({
+      name: "discover_games",
+      arguments: {
+        tags: ["Puzzle", "co-op"],
+        steam_deck: "playable",
+        steam_machine: "verified",
+        min_review: 85,
+        released_after: "2026-03-01",
+      },
+    });
+    const call = mock.calls.find((c) => c.url.includes("IStoreQueryService/Query"))!;
+    const input = JSON.parse(new URL(call.url).searchParams.get("input_json")!) as {
+      query: { filters: Record<string, unknown> };
+    };
+    const f = input.query.filters;
+    assert.deepEqual(f.type_filters, { include_games: true });
+    assert.deepEqual(f.tagids_must_match, [{ tagids: [10] }, { tagids: [20] }]);
+    // One compatibility_filter only: the first set dimension (Deck); the
+    // Machine requirement is left to the client-side re-check.
+    assert.deepEqual(f.compatibility_filter, { device: 1, categories: [2, 3] });
+    assert.deepEqual(f.review_score_filter, { min_score: 7 });
+    assert.equal((f.release_date_filter as { release_date_type: number }).release_date_type, 1);
+    assert.equal(f.released_only, true);
+  });
+
+  test("discover_games: an unknown tag matches nothing without querying the catalog", async (t) => {
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    const res = await client.callTool({
+      name: "discover_games",
+      arguments: { tags: ["Puzzle", "Not A Real Tag"] },
+    });
+    assert.equal(res.isError, undefined);
+    assert.equal((res.structuredContent as { matched: number }).matched, 0);
+    assert.ok(!mock.calls.some((c) => c.url.includes("IStoreQueryService/Query")));
+  });
+
   test("discover_games: tags filter errors clearly when GetTagList is unavailable (no silent empty result)", async (t) => {
     const { client } = await setupServer(
       t,
