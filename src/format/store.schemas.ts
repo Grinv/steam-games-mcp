@@ -104,6 +104,38 @@ export const getItemsOutput = z.strictObject({
 // clients, not a tool output: it carries no currency code, because GetItems
 // never returns one (verified live against every data_request flag), so the
 // Storefront row being corrected keeps supplying that field.
+// store.ts's summarizeSearchSuggestions() (search_games). No `currency` code:
+// the store services never return one (verified live against every
+// data_request flag); the formatted strings already carry the symbol, in
+// Steam's own form ("$34.99 USD", "CDN$ 69.99"), like get_items' prices.
+export const searchGamesOutput = z.strictObject({
+  total: z
+    .number()
+    .describe("Steam's total number of matches for the term — often more than `returned`."),
+  returned: z.number().describe("Results in this response (at most the requested `limit`)."),
+  results: z.array(
+    z.strictObject({
+      appid: z.number(),
+      name: z.string().nullable(),
+      type: z
+        .string()
+        .nullable()
+        .describe("Store item type: game, dlc, music (soundtrack), demo, software, video, …"),
+      price: z
+        .strictObject({
+          final: z.string().nullable(),
+          initial: z.string().nullable(),
+          discount_percent: z.number(),
+        })
+        .nullable()
+        .describe("This game's own price; null when free to play or not priced (unreleased)."),
+      metascore: z.string().nullable(),
+      platforms: z.array(z.string()),
+      store_url: z.string().nullable(),
+    }),
+  ),
+});
+
 export const purchasePricesSchema = z.record(
   z.string(),
   z.strictObject({

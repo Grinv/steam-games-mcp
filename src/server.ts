@@ -58,7 +58,7 @@ export function buildServer(config: Config, logger: Logger): McpServer {
   registerStorefrontTools(server, store);
   registerStoreWebTools(server, web, web.store);
   registerPlayerWebTools(server, web);
-  registerPrompts(server, store);
+  registerPrompts(server, web.store);
   return server;
 }
 

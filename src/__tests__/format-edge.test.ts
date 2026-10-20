@@ -6,7 +6,6 @@ import {
   summarizeFeatured,
   summarizeReviews,
   summarizeReviewHistogram,
-  summarizeSearch,
 } from "../format/storefront.js";
 import {
   RECENTLY_PLAYED_MAX,
@@ -23,7 +22,7 @@ import {
   ACHIEVEMENTS_MAX,
   GAME_SCHEMA_ACHIEVEMENTS_MAX,
 } from "../format/webAchievements.js";
-import { summarizePurchasePrices } from "../format/store.js";
+import { summarizePurchasePrices, summarizeSearchSuggestions } from "../format/store.js";
 import { chartAppids } from "../format/charts.js";
 import { storeDayStart, storeReleaseDay, stripHtml } from "../format/shared.js";
 
@@ -230,29 +229,105 @@ describe("summarizeRecentlyPlayed", () => {
   });
 });
 
-describe("summarizeSearch", () => {
-  test("derives discount from raw cents, and a same-price item has no discount", () => {
-    const s = summarizeSearch({
-      items: [
-        { id: 1, name: "On sale", price: { currency: "USD", initial: 1000, final: 500 } },
-        { id: 2, name: "Full price", price: { currency: "USD", initial: 500, final: 500 } },
-      ],
-    }) as { results: { price: { discount_percent: number; final: string; initial: string } }[] };
-    assert.equal(s.results[0]!.price.discount_percent, 50);
-    assert.equal(s.results[0]!.price.final, "5.00 USD");
-    assert.equal(s.results[1]!.price.discount_percent, 0);
+describe("summarizeSearchSuggestions", () => {
+  type R = {
+    total: number;
+    results: {
+      type: string | null;
+      price: { final: string; initial: string; discount_percent: number } | null;
+      metascore: string | null;
+    }[];
+  };
+
+  test("prices the game's own package, not a bundle Steam calls its best option", () => {
+    // The Rogue Trader trap (verified live): best_purchase_option is a two-game
+    // bundle at $48.36 while the game's own package is $49.99.
+    const s = summarizeSearchSuggestions({
+      response: {
+        store_items: [
+          {
+            appid: 2186680,
+            type: 0,
+            best_purchase_option: { bundleid: 67187, formatted_final_price: "$48.36" },
+            purchase_options: [
+              { bundleid: 67187, formatted_final_price: "$48.36" },
+              { packageid: 1036080, formatted_final_price: "$49.99" },
+            ],
+          },
+        ],
+      },
+    }) as R;
+    assert.deepEqual(s.results[0]!.price, {
+      final: "$49.99",
+      initial: "$49.99",
+      discount_percent: 0,
+    });
   });
 
-  test("a 100%-off row (final 0) reports discount_percent 100, not 0", () => {
-    const s = summarizeSearch({
-      items: [{ id: 1, name: "Giveaway", price: { currency: "USD", initial: 1999, final: 0 } }],
-    }) as { results: { price: { discount_percent: number; final: string } }[] };
-    assert.equal(s.results[0]!.price.discount_percent, 100);
-    assert.equal(s.results[0]!.price.final, "0.00 USD");
+  test("a free-to-play game has no price, not one of its paid add-ons", () => {
+    // Counter-Strike 2 (verified live): is_free, with the $14.99 Prime upgrade
+    // as its only own-package purchase option.
+    const s = summarizeSearchSuggestions({
+      response: {
+        store_items: [
+          {
+            appid: 730,
+            is_free: true,
+            purchase_options: [{ packageid: 54029, formatted_final_price: "$14.99" }],
+          },
+        ],
+      },
+    }) as R;
+    assert.equal(s.results[0]!.price, null);
+  });
+
+  test("maps the numeric store type and a missing metacritic to null", () => {
+    const s = summarizeSearchSuggestions({
+      response: {
+        store_items: [
+          { appid: 1, type: 4 },
+          { appid: 2, type: 11 },
+          { appid: 3, type: 99 },
+          { appid: 4 },
+        ],
+      },
+    }) as R;
+    assert.deepEqual(
+      s.results.map((r) => r.type),
+      ["dlc", "music", null, null],
+    );
+    assert.equal(s.results[0]!.metascore, null);
+  });
+
+  test("carries a discount from the own package, and falls back to the result count for total", () => {
+    const s = summarizeSearchSuggestions({
+      response: {
+        store_items: [
+          {
+            appid: 684410,
+            purchase_options: [
+              {
+                packageid: 1,
+                formatted_final_price: "$0.89",
+                formatted_original_price: "$9.99",
+                discount_pct: 91,
+              },
+            ],
+          },
+          { name: "no appid" },
+        ],
+      },
+    }) as R;
+    assert.equal(s.total, 1);
+    assert.deepEqual(s.results[0]!.price, {
+      final: "$0.89",
+      initial: "$9.99",
+      discount_percent: 91,
+    });
   });
 
   test("empty response → total 0, no results", () => {
-    const s = summarizeSearch({}) as { total: number; results: unknown[] };
+    const s = summarizeSearchSuggestions({}) as R;
     assert.equal(s.total, 0);
     assert.deepEqual(s.results, []);
   });

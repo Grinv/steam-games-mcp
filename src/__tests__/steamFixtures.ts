@@ -40,9 +40,31 @@ export const APP = {
   content_descriptors: { ids: [2, 5], notes: null },
 };
 
+// storesearch: only get_game's name → appid resolution still reads it.
 export const SEARCH = {
   total: 1,
   items: [{ type: "app", name: "Portal 2", id: 620, metascore: "95" }],
+};
+// IStoreQueryService/SearchSuggestions (search_games), trimmed from a live
+// response: store_items carry the card fields asked for in data_request.
+export const SUGGEST = {
+  response: {
+    metadata: { total_matching_records: 204, start: 0, count: 1 },
+    ids: [{ appid: 620 }],
+    store_items: [
+      {
+        appid: 620,
+        name: "Portal 2",
+        type: 0,
+        platforms: { windows: true, steamos_linux: true },
+        best_purchase_option: { packageid: 7877, formatted_final_price: "$9.99" },
+        purchase_options: [{ packageid: 7877, formatted_final_price: "$9.99" }],
+        extra_details: {
+          metacritic: { score: 95, url: "https://www.metacritic.com/game/pc/portal-2" },
+        },
+      },
+    ],
+  },
 };
 export const REVIEWS = {
   success: 1,
@@ -352,6 +374,7 @@ export function router(url: string) {
   if (url.includes("IStoreQueryService/Query")) return jsonResponse(DISCOVER);
   if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(ITEMS);
   if (url.includes("/api/storesearch")) return jsonResponse(SEARCH);
+  if (url.includes("IStoreQueryService/SearchSuggestions")) return jsonResponse(SUGGEST);
   if (url.includes("/api/appdetails")) {
     const id = /appids=(\d+)/.exec(url)?.[1] ?? "620";
     return jsonResponse({ [id]: { success: true, data: APP } });

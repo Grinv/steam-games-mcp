@@ -20,6 +20,11 @@ export const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
 export const ITEMS_MAX = 50;
 export const PRICES_MAX = 250;
 
+// search_games' `limit` ceiling: everything SearchSuggestions answers. A full
+// 100-result response measured 20-25 KB live (2026-10-20), inside the ~28 KB
+// budget above; the default stays 10, the old storesearch page size.
+export const SEARCH_MAX = 100;
+
 export const appid = z
   .int()
   .positive()

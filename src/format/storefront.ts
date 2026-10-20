@@ -23,8 +23,6 @@ import {
   getSpecialsOutput,
   priceFieldsSchema,
   rollupSchema,
-  searchGamesOutput,
-  searchPriceSchema,
 } from "./storefront.schemas.js";
 
 // ---- Storefront: appdetails -------------------------------------------------
@@ -205,59 +203,10 @@ export function detailApp(a: StoreApp, override?: PriceOverride): z.infer<typeof
   });
 }
 
-// ---- Storefront: storesearch ------------------------------------------------
+// ---- Storefront: storesearch (name → appid resolution only) ----------------
 
-interface SearchItem {
-  type?: string;
-  name?: string;
-  id?: number;
-  price?: { currency?: string; initial?: number; final?: number };
-  tiny_image?: string;
-  metascore?: string;
-  platforms?: { windows?: boolean; mac?: boolean; linux?: boolean };
-}
 export interface SearchResponse {
-  total?: number;
-  items?: SearchItem[];
-}
-
-// storesearch prices are raw cents (initial/final); derive a discount + labels.
-// Not `.parse()`d — see formattedPrice()'s comment; summarizeSearch validates
-// the whole result once.
-function searchPrice(
-  p: SearchItem["price"],
-  override?: PriceOverride,
-): z.infer<typeof searchPriceSchema> {
-  if (!p || typeof p.final !== "number") return null;
-  const discount =
-    p.initial && p.initial > p.final ? Math.round((1 - p.final / p.initial) * 100) : 0;
-  return overridePrice(
-    {
-      currency: p.currency ?? null,
-      final: money(p.final, p.currency),
-      initial: money(p.initial, p.currency),
-      discount_percent: discount,
-    },
-    override,
-  );
-}
-
-export function summarizeSearch(
-  r: SearchResponse,
-  overrides: PurchasePrices = {},
-): z.infer<typeof searchGamesOutput> {
-  return searchGamesOutput.parse({
-    total: r.total ?? r.items?.length ?? 0,
-    results: (r.items ?? []).map((i) => ({
-      appid: i.id,
-      name: i.name,
-      type: i.type ?? null,
-      price: searchPrice(i.price, overrides[String(i.id)]),
-      metascore: i.metascore || null,
-      platforms: platforms(i.platforms),
-      store_url: storeUrl(i.id),
-    })),
-  });
+  items?: { id?: number }[];
 }
 
 // ---- Storefront: batch prices (appdetails?filters=price_overview) -----------

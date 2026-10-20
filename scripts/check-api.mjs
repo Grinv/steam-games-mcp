@@ -56,6 +56,32 @@ const checks = [
     },
   },
   {
+    name: "web IStoreQueryService/SearchSuggestions (search_games)",
+    run: async () => {
+      const input = {
+        search_term: "portal",
+        max_results: 3,
+        context: { country_code: "US", language: "english" },
+        data_request: {
+          include_platforms: true,
+          include_all_purchase_options: true,
+          include_extra_details: true,
+        },
+      };
+      const body = await getJson(
+        `${API}/IStoreQueryService/SearchSuggestions/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
+      );
+      const it = body.response?.store_items?.[0];
+      need(typeof body.response?.metadata?.total_matching_records === "number", "metadata.total");
+      need(
+        typeof it?.appid === "number" && typeof it.type === "number",
+        "store_items[0].appid/type",
+      );
+      need(Array.isArray(it?.purchase_options), "store_items[0].purchase_options");
+      need(typeof it?.extra_details?.metacritic?.score === "number", "extra_details.metacritic");
+    },
+  },
+  {
     name: "storefront appdetails",
     run: async () => {
       const res = await fetch(`${STORE}/api/appdetails?appids=${APPID}&cc=US&l=english`, {

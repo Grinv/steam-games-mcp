@@ -35,23 +35,55 @@ test("the server advertises store and player tools", async (t) => {
 });
 
 describe("search_games", () => {
-  test("search_games returns appids", async (t) => {
-    const { client } = await setupServer(t, ENV, router);
+  const input = (mock: { calls: { url: string }[] }) =>
+    JSON.parse(
+      new URL(mock.calls.find((c) => c.url.includes("SearchSuggestions"))!.url).searchParams.get(
+        "input_json",
+      )!,
+    ) as {
+      search_term: string;
+      max_results: number;
+      context: { country_code: string; language: string };
+    };
+
+  test("search_games returns appids with price, metascore, type and Steam's full total", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
     const res = await client.callTool({ name: "search_games", arguments: { term: "portal" } });
-    const s = res.structuredContent as { results: { appid: number; name: string }[] };
-    assert.equal(s.results[0]!.appid, 620);
-    assert.equal(s.results[0]!.name, "Portal 2");
+    const s = res.structuredContent as { total: number; returned: number; results: unknown[] };
+    assert.equal(s.total, 204);
+    assert.equal(s.returned, 1);
+    assert.deepEqual(s.results[0], {
+      appid: 620,
+      name: "Portal 2",
+      type: "game",
+      price: { final: "$9.99", initial: "$9.99", discount_percent: 0 },
+      metascore: "95",
+      platforms: ["windows", "linux"],
+      store_url: "https://store.steampowered.com/app/620",
+    });
+    assert.equal(input(mock).max_results, 10);
+    // One request: prices ride along, unlike the old storesearch + GetItems pair.
+    assert.equal(mock.calls.length, 1);
   });
 
-  test("search_games forwards per-call country/language overrides", async (t) => {
+  test("search_games forwards limit and per-call country/language overrides", async (t) => {
     const { client, mock } = await setupServer(t, ENV, router);
     await client.callTool({
       name: "search_games",
-      arguments: { term: "portal", country: "RU", language: "russian" },
+      arguments: { term: "portal", limit: 25, country: "RU", language: "russian" },
     });
-    const u = mock.calls.find((c) => c.url.includes("/api/storesearch"))!.url;
-    assert.match(u, /cc=RU/);
-    assert.match(u, /l=russian/);
+    const i = input(mock);
+    assert.equal(i.max_results, 25);
+    assert.deepEqual(i.context, { country_code: "RU", language: "russian" });
+  });
+
+  test("search_games rejects a limit outside 1-100 before calling the upstream", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    for (const limit of [0, 101]) {
+      const res = await client.callTool({ name: "search_games", arguments: { term: "x", limit } });
+      assert.equal(res.isError, true, `limit ${limit} should be rejected`);
+    }
+    assert.equal(mock.calls.length, 0);
   });
 
   // Regression: a padded country/language override (e.g. pasted with stray
@@ -65,9 +97,7 @@ describe("search_games", () => {
       arguments: { term: "portal", country: " RU ", language: " russian " },
     });
     assert.equal(res.isError, undefined);
-    const u = mock.calls.find((c) => c.url.includes("/api/storesearch"))!.url;
-    assert.match(u, /cc=RU/);
-    assert.match(u, /l=russian/);
+    assert.deepEqual(input(mock).context, { country_code: "RU", language: "russian" });
   });
 
   // Regression: a whitespace-only term used to pass .nonempty() (non-zero
@@ -83,8 +113,7 @@ describe("search_games", () => {
       arguments: { term: "  portal  " },
     });
     assert.equal(padded.isError, undefined);
-    const u = mock.calls.find((c) => c.url.includes("/api/storesearch"))!.url;
-    assert.match(u, /term=portal(?!%20)/);
+    assert.equal(input(mock).search_term, "portal");
   });
 });
 
@@ -731,28 +760,6 @@ describe("price_overview correction", () => {
     assert.equal(await pct(), 0);
     discount = 40;
     assert.equal(await pct(), 40);
-  });
-
-  test("search_games corrects the same trap", async (t) => {
-    const { client } = await setupServer(t, ENV, trapRouter());
-    const res = await client.callTool({ name: "search_games", arguments: { term: "kiwami" } });
-    const s = res.structuredContent as { results: { price: PriceShape }[] };
-    assert.equal(s.results[0]!.price.final, "Rp 120 000");
-    assert.equal(s.results[0]!.price.initial, "Rp 200 000");
-    assert.equal(s.results[0]!.price.discount_percent, 40);
-    assert.equal(s.results[0]!.price.currency, "IDR");
-  });
-
-  test("a zero-result search costs no price lookup", async (t) => {
-    const { client, mock } = await setupServer(t, ENV, (url) =>
-      url.includes("/api/storesearch") ? jsonResponse({ total: 0, items: [] }) : jsonResponse({}),
-    );
-    const res = await client.callTool({ name: "search_games", arguments: { term: "zzzznope" } });
-    assert.equal(res.isError, undefined);
-    assert.equal(
-      mock.calls.filter((c) => c.url.includes("IStoreBrowseService/GetItems")).length,
-      0,
-    );
   });
 
   test("get_prices corrects the amounts and keeps currency, is_free and available", async (t) => {

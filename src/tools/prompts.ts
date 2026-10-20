@@ -4,7 +4,7 @@
 // orchestration lives in the prompt text.
 import { z } from "zod";
 import { completable, type McpServer } from "@modelcontextprotocol/server";
-import type { StorefrontClient } from "../clients/storefront.js";
+import type { StoreServiceClient } from "../clients/storeService.js";
 import { steamId64Base } from "./webShared.js";
 import { CHECK_APPIDS_MAX } from "./webPlayer.js";
 import { OWNED_GAMES_MAX } from "../format/web.js";
@@ -65,7 +65,7 @@ const percentArg = (min: number, max: number, message: string, description: stri
     .describe(description)
     .optional();
 
-export function registerPrompts(server: McpServer, store: StorefrontClient): void {
+export function registerPrompts(server: McpServer, store: StoreServiceClient): void {
   server.registerPrompt(
     "what_should_i_play",
     {

@@ -187,9 +187,9 @@ environment supports concurrent subagents/background tasks.
   Steam silently ignores for one endpoint but not another.
 - **The same fact from two tools must agree.** A per-tool sweep passes happily
   while two tools answer one question differently — nothing in a single call
-  looks wrong. Prices are the live instance: `search_games`/`get_game`/
-  `get_prices` come from the Storefront (`price_overview`/`storesearch`), while
-  `get_items`/`discover_games`/the detailed wishlist come from `GetItems`'
+  looks wrong. Prices are the live instance: `get_game`/`get_prices` come
+  from the Storefront (`price_overview`), while `search_games`/`get_items`/
+  `discover_games`/the detailed wishlist come from the store services'
   purchase options, and the two disagreed by **10x** on appid 3717330 (Yakuza
   Kiwami: Rp 20 000 vs Rp 120 000) through several audits. So call BOTH
   families on the same appid and diff the numbers — then settle the tie against

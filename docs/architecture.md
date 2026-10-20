@@ -23,7 +23,7 @@ we rely on that: `GetNewsForApp`, `GetGlobalAchievementPercentagesForApp`,
 `IStoreService/GetGamesFollowed`(+`Count`), the charts services
 (`IStoreTopSellersService/GetWeeklyTopSellers`, `ISteamChartsService/GetMostPlayedGames`,
 `GetMostPlayedSteamDeckGames` and `GetGamesByConcurrentPlayers`), the store-browse services
-(`IStoreBrowseService/GetItems`, `IStoreQueryService/Query`), tag-name
+(`IStoreBrowseService/GetItems`, `IStoreQueryService/Query` and `SearchSuggestions`), tag-name
 resolution (`IStoreService/GetTagList`), and the enriched wishlist
 (`IWishlistService/GetWishlistSortedFiltered`). These tools are exposed
 without the key gate; the key is still sent when present.
@@ -52,7 +52,9 @@ the server Steam-only and dependency-free.
 ## Where prices come from
 
 Not from the Storefront API, even in the Storefront-backed tools. Both
-`appdetails`' `price_overview` and `storesearch`' `price` are filled from the
+`appdetails`' `price_overview` and `storesearch`' `price` (which `search_games`
+no longer reads — it uses `IStoreQueryService/SearchSuggestions`, whose store
+items carry purchase options directly) are filled from the
 **first sub of an app's default package group** rather than from its base game,
 so an app whose first sub is an upgrade SKU is reported at the upgrade's price
 with `discount_percent: 0`. Verified live on appid 3717330 (Yakuza Kiwami,

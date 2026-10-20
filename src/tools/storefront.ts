@@ -15,34 +15,10 @@ import {
   getPricesOutput,
   getReviewHistogramOutput,
   getSpecialsOutput,
-  searchGamesOutput,
 } from "../format/storefront.schemas.js";
 import { DLC_MAX, HISTOGRAM_HISTORY_MAX, HISTOGRAM_RECENT_MAX } from "../format/storefront.js";
 
 export function registerStorefrontTools(server: McpServer, store: StorefrontClient): void {
-  server.registerTool(
-    "search_games",
-    {
-      title: "Search games",
-      description:
-        "Search the Steam store by title — term can be partial or approximate, not an exact match; " +
-        "returns matches with their appid (needed by the other game tools), price, Metacritic score, " +
-        "platforms, type and a clickable store_url. Note `type` is Steam's storesearch value, which " +
-        "is 'app' for every store item — it does NOT distinguish a game from its DLC or soundtrack; " +
-        "call get_game on the appid for the real type (game/dlc/music/…). Returns only Steam's own first page " +
-        "of matches (~10, no pagination) — refine the term if the game you want isn't listed. No API " +
-        "key required.",
-      inputSchema: z.strictObject({
-        term: z.string().trim().nonempty().describe("Game title to search for."),
-        country,
-        language,
-      }),
-      outputSchema: searchGamesOutput,
-      annotations: READ_ONLY,
-    },
-    ({ term, country: cc, language: l }) => reply(() => store.searchGames(term, cc, l)),
-  );
-
   server.registerTool(
     "get_game",
     {

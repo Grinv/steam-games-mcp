@@ -130,7 +130,7 @@ Key: **–** no credentials · **K** Steam Web API key.
 
 | Tool                      | Key | Purpose                                                                                                                                                          |
 | ------------------------- | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_games`            | –   | Find games by title → appid (with price)                                                                                                                         |
+| `search_games`            | –   | Find games by title → appid (with price, Metacritic, type) — up to 100 matches                                                                                   |
 | `get_game`                | –   | Store details by appid **or name**: price, genres, platforms, Metacritic, age rating, DLC, requirements                                                          |
 | `get_items`               | –   | Batch store card (price, review %, **Deck/SteamOS/Machine/Frame** compat, native **platforms**, **tags**) — up to 50 appids                                      |
 | `discover_games`          | –   | Find games catalog-wide by **discount**, **recency**, **Deck/SteamOS/Machine/Frame**, **platform**, **tags**, rating                                             |

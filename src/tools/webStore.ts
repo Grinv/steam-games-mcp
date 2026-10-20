@@ -14,6 +14,7 @@ import {
   ITEMS_MAX,
   PRICES_MAX,
   READ_ONLY,
+  SEARCH_MAX,
   appid,
   country,
   language,
@@ -33,6 +34,7 @@ import { ACHIEVEMENTS_MAX } from "../format/webAchievements.js";
 import {
   discoverGamesOutput,
   getItemsOutput,
+  searchGamesOutput,
   wishlistDetailedFound,
 } from "../format/store.schemas.js";
 import {
@@ -56,6 +58,37 @@ export function registerStoreWebTools(
   web: SteamWebClient,
   store: StoreServiceClient,
 ): void {
+  server.registerTool(
+    "search_games",
+    {
+      title: "Search games",
+      description:
+        "Search the Steam store by title — term can be partial or approximate, not an exact match; " +
+        "returns matches with their appid (needed by the other game tools), the game's own price, " +
+        "Metacritic score, platforms, type (game, dlc, music for a soundtrack, demo, …) and a " +
+        "clickable store_url, in Steam's relevance order. `total` is Steam's full match count; " +
+        `\`limit\` returns up to ${SEARCH_MAX} of them (there is no paging past that, so refine ` +
+        "the term if the game you want isn't listed). Prices are Steam's formatted strings with " +
+        "the currency symbol (no separate currency code); null for free-to-play or unpriced games. " +
+        "For review %, Steam Deck status or tags, pass the appids to get_items. No API key required.",
+      inputSchema: z.strictObject({
+        term: z.string().trim().nonempty().describe("Game title to search for."),
+        limit: z
+          .int()
+          .positive()
+          .max(SEARCH_MAX)
+          .describe(`How many matches to return (1-${SEARCH_MAX}). Default 10.`)
+          .default(10),
+        country,
+        language,
+      }),
+      outputSchema: searchGamesOutput,
+      annotations: READ_ONLY,
+    },
+    ({ term, limit, country: cc, language: l }) =>
+      reply(() => store.searchGames(term, { country: cc, language: l, limit })),
+  );
+
   server.registerTool(
     "get_game_news",
     {

@@ -8,11 +8,8 @@
 // `outputSchema` in tools/storefront.ts.
 import { z } from "zod";
 
-// The currency/final/initial/discount_percent fields formattedPrice() builds
-// (detailApp's price()) and searchPrice() both produce, independently derived
-// from different raw shapes (already-formatted appdetails strings vs. raw
-// storesearch cents) but landing on the same final shape — shared here so the
-// two summarizers' price fragments can't drift apart from each other either.
+// The currency/final/initial/discount_percent fields formattedPrice() builds,
+// shared by detailApp's price() and summarizePrices' rows.
 export const priceFieldsSchema = z.strictObject({
   currency: z.string().nullable(),
   final: z.string().nullable(),
@@ -27,24 +24,6 @@ export const detailPriceSchema = z
     priceFieldsSchema.extend({ is_free: z.literal(false) }),
   ])
   .nullable();
-
-// summarizeSearch's searchPrice() — storesearch-derived price (no is_free).
-export const searchPriceSchema = priceFieldsSchema.nullable();
-
-export const searchGamesOutput = z.strictObject({
-  total: z.number(),
-  results: z.array(
-    z.strictObject({
-      appid: z.number().optional(),
-      name: z.string().optional(),
-      type: z.string().nullable(),
-      price: searchPriceSchema,
-      metascore: z.string().nullable(),
-      platforms: z.array(z.string()),
-      store_url: z.string().nullable(),
-    }),
-  ),
-});
 
 export const getGameOutput = z.strictObject({
   appid: z.number().optional(),

@@ -1,5 +1,6 @@
 // Response shapers for Steam's keyless store services (see AGENTS.md): one per
-// service — IStoreQueryService/Query (discover_games), IStoreBrowseService/
+// service — IStoreQueryService/SearchSuggestions (search_games),
+// IStoreQueryService/Query (discover_games), IStoreBrowseService/
 // GetItems (get_items), IWishlistService/GetWishlistSortedFiltered (get_wishlist
 // detailed) and the derived recommendations. Each trims a raw service response
 // into its agent-facing shape using the shared card/tag/filter toolkit in
@@ -11,13 +12,14 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
-import { capList, isoDay } from "./shared.js";
+import { capList, isoDay, storeUrl } from "./shared.js";
 import { wishlistNotFound } from "./shared.schemas.js";
 import {
   discoverGamesOutput,
   getItemsOutput,
   purchasePricesSchema,
   recommendedGamesFound,
+  searchGamesOutput,
   wishlistDetailedFound,
 } from "./store.schemas.js";
 import {
@@ -26,6 +28,7 @@ import {
   isOwnPackage,
   ownPurchaseOption,
   matchesAnyTag,
+  nativePlatforms,
   priceFields,
   resolveTags,
   storeCard,
@@ -36,6 +39,61 @@ import {
   type StoreItemWithAppid,
   type TagMap,
 } from "./storeCard.js";
+
+// ---- IStoreQueryService/SearchSuggestions (keyless title search) ------------
+
+export interface SearchSuggestionsResponse {
+  response?: {
+    metadata?: { total_matching_records?: number };
+    store_items?: StoreItem[];
+  };
+}
+
+const STORE_APP_TYPE = [
+  "game",
+  "demo",
+  "mod",
+  "movie",
+  "dlc",
+  "guide",
+  "software",
+  "video",
+  "series",
+  "episode",
+  "hardware",
+  "music",
+  "beta",
+  "tool",
+  "advertising",
+] as const;
+
+export function summarizeSearchSuggestions(
+  r: SearchSuggestionsResponse,
+): z.infer<typeof searchGamesOutput> {
+  const results = (r.response?.store_items ?? [])
+    .filter((it): it is StoreItemWithAppid => typeof it.appid === "number")
+    .map((it) => {
+      // Same rule as every card: the app's OWN package, never a bundle it sits
+      // in, and no price at all for a free app (its packages are paid add-ons).
+      const p = it.is_free ? undefined : priceFields(ownPurchaseOption(it));
+      return {
+        appid: it.appid,
+        name: it.name ?? null,
+        type: (typeof it.type === "number" && STORE_APP_TYPE[it.type]) || null,
+        price: p?.final
+          ? { final: p.final, initial: p.original, discount_percent: p.discount_pct }
+          : null,
+        metascore: it.extra_details?.metacritic?.score?.toString() ?? null,
+        platforms: nativePlatforms(it.platforms),
+        store_url: storeUrl(it.appid),
+      };
+    });
+  return searchGamesOutput.parse({
+    total: r.response?.metadata?.total_matching_records ?? results.length,
+    returned: results.length,
+    results,
+  });
+}
 
 // ---- IStoreQueryService/Query (keyless catalog discovery) -------------------
 

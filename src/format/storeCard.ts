@@ -21,6 +21,12 @@ import {
 export interface StoreItem {
   appid?: number;
   name?: string;
+  // EStoreAppType: 0 game, 1 demo, 2 mod, 3 movie, 4 dlc, 5 guide, 6 software,
+  // 7 video, 8 series, 9 episode, 10 hardware, 11 music, 12 beta, 13 tool,
+  // 14 advertising (SteamDatabase/Protobufs steam/enums.proto; 4 and 11 seen live).
+  type?: number;
+  // Only with data_request.include_extra_details (search_games asks for it).
+  extra_details?: { metacritic?: { score?: number } };
   is_free?: boolean;
   best_purchase_option?: {
     // Exactly one of these identifies WHAT Valve considers the best buy: a
@@ -196,7 +202,7 @@ const PLATFORM_FIELD = {
   mac: "mac",
   linux: "steamos_linux",
 } as const;
-function nativePlatforms(p: StoreItem["platforms"]): string[] {
+export function nativePlatforms(p: StoreItem["platforms"]): string[] {
   if (!p) return [];
   const out: string[] = [];
   if (p.windows) out.push("windows");

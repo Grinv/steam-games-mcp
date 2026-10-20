@@ -13,7 +13,6 @@ import {
   summarizePrices,
   summarizeReviewHistogram,
   summarizeReviews,
-  summarizeSearch,
   summarizeSpecials,
   type FeaturedResponse,
   type PriceDetailsResponse,
@@ -67,34 +66,15 @@ export class StorefrontClient {
     this.#cache = new TtlCache(config.cacheTtlMs);
   }
 
-  // storesearch backs both title search and name→appid resolution. country (cc)
-  // and language (l) fall back to the configured defaults; tools expose them as
-  // optional per-call overrides (e.g. compare prices by region).
-  #search(term: string, country?: string, language?: string): Promise<SearchResponse> {
-    return this.#http.getJson<SearchResponse>("api/storesearch/", {
+  // Resolve a game title to its appid via storesearch (top match), so callers
+  // can pass a name instead of an appid. Returns null when nothing matches.
+  // (search_games itself uses the store service's SearchSuggestions instead;
+  // see clients/storeService.ts.) country (cc) and language (l) fall back to
+  // the configured defaults.
+  async resolveAppId(term: string, country?: string, language?: string): Promise<number | null> {
+    const res = await this.#http.getJson<SearchResponse>("api/storesearch/", {
       query: { term, l: language ?? this.#l, cc: country ?? this.#cc },
     });
-  }
-
-  async searchGames(
-    term: string,
-    country?: string,
-    language?: string,
-  ): Promise<Record<string, unknown>> {
-    const res = await this.#search(term, country, language);
-    // Sequential, unlike getGame/getPrices below: the appids to price only exist
-    // once the search has answered. getPurchasePrices no-ops on an empty list,
-    // so a zero-result search still costs exactly one request.
-    const appids = (res.items ?? [])
-      .map((i) => i.id)
-      .filter((id): id is number => typeof id === "number");
-    return summarizeSearch(res, await this.#pricing.getPurchasePrices(appids, country, language));
-  }
-
-  // Resolve a game title to its appid via store search (top match), so callers
-  // can pass a name instead of an appid. Returns null when nothing matches.
-  async resolveAppId(term: string, country?: string, language?: string): Promise<number | null> {
-    const res = await this.#search(term, country, language);
     return res.items?.find((i) => typeof i.id === "number")?.id ?? null;
   }
 

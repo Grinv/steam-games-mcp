@@ -19,8 +19,10 @@ import {
   summarizeItems,
   summarizePurchasePrices,
   summarizeRecommendations,
+  summarizeSearchSuggestions,
   summarizeWishlistDetailed,
   type PurchasePrices,
+  type SearchSuggestionsResponse,
   type StoreQueryResponse,
   type WishlistDetailedResponse,
 } from "../format/store.js";
@@ -167,6 +169,40 @@ export class StoreServiceClient {
       this.#tagNames(language),
     ]);
     return { res, tagMap: this.#requireTagMapIfFiltering(tagsBeingFiltered, tagMap, language) };
+  }
+
+  // Title search (search_games, and the is_it_worth_buying prompt's completions)
+  // via the store's own search-suggestion service rather than the Storefront's
+  // storesearch: same relevance order (compared live), but up to 100 results
+  // instead of 10, a real match total, the item type, and GetItems-style store
+  // items in the same response — so prices come from the app's own package
+  // like every card, with no second lookup. `start` is ignored upstream (always
+  // 0), so there is no paging past `limit`. include_extra_details is only for
+  // metacritic: it roughly doubles the upstream payload (~+0.1 s at 50 results).
+  async searchGames(
+    term: string,
+    opts: { country?: string; language?: string; limit?: number } = {},
+  ): Promise<Record<string, unknown>> {
+    const res = await this.#get<SearchSuggestionsResponse>(
+      "IStoreQueryService/SearchSuggestions/v1/",
+      {
+        input_json: JSON.stringify({
+          search_term: term,
+          max_results: opts.limit ?? 10,
+          context: {
+            language: opts.language ?? this.#l,
+            country_code: opts.country ?? this.#country,
+          },
+          data_request: {
+            include_platforms: true,
+            include_all_purchase_options: true,
+            include_extra_details: true,
+          },
+        }),
+      },
+      { hasCredentials: false },
+    );
+    return summarizeSearchSuggestions(res);
   }
 
   // Batch store card (price+discount, review %, compat, popular tags, release) for

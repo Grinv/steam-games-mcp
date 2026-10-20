@@ -23,7 +23,8 @@ src/
   format/         # raw Steam payloads → trimmed, agent-facing shapes: storefront.ts,
                   #   web.ts + webAchievements.ts (official Web API: player data /
                   #   achievement lists), store.ts (keyless store-service summarizers:
-                  #   GetItems/Query/wishlist/recommendations) over storeCard.ts (their
+                  #   SearchSuggestions/GetItems/Query/wishlist/recommendations) over
+                  #   storeCard.ts (their
                   #   shared StoreItem/tag/compat/card/filter toolkit), shared.ts (helpers),
                   #   charts.ts (keyless chart services: top sellers / most played /
                   #   Steam Deck most played / live concurrent players, for get_charts).
