@@ -53,13 +53,14 @@ type Query = Record<string, string | number | boolean | undefined>;
 // AGENTS.md's keyless caveat — these endpoints answer without one too).
 type Get = <T>(path: string, query: Query, opts?: { hasCredentials?: boolean }) => Promise<T>;
 
-// The include_* flags every store-service card call needs (basic info, reviews,
-// release, native platforms + compat, popular tags). TAG_LIMIT tags: every card
+// The include_* flags every store-service card call needs (reviews, release,
+// native platforms + compat, popular tags). Not include_basic_info: no card
+// field reads it (name and is_free come with every item), and it was ~14% of
+// the payload — verified live that items are otherwise identical without it. TAG_LIMIT tags: every card
 // and the recommendation scoring read only that many (resolveTags), Steam
 // returns the most-weighted ones first (verified live), and tag FILTERING runs
 // server-side, so a longer list was only ever discarded.
 const storeCardDataRequest = () => ({
-  include_basic_info: true,
   include_reviews: true,
   include_release: true,
   include_platforms: true,
