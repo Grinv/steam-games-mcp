@@ -648,11 +648,25 @@ export class SteamWebClient {
 
   // ---- keyless-capable (key sent when present) ------------------------------
 
-  async getNews(appid: number, count: number): Promise<Record<string, unknown>> {
+  // kind narrows the feed server-side (verified live on 6 games): "official"
+  // keeps only the developer's own Steam announcements (the default list mixes
+  // in third-party press feeds), "patch_notes" only posts the developer tagged
+  // as patch notes.
+  async getNews(
+    appid: number,
+    count: number,
+    kind: "all" | "official" | "patch_notes" = "all",
+  ): Promise<Record<string, unknown>> {
     try {
       const res = await this.#get<NewsResponse>(
         "ISteamNews/GetNewsForApp/v2/",
-        { appid, count, maxlength: 400 },
+        {
+          appid,
+          count,
+          maxlength: 400,
+          ...(kind === "official" ? { feeds: "steam_community_announcements" } : {}),
+          ...(kind === "patch_notes" ? { tags: "patchnotes" } : {}),
+        },
         { hasCredentials: false },
       );
       return summarizeNews(res);

@@ -105,6 +105,10 @@ export function registerStoreWebTools(
       title: "Get game news",
       description:
         "Get recent news / patch notes for a game by appid (title, date, author, excerpt, link). " +
+        "By default this mixes the developer's announcements with third-party press feeds; set " +
+        "kind='official' for the developer's own posts only, or kind='patch_notes' for update " +
+        "notes only (posts the developer tagged as patch notes — if that comes back empty, try " +
+        "'official'). " +
         "Each excerpt is the first ~400 characters of the post with HTML stripped — follow `url` " +
         "for the full text. " +
         "An unknown/unassigned appid comes back as an empty list rather than an error, the same as " +
@@ -117,11 +121,18 @@ export function registerStoreWebTools(
           .max(20)
           .describe("How many news items (1-20). Default 5.")
           .default(5),
+        kind: z
+          .enum(["all", "official", "patch_notes"])
+          .describe(
+            "all (default) = every feed incl. press; official = the developer's Steam " +
+              "announcements only; patch_notes = update notes only.",
+          )
+          .default("all"),
       }),
       outputSchema: getGameNewsOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id, limit }) => reply(() => web.getNews(id, limit)),
+    ({ appid: id, limit, kind }) => reply(() => web.getNews(id, limit, kind)),
   );
 
   server.registerTool(

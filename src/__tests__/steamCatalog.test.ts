@@ -48,6 +48,18 @@ test("get_game_news works without a key", async (t) => {
   assert.equal(s.items[0]!.excerpt, "notes"); // HTML stripped
 });
 
+test("get_game_news kind narrows the feed server-side", async (t) => {
+  const { client, mock } = await setupServer(t, ENV, router);
+  const newsUrl = () => new URL(mock.calls.at(-1)!.url).searchParams;
+  await client.callTool({ name: "get_game_news", arguments: { appid: 620 } });
+  assert.equal(newsUrl().get("feeds"), null);
+  assert.equal(newsUrl().get("tags"), null);
+  await client.callTool({ name: "get_game_news", arguments: { appid: 620, kind: "official" } });
+  assert.equal(newsUrl().get("feeds"), "steam_community_announcements");
+  await client.callTool({ name: "get_game_news", arguments: { appid: 620, kind: "patch_notes" } });
+  assert.equal(newsUrl().get("tags"), "patchnotes");
+});
+
 test("get_game_news degrades to a clean empty result for a large/unassigned appid, not a misleading credentials error", async (t) => {
   // Regression: Steam answers 403 for GetNewsForApp on a large/unassigned
   // appid (verified live) — never a credentials problem, since this endpoint
