@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-20
+
 ### Added
 
 - Add `country` and `week` to `get_charts`' `top_sellers`, for a country's own best-sellers and past weeks. ([b763cff](https://github.com/Grinv/steam-games-mcp/commit/b763cff))
