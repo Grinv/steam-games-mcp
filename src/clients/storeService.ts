@@ -189,9 +189,13 @@ export class StoreServiceClient {
         input_json: JSON.stringify({
           search_term: term,
           max_results: opts.limit ?? 10,
-          // Server-side, so `limit` is filled with games rather than shrunk by
-          // dropped DLC/soundtracks, and `total` counts games only (verified live).
-          ...(opts.gamesOnly ? { filters: { type_filters: { include_games: true } } } : {}),
+          // Games only unless told otherwise (a title search is nearly always for
+          // the game, and DLC/soundtracks otherwise crowd it out). Server-side, so
+          // `limit` is filled with games rather than shrunk by dropped items, and
+          // `total` counts games only (verified live).
+          ...((opts.gamesOnly ?? true)
+            ? { filters: { type_filters: { include_games: true } } }
+            : {}),
           context: {
             language: opts.language ?? this.#l,
             country_code: opts.country ?? this.#country,
