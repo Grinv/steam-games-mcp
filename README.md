@@ -134,15 +134,15 @@ Key: **–** no credentials · **K** Steam Web API key.
 | `get_game`                | –   | Store details by appid **or name**: price, genres, platforms, Metacritic, age rating, DLC, requirements                                                          |
 | `get_items`               | –   | Batch store card (price, review %, **Deck/SteamOS/Machine/Frame** compat, native **platforms**, **tags**) — up to 50 appids                                      |
 | `discover_games`          | –   | Find games catalog-wide by **discount**, **recency**, **Deck/SteamOS/Machine/Frame**, **platform**, **tags**, rating                                             |
-| `get_game_reviews`        | –   | Review summary + recent reviews                                                                                                                                  |
+| `get_game_reviews`        | –   | Review summary + the most helpful (any window up to a year) or newest reviews                                                                                    |
 | `get_review_histogram`    | –   | Review trend over time (history + recent)                                                                                                                        |
 | `get_prices`              | –   | Batch current price/discount — up to 250 appids                                                                                                                  |
 | `get_specials`            | –   | Steam front-page discounts                                                                                                                                       |
 | `get_featured`            | –   | Featured sections (top sellers, new releases, …)                                                                                                                 |
-| `get_game_news`           | –   | Recent news / patch notes                                                                                                                                        |
+| `get_game_news`           | –   | Recent news, or only the developer's posts / patch notes                                                                                                         |
 | `get_global_achievements` | –   | Global achievement unlock rates (rarity) — top 200                                                                                                               |
 | `get_current_players`     | –   | Live concurrent player count                                                                                                                                     |
-| `get_charts`              | –   | What's popular now: weekly top sellers, most played (also on Steam Deck), live concurrent top 100 (ranks + appids; price/reviews via `get_items`)                |
+| `get_charts`              | –   | What's popular now: weekly top sellers (global or per country, any past week), most played (also on Steam Deck), live concurrent top 100 (ranks + appids)        |
 | `get_wishlist`            | –   | A player's wishlist — appids, or full cards + on-sale filter with `include_details` (public profiles)                                                            |
 | `get_followed_games`      | –   | A player's followed games (Steam's "follow" feature, separate from the wishlist) — appids (public profiles)                                                      |
 | `get_game_achievements`   | K   | Achievement list (names, descriptions) + rarity — first 150, definition order                                                                                    |
