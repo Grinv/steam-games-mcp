@@ -377,25 +377,55 @@ export function registerStoreWebTools(
         "tags or compat use discover_games. Returns only rank, appid, name, store_url and chart " +
         "metrics (no price/reviews/Deck status) — pass the appids to get_items for those. " +
         "`last_week_rank` null means a new entry; concurrent_players has none. Results are " +
-        "cached for a few minutes. " +
-        "All four are global rankings (the same in every country). No API key required.",
-      inputSchema: z.strictObject({
-        chart: chartSchema.describe(
-          "top_sellers = weekly best-sellers; most_played = yesterday's peak players; " +
-            "most_played_deck = most played on Steam Deck this past week; " +
-            "concurrent_players = live players now.",
-        ),
-        limit: z
-          .int()
-          .positive()
-          .max(100)
-          .describe("How many top entries to return (1-100). Default 20.")
-          .default(20),
-      }),
+        "cached for a few minutes. top_sellers is global by default; give `country` for that " +
+        "country's own best-sellers and `week` for a past week. The other three are global " +
+        "rankings of the current period only. No API key required.",
+      inputSchema: z
+        .strictObject({
+          chart: chartSchema.describe(
+            "top_sellers = weekly best-sellers; most_played = yesterday's peak players; " +
+              "most_played_deck = most played on Steam Deck this past week; " +
+              "concurrent_players = live players now.",
+          ),
+          limit: z
+            .int()
+            .positive()
+            .max(100)
+            .describe("How many top entries to return (1-100). Default 20.")
+            .default(20),
+          country: country.describe(
+            "top_sellers only: two-letter country code for that country's best-sellers, e.g. DE. " +
+              `Omit for the global chart. ${COUNTRY_UNKNOWN_WARNING}`,
+          ),
+          week: z.iso
+            .date({
+              error: (issue) =>
+                issue.code === "invalid_type"
+                  ? undefined
+                  : "Use a real ISO calendar date, e.g. 2026-03-01.",
+            })
+            .describe(
+              "top_sellers only: any date (YYYY-MM-DD) inside the week to show; Steam's weeks " +
+                "start Tuesday 00:00 UTC and go back 10+ years. Omit for the latest published week " +
+                "(`as_of` says which week that is).",
+            )
+            .optional(),
+        })
+        .refine((a) => a.chart === "top_sellers" || (a.country === undefined && !a.week), {
+          message:
+            "country and week apply to top_sellers only; the other charts are global and current.",
+        }),
       outputSchema: getChartsOutput,
       annotations: READ_ONLY,
     },
-    ({ chart, limit }) => reply(() => store.getCharts(chart, { limit })),
+    ({ chart, limit, country: cc, week }) =>
+      reply(() =>
+        store.getCharts(chart, {
+          limit,
+          country: cc?.toUpperCase(),
+          weekOf: week ? Date.parse(week) / 1000 : undefined,
+        }),
+      ),
   );
 
   server.registerTool(

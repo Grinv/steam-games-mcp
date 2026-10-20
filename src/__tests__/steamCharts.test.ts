@@ -93,15 +93,45 @@ type Entry = Record<string, unknown>;
 type Out = { chart: string; as_of: string | null; count: number; entries: Entry[] };
 
 describe("get_charts", () => {
-  test("rejects a `country`: every chart is a global ranking", async (t) => {
-    // Verified live 2026-10-03: GetWeeklyTopSellers returns the identical
-    // order for US, JP and RU, so a country argument would only mislead.
+  test("top_sellers takes a country (top-level country_code) and a week (start_date)", async (t) => {
+    // Verified live 2026-10-20: only the request's TOP-LEVEL country_code
+    // changes the ranking (DE/BR/JP each differ from global); context alone
+    // doesn't. start_date is snapped by Steam to the week containing it.
     const { client, mock } = await setupServer(t, ENV, chartsRouter());
-    const res = await client.callTool({
+    await client.callTool({
       name: "get_charts",
-      arguments: { chart: "top_sellers", country: "DE" },
+      arguments: { chart: "top_sellers", country: "de", week: "2026-03-05" },
     });
-    assert.equal(res.isError, true);
+    const input = JSON.parse(
+      new URL(mock.calls.find((c) => c.url.includes("GetWeeklyTopSellers"))!.url).searchParams.get(
+        "input_json",
+      )!,
+    ) as { country_code?: string; start_date?: number };
+    assert.equal(input.country_code, "DE");
+    assert.equal(input.start_date, Date.UTC(2026, 2, 5) / 1000);
+  });
+
+  test("top_sellers without a country is the global chart (no top-level country_code)", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, chartsRouter());
+    await client.callTool({ name: "get_charts", arguments: { chart: "top_sellers" } });
+    const input = JSON.parse(
+      new URL(mock.calls.find((c) => c.url.includes("GetWeeklyTopSellers"))!.url).searchParams.get(
+        "input_json",
+      )!,
+    ) as { country_code?: string; start_date?: number };
+    assert.equal(input.country_code, undefined);
+    assert.equal(input.start_date, undefined);
+  });
+
+  test("country and week are rejected for the other charts, which are global and current", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, chartsRouter());
+    for (const args of [
+      { chart: "most_played", country: "DE" },
+      { chart: "concurrent_players", week: "2026-03-05" },
+    ]) {
+      const res = await client.callTool({ name: "get_charts", arguments: args });
+      assert.equal(res.isError, true);
+    }
     assert.equal(mock.calls.length, 0);
   });
 

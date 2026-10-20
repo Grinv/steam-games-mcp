@@ -362,20 +362,29 @@ export class StoreServiceClient {
   // `item`: weekly top sellers, the weekly Steam Deck most-played, and the
   // most-played / live-concurrent top-100s. Cached under the shared TtlCache
   // TTL (CACHE_TTL_MS), stale-on-error.
-  async getCharts(chart: ChartName, opts: { limit: number }): Promise<Record<string, unknown>> {
+  async getCharts(
+    chart: ChartName,
+    opts: { limit: number; country?: string; weekOf?: number },
+  ): Promise<Record<string, unknown>> {
     const { limit } = opts;
     if (chart === "top_sellers") {
-      // The ranking itself is global (verified live: identical for US/JP/RU), so
-      // no country parameter; the configured one only shapes the request context.
-      const cc = this.#country;
+      // Global unless the request's TOP-LEVEL country_code is set: that gives
+      // the country's own chart (verified live: DE, BR and JP each differ from
+      // the global order), while context.country_code alone changes nothing —
+      // which is how this was once mistaken for a global-only ranking.
+      // start_date is snapped by Steam to the week containing it (weeks start
+      // Tuesday 00:00 UTC; history reaches back 10+ years, verified live).
+      const { country, weekOf } = opts;
       const res = await this.#cache.wrapStaleOnError(
-        `charts:top_sellers:${cc}:${this.#l}:${limit}`,
+        `charts:top_sellers:${country ?? "global"}:${weekOf ?? "latest"}:${this.#l}:${limit}`,
         () =>
           this.#get<TopSellersResponse>(
             "IStoreTopSellersService/GetWeeklyTopSellers/v1/",
             {
               input_json: JSON.stringify({
-                context: { country_code: cc, language: this.#l },
+                ...(country ? { country_code: country } : {}),
+                context: { country_code: country ?? this.#country, language: this.#l },
+                ...(weekOf !== undefined ? { start_date: weekOf } : {}),
                 page_count: limit,
               }),
             },
