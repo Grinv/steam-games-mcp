@@ -390,6 +390,18 @@ price_overview`), so the suite agrees with the bug instead of catching it.
 - A tool that assumes a private profile 404s instead of returning a
   restricted-but-200 shape (or vice versa) — Steam's actual behavior differs
   by endpoint, don't assume one implies the other for a sibling endpoint.
+- **A bad key read as "private".** Steam answers a bad/revoked key with the
+  same 403 a private profile gets, on every key-gated endpoint — told apart
+  only by the body (an HTML "verify your `<pre>key=</pre>`" page vs. JSON like
+  `"Profile is not public"`; a private friends list is a 401 with `{}`). Every
+  `catch` mapping `forbidden`/`unauthorized` to a privacy or "no data" verdict
+  must exclude it via `isBadKey()` (`clients/web.ts`): `get_player_achievements`
+  and `get_friend_list` shipped telling the agent to change privacy settings
+  when the key was the problem, while `get_player_summary` correctly blamed the
+  key. Re-check by running the key-gated tools with a fake 32-hex key against a
+  known-private profile, not just with no key (no key short-circuits before any
+  fetch, so it never reaches these branches). Keyless endpoints ignore a bad
+  key and answer 200, so they can't hit this.
 - A raw-response TS interface or a private/empty-detection helper (e.g.
   `isPrivate()`) reused across two upstream endpoints that merely _look_
   alike (same steamid-in/games-list-out shape) — confirmed recurring:

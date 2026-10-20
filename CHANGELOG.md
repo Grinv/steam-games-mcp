@@ -9,6 +9,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Bump the MCP TypeScript SDK to 2.3.1 and zod to 4.6.7. ([af58a4b](https://github.com/Grinv/steam-games-mcp/commit/af58a4b))
+- Speed up `get_recommended_games` by sending its three upstream requests at once. ([3074c37](https://github.com/Grinv/steam-games-mcp/commit/3074c37))
+
+### Fixed
+
+- Fix a bad or revoked API key being reported as a private profile or friends list; it now surfaces as a credentials error. ([e791dcb](https://github.com/Grinv/steam-games-mcp/commit/e791dcb))
+- Fix a request hanging past `HTTP_TIMEOUT_MS` when Steam sent the headers but stalled mid-body. ([630ff5a](https://github.com/Grinv/steam-games-mcp/commit/630ff5a))
+- Fix `get_game_achievements` caching a list without rarity for the full TTL after one failed rarity lookup. ([e791dcb](https://github.com/Grinv/steam-games-mcp/commit/e791dcb))
+- Fix `search_games` reporting a 100%-off game as `discount_percent` 0. ([5ae5951](https://github.com/Grinv/steam-games-mcp/commit/5ae5951))
+- Fix `get_game_achievements` reporting an unknown unlock rate as 0% instead of null, unlike `get_global_achievements`. ([5ae5951](https://github.com/Grinv/steam-games-mcp/commit/5ae5951))
+- Fix `get_charts` occasionally leaving its last row without a name. ([5ae5951](https://github.com/Grinv/steam-games-mcp/commit/5ae5951))
+- Fix tag filters with surrounding spaces silently matching or excluding nothing. ([654727b](https://github.com/Grinv/steam-games-mcp/commit/654727b))
+- Fix `is_it_worth_buying`'s `game` argument letting a newline or quote append instructions to the prompt. ([654727b](https://github.com/Grinv/steam-games-mcp/commit/654727b))
 
 ## [0.15.0] - 2026-10-04
 
