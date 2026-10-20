@@ -6,6 +6,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Bump the MCP TypeScript SDK to 2.3.1 and zod to 4.6.7. ([af58a4b](https://github.com/Grinv/steam-games-mcp/commit/af58a4b))
+
 ## [0.15.0] - 2026-10-04
 
 ### Added
