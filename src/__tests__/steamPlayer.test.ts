@@ -440,7 +440,7 @@ describe("get_recommended_games", () => {
     assert.equal(input.query.filters.price_filters.min_discount_percent, 30);
   });
 
-  test("get_recommended_games: the pool is games-only and excludes exclude_tags server-side", async (t) => {
+  test("get_recommended_games: the pool is games-only, favorite-tagged and excludes exclude_tags server-side", async (t) => {
     const { client, mock } = await setupServer(t, ENV, recoRouter);
     await client.callTool({
       name: "get_recommended_games",
@@ -451,6 +451,10 @@ describe("get_recommended_games", () => {
     assert.deepEqual(input.query.filters.type_filters, { include_games: true });
     // An unknown name excludes nothing, so only the resolved id goes upstream.
     assert.deepEqual(input.query.filters.tagids_exclude, [3]);
+    // The pool is narrowed to games carrying ANY favorite tag: one group, ORed.
+    const groups = input.query.filters.tagids_must_match as { tagids: number[] }[];
+    assert.equal(groups.length, 1);
+    assert.ok(groups[0]!.tagids.length > 0);
   });
 
   test("get_recommended_games reports found:false for a private profile", async (t) => {

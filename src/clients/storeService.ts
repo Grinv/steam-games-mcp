@@ -540,35 +540,7 @@ export class StoreServiceClient {
       },
       { hasCredentials: false },
     );
-    // The tool schema's own min(1).max(25) already bounds this — no need to
-    // re-clamp here, just fall back for direct (non-tool) callers.
-    const count = opts.count ?? 10;
-    // Server-side filters, as #queryCatalog's: games only, the price floor and
-    // the excluded tags all cut the candidate pool before it is scored, instead
-    // of spending its 300 slots on items summarizeRecommendations would only
-    // discard locally (it still re-checks every one of them).
-    const pool = (excludeIds: number[]) => {
-      const filters: Record<string, unknown> = { type_filters: { include_games: true } };
-      if (typeof opts.minDiscount === "number")
-        filters.price_filters = { min_discount_percent: opts.minDiscount };
-      if (excludeIds.length) filters.tagids_exclude = excludeIds;
-      return this.#get<StoreQueryResponse>(
-        "IStoreQueryService/Query/v1/",
-        {
-          input_json: JSON.stringify({
-            query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
-            context: { language: l, country_code: cc, steam_realm: 1 },
-            data_request: storeCardDataRequest(),
-          }),
-        },
-        { hasCredentials: false },
-      );
-    };
-    // Excluded tags need their ids, i.e. the (cached) dictionary, first;
-    // otherwise the pool goes out right away with the other two requests.
-    let poolPromise = opts.excludeTags?.length ? undefined : pool([]);
     samplePromise.catch(() => {});
-    poolPromise?.catch(() => {});
     const tagMap = await tagMapPromise;
     if (tagMap === null) {
       // Same "fail loudly, don't silently degrade" rule as
@@ -596,14 +568,37 @@ export class StoreServiceClient {
       .slice(0, BASED_ON_TAGS_LIMIT)
       .map(([tag]) => tag);
 
-    if (!poolPromise) {
-      const idOf = tagIdLookup(tagMap);
-      // An unknown name excludes nothing, here and client-side alike.
-      poolPromise = pool(
-        (opts.excludeTags ?? []).map(idOf).filter((id): id is number => id !== undefined),
-      );
-    }
-    const poolRes = await poolPromise;
+    // The pool waits for the favorite tags, so its 300 slots go to games that
+    // carry at least one of them: one tagids_must_match group ORs its ids
+    // (verified live — a niche visual-novel/puzzle taste went from 84 to 163
+    // relevant candidates of 300). Plus, as #queryCatalog: games only, the
+    // price floor and exclude_tags, all server-side; summarizeRecommendations
+    // still scores and re-checks every candidate. An unknown exclude name
+    // excludes nothing, here and client-side alike.
+    const idOf = tagIdLookup(tagMap);
+    const ids = (names: string[]) => names.map(idOf).filter((id): id is number => id !== undefined);
+    const filters: Record<string, unknown> = {
+      type_filters: { include_games: true },
+      tagids_must_match: [{ tagids: ids(basedOnTags) }],
+    };
+    if (typeof opts.minDiscount === "number")
+      filters.price_filters = { min_discount_percent: opts.minDiscount };
+    const excludeIds = ids(opts.excludeTags ?? []);
+    if (excludeIds.length) filters.tagids_exclude = excludeIds;
+    // The tool schema's own min(1).max(25) already bounds this — no need to
+    // re-clamp here, just fall back for direct (non-tool) callers.
+    const count = opts.count ?? 10;
+    const poolRes = await this.#get<StoreQueryResponse>(
+      "IStoreQueryService/Query/v1/",
+      {
+        input_json: JSON.stringify({
+          query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
+          context: { language: l, country_code: cc, steam_realm: 1 },
+          data_request: storeCardDataRequest(),
+        }),
+      },
+      { hasCredentials: false },
+    );
     const ownedAppids = new Set(ownedGames.map((g) => g.appid));
     return summarizeRecommendations(
       poolRes.response?.store_items ?? [],

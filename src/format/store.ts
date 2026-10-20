@@ -326,9 +326,9 @@ export function computeFavoriteTagWeights(
 
 // Ranks unowned catalog items by overlap with the player's weighted tag
 // preferences, discounted by how well-reviewed each candidate is — a locally
-// computed ranking, since the Query API has no "similar to my library" or
-// OR-tag mode of its own (its own tags filter is AND-only, unsuitable for "any
-// of my several favorite tags"), and doesn't rank by review quality either.
+// computed ranking: the Query API can narrow the pool to games carrying ANY of
+// the favorite tags (clients/storeService.ts does), but has no weighted "similar
+// to my library" ranking, and doesn't rank by review quality either.
 export function summarizeRecommendations(
   candidates: StoreItem[],
   tagWeights: Map<string, number>,
