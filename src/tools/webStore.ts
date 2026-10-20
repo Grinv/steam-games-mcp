@@ -323,18 +323,21 @@ export function registerStoreWebTools(
       description:
         "Get what is popular on Steam right now as a ranked list. `chart` picks one: top_sellers " +
         "(weekly best-sellers, with weeks on chart), most_played (top 100 by peak players on the " +
-        "last full day, with the rank a week earlier) or concurrent_players (top 100 by players " +
-        "in game right now, live). Use for 'what's hot / top selling / most played on Steam'; for " +
+        "last full day, with the rank a week earlier), most_played_deck (top 100 played on Steam " +
+        "Deck in the past week, with the previous week's rank) or concurrent_players (top 100 by " +
+        "players in game right now, live). Use for 'what's hot / top selling / most played on " +
+        "Steam (Deck)'; for " +
         "one known game's live count use get_current_players, for the store front page's curated " +
         "sections (also hardware and bundles) use get_featured, to FILTER the catalog by discount, " +
         "tags or compat use discover_games. Returns only rank, appid, name, store_url and chart " +
         "metrics (no price/reviews/Deck status) — pass the appids to get_items for those. " +
         "`last_week_rank` null means a new entry; concurrent_players has none. Player-chart names " +
         "come from a best-effort lookup and may be null. Results are cached for a few minutes. " +
-        "All three are global rankings (the same in every country). No API key required.",
+        "All four are global rankings (the same in every country). No API key required.",
       inputSchema: z.strictObject({
         chart: chartSchema.describe(
           "top_sellers = weekly best-sellers; most_played = yesterday's peak players; " +
+            "most_played_deck = most played on Steam Deck this past week; " +
             "concurrent_players = live players now.",
         ),
         limit: z

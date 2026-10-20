@@ -24,7 +24,7 @@
 - **No data is kept between requests beyond a small TTL cache** (`CACHE_TTL_MS`,
   default 5 minutes) of non-personal store/catalog responses (game details,
   review histogram, tag dictionary, the featured/specials payload, the
-  top-sellers / most-played / live-players charts, `get_game`'s price
+  top-sellers / most-played / Steam Deck most-played / live-players charts, `get_game`'s price
   correction, global achievement percentages and a game's achievement
   schema). Player-specific responses (profile, library,
   achievements, friends) are never cached, with two exceptions:

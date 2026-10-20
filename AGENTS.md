@@ -26,7 +26,7 @@ src/
                   #   GetItems/Query/wishlist/recommendations) over storeCard.ts (their
                   #   shared StoreItem/tag/compat/card/filter toolkit), shared.ts (helpers),
                   #   charts.ts (keyless chart services: top sellers / most played /
-                  #   live concurrent players, for get_charts).
+                  #   Steam Deck most played / live concurrent players, for get_charts).
                   #   Each shaper has a co-located *.schemas.ts (schema-first: the shaper
                   #   builds its return value via `schema.parse({...})`, see Conventions);
                   #   storeCard.ts shares store.schemas.ts with store.ts

@@ -21,8 +21,8 @@ Valve states _all_ Web API use requires a key
 we rely on that: `GetNewsForApp`, `GetGlobalAchievementPercentagesForApp`,
 `GetNumberOfCurrentPlayers`, `IWishlistService/GetWishlist`,
 `IStoreService/GetGamesFollowed`(+`Count`), the charts services
-(`IStoreTopSellersService/GetWeeklyTopSellers`, `ISteamChartsService/GetMostPlayedGames`
-and `GetGamesByConcurrentPlayers`), the store-browse services
+(`IStoreTopSellersService/GetWeeklyTopSellers`, `ISteamChartsService/GetMostPlayedGames`,
+`GetMostPlayedSteamDeckGames` and `GetGamesByConcurrentPlayers`), the store-browse services
 (`IStoreBrowseService/GetItems`, `IStoreQueryService/Query`), tag-name
 resolution (`IStoreService/GetTagList`), and the enriched wishlist
 (`IWishlistService/GetWishlistSortedFiltered`). These tools are exposed

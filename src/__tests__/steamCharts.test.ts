@@ -1,5 +1,5 @@
-// Integration tests for get_charts (keyless): top_sellers, most_played and
-// concurrent_players — mirrors tools/webStore.ts's get_charts registration.
+// Integration tests for get_charts (keyless): top_sellers, most_played,
+// most_played_deck and concurrent_players — mirrors tools/webStore.ts's get_charts registration.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { setupServer, jsonResponse, assertToolError } from "./helpers.js";
@@ -49,6 +49,17 @@ const CONCURRENT = {
     ],
   },
 };
+// Shape verified live 2026-10-20: names ride along on `item`, no date field,
+// and a new entry's last_period_rank is -1.
+const DECK = {
+  response: {
+    ranks: [
+      { rank: 1, appid: 2868840, item: { name: "Slay the Spire 2" }, last_period_rank: 1 },
+      { rank: 2, appid: 4231820, item: { name: "Newcomer" }, last_period_rank: -1 },
+    ],
+    top_played_period: 1,
+  },
+};
 const NAMES = {
   response: {
     store_items: [
@@ -62,6 +73,7 @@ function chartsRouter(over: { names?: () => Response } = {}) {
   return (url: string) => {
     if (url.includes("GetWeeklyTopSellers")) return jsonResponse(TOP_SELLERS);
     if (url.includes("GetMostPlayedGames")) return jsonResponse(MOST_PLAYED);
+    if (url.includes("GetMostPlayedSteamDeckGames")) return jsonResponse(DECK);
     if (url.includes("GetGamesByConcurrentPlayers")) return jsonResponse(CONCURRENT);
     if (url.includes("IStoreBrowseService/GetItems") && over.names) return over.names();
     if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(NAMES);
@@ -129,6 +141,31 @@ describe("get_charts", () => {
       mock.calls.filter((c) => c.url.includes("IStoreBrowseService/GetItems")).length,
       1,
     );
+  });
+
+  test("most_played_deck asks for the past week, takes names from the chart and maps -1 to null", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, chartsRouter());
+    const res = await client.callTool({
+      name: "get_charts",
+      arguments: { chart: "most_played_deck", limit: 2 },
+    });
+    const s = res.structuredContent as Out;
+    assert.equal(s.chart, "most_played_deck");
+    assert.equal(s.as_of, null);
+    assert.deepEqual(s.entries[0], {
+      rank: 1,
+      appid: 2868840,
+      name: "Slay the Spire 2",
+      store_url: "https://store.steampowered.com/app/2868840",
+      last_week_rank: 1,
+    });
+    assert.equal(s.entries[1]!.last_week_rank, null);
+    const u = decodeURIComponent(
+      mock.calls.find((c) => c.url.includes("GetMostPlayedSteamDeckGames"))!.url,
+    );
+    assert.match(u, /"top_played_period":1/);
+    assert.match(u, /"count":2/);
+    assert.ok(!mock.calls.some((c) => c.url.includes("IStoreBrowseService/GetItems")));
   });
 
   test("concurrent_players returns live and peak counts, and no last_week_rank", async (t) => {

@@ -63,7 +63,7 @@
     { "name": "get_current_players", "description": "Live concurrent player count." },
     {
       "name": "get_charts",
-      "description": "Top sellers, most played and live top players on Steam."
+      "description": "Top sellers, most played (also on Steam Deck) and live top players on Steam."
     },
     {
       "name": "get_wishlist",

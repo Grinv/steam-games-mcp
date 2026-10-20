@@ -453,6 +453,24 @@ const checks = [
     },
   },
   {
+    name: "web ISteamChartsService/GetMostPlayedSteamDeckGames (charts)",
+    run: async () => {
+      const input = {
+        context: { country_code: "US", language: "english" },
+        data_request: {},
+        top_played_period: 1,
+        count: 3,
+      };
+      const body = await getJson(
+        `${API}/ISteamChartsService/GetMostPlayedSteamDeckGames/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
+      );
+      const r = body.response?.ranks?.[0];
+      need(typeof r?.rank === "number" && typeof r.appid === "number", "ranks[0].rank/appid");
+      need(typeof r?.item?.name === "string", "ranks[0].item.name");
+      need(typeof r?.last_period_rank === "number", "ranks[0].last_period_rank");
+    },
+  },
+  {
     name: "web ISteamChartsService/GetGamesByConcurrentPlayers (charts)",
     run: async () => {
       const body = await getJson(

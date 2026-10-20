@@ -1,6 +1,6 @@
 // Shapers for Steam's keyless chart services (get_charts):
 // IStoreTopSellersService/GetWeeklyTopSellers, ISteamChartsService/
-// GetMostPlayedGames and GetGamesByConcurrentPlayers. Lean by design — rank,
+// GetMostPlayedGames, GetMostPlayedSteamDeckGames and GetGamesByConcurrentPlayers. Lean by design — rank,
 // appid, name, link and the chart's own metrics; price/reviews/compat are what
 // get_items is for.
 import { z } from "zod";
@@ -35,11 +35,25 @@ export interface ConcurrentPlayersResponse {
   response?: { last_update?: number; ranks?: PlayerRank[] };
 }
 
+// Names ride along on each rank's `item` (requested via an empty data_request);
+// there is no date field at all, and a new entry's last_period_rank is -1.
+export interface DeckMostPlayedResponse {
+  response?: {
+    ranks?: {
+      rank?: number;
+      appid?: number;
+      item?: { name?: string };
+      last_period_rank?: number;
+    }[];
+  };
+}
+
 export type ChartName = z.infer<typeof chartSchema>;
 
 // Steam omits last_week_rank for a new entry (verified live on the top-sellers
-// chart); 0 is treated the same defensively. Both mean "not charted last week".
-const prevRank = (n: number | undefined): number | null => (n ? n : null);
+// chart) and sends -1 on the Deck chart; 0 is treated the same defensively. All
+// mean "not charted last week".
+const prevRank = (n: number | undefined): number | null => (n && n > 0 ? n : null);
 
 const num = (n: number | undefined): number | null => (typeof n === "number" ? n : null);
 
@@ -98,6 +112,28 @@ export function summarizeMostPlayed(
   return getChartsOutput.parse({
     chart: "most_played",
     as_of: isoDateTime(r.response?.rollup_date),
+    count: entries.length,
+    entries,
+  });
+}
+
+export function summarizeMostPlayedDeck(
+  r: DeckMostPlayedResponse,
+  limit: number,
+): z.infer<typeof getChartsOutput> {
+  const entries = (r.response?.ranks ?? [])
+    .filter((e) => typeof e.appid === "number")
+    .slice(0, limit)
+    .map((e) => ({
+      rank: e.rank ?? 0,
+      appid: e.appid!,
+      name: e.item?.name ?? null,
+      store_url: storeUrl(e.appid),
+      last_week_rank: prevRank(e.last_period_rank),
+    }));
+  return getChartsOutput.parse({
+    chart: "most_played_deck",
+    as_of: null,
     count: entries.length,
     entries,
   });

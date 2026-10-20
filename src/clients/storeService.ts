@@ -29,8 +29,10 @@ import {
   itemNames,
   summarizeConcurrentPlayers,
   summarizeMostPlayed,
+  summarizeMostPlayedDeck,
   summarizeTopSellers,
   type ConcurrentPlayersResponse,
+  type DeckMostPlayedResponse,
   type MostPlayedResponse,
   type TopSellersResponse,
 } from "../format/charts.js";
@@ -192,8 +194,9 @@ export class StoreServiceClient {
     return summarizeItems(res, appids, tagMap);
   }
 
-  // Steam charts (get_charts), all keyless: weekly top sellers (names ride along
-  // on each rank's `item`), and the most-played / live-concurrent top-100s, which
+  // Steam charts (get_charts), all keyless: weekly top sellers and the weekly
+  // Steam Deck most-played (names ride along on each rank's `item`), and the
+  // most-played / live-concurrent top-100s, which
   // carry only appids — their names come from ONE batched GetItems call.
   // Cached under the shared TtlCache TTL (CACHE_TTL_MS), stale-on-error.
   async getCharts(chart: ChartName, opts: { limit: number }): Promise<Record<string, unknown>> {
@@ -217,6 +220,30 @@ export class StoreServiceClient {
           ),
       );
       return summarizeTopSellers(res, limit);
+    }
+    if (chart === "most_played_deck") {
+      // Period 1 is the only one Steam labels: its own chart page requests it and
+      // reads "Top 100 played games on Steam Deck in the past week" (2 and 3 also
+      // answer, but nothing says what they cover). Global like the others
+      // (verified live: identical for US/JP/RU); names ride along on `item`.
+      const cc = this.#country;
+      const res = await this.#cache.wrapStaleOnError(
+        `charts:most_played_deck:${cc}:${this.#l}:${limit}`,
+        () =>
+          this.#get<DeckMostPlayedResponse>(
+            "ISteamChartsService/GetMostPlayedSteamDeckGames/v1/",
+            {
+              input_json: JSON.stringify({
+                context: { country_code: cc, language: this.#l },
+                data_request: {},
+                top_played_period: 1,
+                count: limit,
+              }),
+            },
+            { hasCredentials: false },
+          ),
+      );
+      return summarizeMostPlayedDeck(res, limit);
     }
     const concurrent = chart === "concurrent_players";
     const res = await this.#cache.wrapStaleOnError(`charts:${chart}`, () =>
