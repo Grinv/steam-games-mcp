@@ -15,12 +15,7 @@ export const chartSchema = z.enum(CHART_NAMES);
 const base = {
   rank: z.number(),
   appid: z.number(),
-  name: z
-    .string()
-    .nullable()
-    .describe(
-      "Game name; null when Steam did not resolve one (best-effort for the player charts).",
-    ),
+  name: z.string().nullable().describe("Game name; null when Steam sends none for the entry."),
   store_url: z.string().nullable(),
 };
 

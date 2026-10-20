@@ -34,8 +34,15 @@ const MOST_PLAYED = {
   response: {
     rollup_date: 1790899200,
     ranks: [
-      { rank: 1, appid: 730, last_week_rank: 1, peak_in_game: 1160588 },
-      { rank: 2, appid: 570, last_week_rank: 0, peak_in_game: 790564 },
+      {
+        rank: 1,
+        appid: 730,
+        item: { name: "Counter-Strike 2" },
+        last_week_rank: 1,
+        peak_in_game: 1160588,
+      },
+      { rank: 2, appid: 570, item: { name: "Dota 2" }, last_week_rank: 0, peak_in_game: 790564 },
+      // No item: a name Steam didn't send stays null.
       { rank: 3, appid: 578080, last_week_rank: 3, peak_in_game: 605728 },
     ],
   },
@@ -44,8 +51,20 @@ const CONCURRENT = {
   response: {
     last_update: 1790999541,
     ranks: [
-      { rank: 1, appid: 730, concurrent_in_game: 516559, peak_in_game: 1160588 },
-      { rank: 2, appid: 570, concurrent_in_game: 434781, peak_in_game: 790564 },
+      {
+        rank: 1,
+        appid: 730,
+        item: { name: "Counter-Strike 2" },
+        concurrent_in_game: 516559,
+        peak_in_game: 1160588,
+      },
+      {
+        rank: 2,
+        appid: 570,
+        item: { name: "Dota 2" },
+        concurrent_in_game: 434781,
+        peak_in_game: 790564,
+      },
     ],
   },
 };
@@ -60,23 +79,12 @@ const DECK = {
     top_played_period: 1,
   },
 };
-const NAMES = {
-  response: {
-    store_items: [
-      { appid: 730, name: "Counter-Strike 2" },
-      { appid: 570, name: "Dota 2" },
-    ],
-  },
-};
-
-function chartsRouter(over: { names?: () => Response } = {}) {
+function chartsRouter() {
   return (url: string) => {
     if (url.includes("GetWeeklyTopSellers")) return jsonResponse(TOP_SELLERS);
     if (url.includes("GetMostPlayedGames")) return jsonResponse(MOST_PLAYED);
     if (url.includes("GetMostPlayedSteamDeckGames")) return jsonResponse(DECK);
     if (url.includes("GetGamesByConcurrentPlayers")) return jsonResponse(CONCURRENT);
-    if (url.includes("IStoreBrowseService/GetItems") && over.names) return over.names();
-    if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(NAMES);
     return router(url);
   };
 }
@@ -124,7 +132,7 @@ describe("get_charts", () => {
     assert.ok(!mock.calls.some((c) => c.url.includes("IStoreBrowseService/GetItems")));
   });
 
-  test("most_played resolves names in one batched call and maps last_week_rank 0 to null", async (t) => {
+  test("most_played takes names from the chart in one request and maps last_week_rank 0 to null", async (t) => {
     const { client, mock } = await setupServer(t, ENV, chartsRouter());
     const res = await client.callTool({
       name: "get_charts",
@@ -136,11 +144,10 @@ describe("get_charts", () => {
     assert.equal(s.entries[0]!.name, "Counter-Strike 2");
     assert.equal(s.entries[0]!.peak_in_game, 1160588);
     assert.equal(s.entries[1]!.last_week_rank, null);
-    assert.equal(s.entries[2]!.name, null); // not in the lookup response
-    assert.equal(
-      mock.calls.filter((c) => c.url.includes("IStoreBrowseService/GetItems")).length,
-      1,
-    );
+    assert.equal(s.entries[2]!.name, null); // Steam sent no item for it
+    assert.equal(mock.calls.length, 1);
+    const u = decodeURIComponent(mock.calls[0]!.url);
+    assert.match(u, /"data_request":\{\}/);
   });
 
   test("most_played_deck asks for the past week, takes names from the chart and maps -1 to null", async (t) => {
@@ -183,17 +190,18 @@ describe("get_charts", () => {
     assert.equal("last_week_rank" in s.entries[0]!, false);
   });
 
-  test("limit trims the chart and the name lookup", async (t) => {
+  test("limit only trims: the cached full chart serves every limit", async (t) => {
+    // Neither player chart takes a count upstream, so one cached response
+    // backs every limit.
     const { client, mock } = await setupServer(t, ENV, chartsRouter());
-    const res = await client.callTool({
-      name: "get_charts",
-      arguments: { chart: "most_played", limit: 1 },
-    });
-    assert.equal((res.structuredContent as Out).count, 1);
-    const lookup = decodeURIComponent(
-      mock.calls.find((c) => c.url.includes("IStoreBrowseService/GetItems"))!.url,
-    );
-    assert.match(lookup, /"ids":\[\{"appid":730\}\]/);
+    for (const limit of [1, 3]) {
+      const res = await client.callTool({
+        name: "get_charts",
+        arguments: { chart: "most_played", limit },
+      });
+      assert.equal((res.structuredContent as Out).count, limit);
+    }
+    assert.equal(mock.calls.length, 1);
   });
 
   test("the default limit is 20 and limits outside 1-100 are rejected", async (t) => {
@@ -210,25 +218,6 @@ describe("get_charts", () => {
       });
       assert.equal(bad.isError, true);
     }
-  });
-
-  test("a failed name lookup degrades to null names instead of failing the chart", async (t) => {
-    const { client } = await setupServer(
-      t,
-      ENV,
-      chartsRouter({ names: () => jsonResponse({}, { status: 500 }) }),
-    );
-    const res = await client.callTool({
-      name: "get_charts",
-      arguments: { chart: "concurrent_players", limit: 2 },
-    });
-    assert.equal(res.isError, undefined);
-    const s = res.structuredContent as Out;
-    assert.equal(s.count, 2);
-    assert.deepEqual(
-      s.entries.map((e) => e.name),
-      [null, null],
-    );
   });
 
   test("an upstream chart failure is a tool error", async (t) => {

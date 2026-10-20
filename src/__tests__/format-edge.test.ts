@@ -23,7 +23,6 @@ import {
   GAME_SCHEMA_ACHIEVEMENTS_MAX,
 } from "../format/webAchievements.js";
 import { summarizePurchasePrices, summarizeSearchSuggestions } from "../format/store.js";
-import { chartAppids } from "../format/charts.js";
 import { storeDayStart, storeReleaseDay, stripHtml } from "../format/shared.js";
 
 // Steam frequently omits optional fields; these exercise the sparse-payload
@@ -673,15 +672,5 @@ describe("summarizePlayerAchievements", () => {
     assert.equal(s.unlocked, 50);
     assert.equal(s.returned, 130);
     assert.equal(s.achievements.length, 130);
-  });
-});
-
-describe("chartAppids", () => {
-  test("drops appid-less entries before slicing, like the summarizers", () => {
-    const ids = chartAppids(
-      { response: { ranks: [{ rank: 1 }, { appid: 10 }, { appid: 20 }] } },
-      2,
-    );
-    assert.deepEqual(ids, [10, 20]);
   });
 });

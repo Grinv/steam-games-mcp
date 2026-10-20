@@ -27,8 +27,6 @@ import {
   type WishlistDetailedResponse,
 } from "../format/store.js";
 import {
-  chartAppids,
-  itemNames,
   summarizeConcurrentPlayers,
   summarizeMostPlayed,
   summarizeMostPlayedDeck,
@@ -268,11 +266,10 @@ export class StoreServiceClient {
     return summarizeItems(res, appids, tagMap);
   }
 
-  // Steam charts (get_charts), all keyless: weekly top sellers and the weekly
-  // Steam Deck most-played (names ride along on each rank's `item`), and the
-  // most-played / live-concurrent top-100s, which
-  // carry only appids — their names come from ONE batched GetItems call.
-  // Cached under the shared TtlCache TTL (CACHE_TTL_MS), stale-on-error.
+  // Steam charts (get_charts), all keyless, names riding along on each rank's
+  // `item`: weekly top sellers, the weekly Steam Deck most-played, and the
+  // most-played / live-concurrent top-100s. Cached under the shared TtlCache
+  // TTL (CACHE_TTL_MS), stale-on-error.
   async getCharts(chart: ChartName, opts: { limit: number }): Promise<Record<string, unknown>> {
     const { limit } = opts;
     if (chart === "top_sellers") {
@@ -321,41 +318,25 @@ export class StoreServiceClient {
       );
       return summarizeMostPlayedDeck(res, limit);
     }
+    // Neither service takes a count (verified live: count/max_results/page_count/
+    // limit and friends are all ignored, 100 ranks come back), so the full chart
+    // is fetched with names inlined via data_request (~67 KB) and cached once
+    // per language, serving every `limit` from that one entry — cheaper than
+    // the separate, uncached GetItems name lookup per call it replaces.
     const concurrent = chart === "concurrent_players";
-    const res = await this.#cache.wrapStaleOnError(`charts:${chart}`, () =>
+    const res = await this.#cache.wrapStaleOnError(`charts:${chart}:${this.#l}`, () =>
       this.#get<MostPlayedResponse & ConcurrentPlayersResponse>(
         `ISteamChartsService/${concurrent ? "GetGamesByConcurrentPlayers" : "GetMostPlayedGames"}/v1/`,
-        { input_json: "{}" },
-        { hasCredentials: false },
-      ),
-    );
-    const names = await this.#chartNames(chartAppids(res, limit));
-    return concurrent
-      ? summarizeConcurrentPlayers(res, limit, names)
-      : summarizeMostPlayed(res, limit, names);
-  }
-
-  // Best-effort appid → name for the player charts: a failed or malformed lookup
-  // leaves names null instead of failing the chart (HttpClient already logs the
-  // underlying failure). Empty data_request keeps it ~1 KB per item.
-  async #chartNames(appids: number[]): Promise<Map<number, string>> {
-    if (appids.length === 0) return new Map();
-    try {
-      const res = await this.#get<StoreItemsResponse>(
-        "IStoreBrowseService/GetItems/v1/",
         {
           input_json: JSON.stringify({
-            ids: appids.map((appid) => ({ appid })),
-            context: { language: this.#l, country_code: this.#country },
+            context: { country_code: this.#country, language: this.#l },
             data_request: {},
           }),
         },
         { hasCredentials: false },
-      );
-      return itemNames(res);
-    } catch {
-      return new Map();
-    }
+      ),
+    );
+    return concurrent ? summarizeConcurrentPlayers(res, limit) : summarizeMostPlayed(res, limit);
   }
 
   // The base-game purchase price of each appid, for correcting the Storefront

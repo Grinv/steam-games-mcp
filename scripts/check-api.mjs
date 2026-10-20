@@ -42,6 +42,10 @@ const getJson = async (url) => {
   return res.json();
 };
 
+// get_charts' player charts: names ride along on each rank's item only when a
+// data_request is sent.
+const CHART_INPUT = { context: { country_code: "US", language: "english" }, data_request: {} };
+
 /** @type {{name:string, skip?:string, run:() => Promise<void>}[]} */
 const checks = [
   {
@@ -461,10 +465,13 @@ const checks = [
   {
     name: "web ISteamChartsService/GetMostPlayedGames (charts)",
     run: async () => {
-      const body = await getJson(`${API}/ISteamChartsService/GetMostPlayedGames/v1/?input_json={}`);
+      const body = await getJson(
+        `${API}/ISteamChartsService/GetMostPlayedGames/v1/?input_json=${encodeURIComponent(JSON.stringify(CHART_INPUT))}`,
+      );
       const r = body.response?.ranks?.[0];
       need(typeof body.response?.rollup_date === "number", "response.rollup_date");
       need(typeof r?.appid === "number" && typeof r.peak_in_game === "number", "ranks[0]");
+      need(typeof r?.item?.name === "string", "ranks[0].item.name");
     },
   },
   {
@@ -489,11 +496,12 @@ const checks = [
     name: "web ISteamChartsService/GetGamesByConcurrentPlayers (charts)",
     run: async () => {
       const body = await getJson(
-        `${API}/ISteamChartsService/GetGamesByConcurrentPlayers/v1/?input_json={}`,
+        `${API}/ISteamChartsService/GetGamesByConcurrentPlayers/v1/?input_json=${encodeURIComponent(JSON.stringify(CHART_INPUT))}`,
       );
       const r = body.response?.ranks?.[0];
       need(typeof body.response?.last_update === "number", "response.last_update");
       need(typeof r?.appid === "number" && typeof r.concurrent_in_game === "number", "ranks[0]");
+      need(typeof r?.item?.name === "string", "ranks[0].item.name");
     },
   },
 ];

@@ -374,8 +374,8 @@ export function registerStoreWebTools(
         "sections (also hardware and bundles) use get_featured, to FILTER the catalog by discount, " +
         "tags or compat use discover_games. Returns only rank, appid, name, store_url and chart " +
         "metrics (no price/reviews/Deck status) — pass the appids to get_items for those. " +
-        "`last_week_rank` null means a new entry; concurrent_players has none. Player-chart names " +
-        "come from a best-effort lookup and may be null. Results are cached for a few minutes. " +
+        "`last_week_rank` null means a new entry; concurrent_players has none. Results are " +
+        "cached for a few minutes. " +
         "All four are global rankings (the same in every country). No API key required.",
       inputSchema: z.strictObject({
         chart: chartSchema.describe(
