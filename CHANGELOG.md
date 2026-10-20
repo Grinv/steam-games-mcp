@@ -22,6 +22,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Fix `get_wishlist`'s detailed view filtering and pricing only a wishlist's first 100 entries; it now covers the whole wishlist. ([64d5d8e](https://github.com/Grinv/steam-games-mcp/commit/64d5d8e))
 - Fix a bad or revoked API key being reported as a private profile or friends list; it now surfaces as a credentials error. ([e791dcb](https://github.com/Grinv/steam-games-mcp/commit/e791dcb))
 - Fix a request hanging past `HTTP_TIMEOUT_MS` when Steam sent the headers but stalled mid-body. ([630ff5a](https://github.com/Grinv/steam-games-mcp/commit/630ff5a))
 - Fix `get_game_achievements` caching a list without rarity for the full TTL after one failed rarity lookup. ([e791dcb](https://github.com/Grinv/steam-games-mcp/commit/e791dcb))
