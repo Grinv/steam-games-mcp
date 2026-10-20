@@ -176,7 +176,7 @@ export function registerPrompts(server: McpServer, store: StoreServiceClient): v
         g
           ? `Should I buy "${g}"?\n\n` +
               `1. Call get_game with name "${g}" (or its appid, if that's what was given) for price, discount and platforms.\n` +
-              "2. Call get_game_reviews for the overall verdict and a few recent reviews.\n" +
+              "2. Call get_game_reviews for the overall verdict and the most helpful reviews of the last month.\n" +
               "3. Call get_review_histogram to see whether reception is improving or declining recently.\n" +
               "4. Call get_items for its appid to check Steam Deck/SteamOS/Machine/Frame compatibility and popular tags.\n" +
               "5. Summarize: price/discount, lifetime review % + recent trend, Deck compatibility, and a clear " +

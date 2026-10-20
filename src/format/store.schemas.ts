@@ -154,7 +154,8 @@ export const discoverGamesOutput = z.strictObject({
         "date, tags, min_review's rating bucket, one hardware filter). Filters with no " +
         "server-side form (steam_os, platform, min_reviews, a second hardware filter) and the " +
         "exact review-% check are not reflected, so this can overstate; `matched` is exact for " +
-        "the fetched page.",
+        "the fetched page. null when a requested tag isn't a Steam tag (nothing could match, so " +
+        "the catalog wasn't queried).",
     ),
   matched: z
     .number()
