@@ -34,19 +34,19 @@ test("the server advertises store and player tools", async (t) => {
   }
 });
 
-describe("search_games", () => {
-  const input = (mock: { calls: { url: string }[] }) =>
-    JSON.parse(
-      new URL(mock.calls.find((c) => c.url.includes("SearchSuggestions"))!.url).searchParams.get(
-        "input_json",
-      )!,
-    ) as {
-      search_term: string;
-      max_results: number;
-      context: { country_code: string; language: string };
-      filters?: unknown;
-    };
+const searchInput = (mock: { calls: { url: string }[] }) =>
+  JSON.parse(
+    new URL(mock.calls.find((c) => c.url.includes("SearchSuggestions"))!.url).searchParams.get(
+      "input_json",
+    )!,
+  ) as {
+    search_term: string;
+    max_results: number;
+    context: { country_code: string; language: string };
+    filters?: unknown;
+  };
 
+describe("search_games", () => {
   test("search_games returns appids with price, metascore, type and Steam's full total", async (t) => {
     const { client, mock } = await setupServer(t, ENV, router);
     const res = await client.callTool({ name: "search_games", arguments: { term: "portal" } });
@@ -62,7 +62,7 @@ describe("search_games", () => {
       platforms: ["windows", "linux"],
       store_url: "https://store.steampowered.com/app/620",
     });
-    assert.equal(input(mock).max_results, 10);
+    assert.equal(searchInput(mock).max_results, 10);
     // One request: prices ride along, unlike the old storesearch + GetItems pair.
     assert.equal(mock.calls.length, 1);
   });
@@ -73,7 +73,7 @@ describe("search_games", () => {
       name: "search_games",
       arguments: { term: "portal", limit: 25, country: "RU", language: "russian" },
     });
-    const i = input(mock);
+    const i = searchInput(mock);
     assert.equal(i.max_results, 25);
     assert.deepEqual(i.context, { country_code: "RU", language: "russian" });
   });
@@ -81,13 +81,13 @@ describe("search_games", () => {
   test("search_games asks Steam for games only by default; games_only:false sends no filter", async (t) => {
     const { client, mock } = await setupServer(t, ENV, router);
     await client.callTool({ name: "search_games", arguments: { term: "portal" } });
-    assert.deepEqual(input(mock).filters, { type_filters: { include_games: true } });
+    assert.deepEqual(searchInput(mock).filters, { type_filters: { include_games: true } });
     mock.calls.length = 0;
     await client.callTool({
       name: "search_games",
       arguments: { term: "portal", games_only: false },
     });
-    assert.equal(input(mock).filters, undefined);
+    assert.equal(searchInput(mock).filters, undefined);
   });
 
   test("search_games rejects a limit outside 1-100 before calling the upstream", async (t) => {
@@ -110,7 +110,7 @@ describe("search_games", () => {
       arguments: { term: "portal", country: " RU ", language: " russian " },
     });
     assert.equal(res.isError, undefined);
-    assert.deepEqual(input(mock).context, { country_code: "RU", language: "russian" });
+    assert.deepEqual(searchInput(mock).context, { country_code: "RU", language: "russian" });
   });
 
   // Regression: a whitespace-only term used to pass .nonempty() (non-zero
@@ -126,7 +126,7 @@ describe("search_games", () => {
       arguments: { term: "  portal  " },
     });
     assert.equal(padded.isError, undefined);
-    assert.equal(input(mock).search_term, "portal");
+    assert.equal(searchInput(mock).search_term, "portal");
   });
 });
 
@@ -227,9 +227,12 @@ describe("get_game", () => {
     const { client, mock } = await setupServer(t, ENV, router);
     const res = await client.callTool({ name: "get_game", arguments: { name: "portal" } });
     const s = res.structuredContent as { appid: number; price: { final: string } };
-    assert.equal(s.appid, 620); // resolved via storesearch (top match)
+    assert.equal(s.appid, 620); // the same search search_games uses, top match
     assert.equal(s.price.final, "$1.99");
-    assert.ok(mock.calls.some((c) => c.url.includes("/api/storesearch")));
+    const lookup = searchInput(mock);
+    assert.equal(lookup.max_results, 1);
+    // Every item type: a DLC looked up by its own name must resolve to the DLC.
+    assert.equal(lookup.filters, undefined);
   });
 
   // Regression: a whitespace-only name used to pass .nonempty() (non-zero
@@ -242,8 +245,7 @@ describe("get_game", () => {
 
     const padded = await client.callTool({ name: "get_game", arguments: { name: "  portal  " } });
     assert.equal(padded.isError, undefined);
-    const u = mock.calls.find((c) => c.url.includes("/api/storesearch"))!.url;
-    assert.match(u, /term=portal(?!%20)/);
+    assert.equal(searchInput(mock).search_term, "portal");
   });
 
   test("get_game errors when neither appid nor name is given", async (t) => {
@@ -257,7 +259,9 @@ describe("get_game", () => {
 
   test("get_game reports no match when the title resolves to nothing", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("/api/storesearch") ? jsonResponse({ total: 0, items: [] }) : jsonResponse({}),
+      url.includes("SearchSuggestions")
+        ? jsonResponse({ response: { store_items: [] } })
+        : jsonResponse({}),
     );
     const res = await client.callTool({ name: "get_game", arguments: { name: "zzzznope" } });
     assertToolError(res, /no steam game found/i);
@@ -585,16 +589,17 @@ describe("zod input boundaries are rejected before reaching the client", () => {
 });
 
 test("get_game (by name) skips a non-numeric top search result and resolves the next one", async (t) => {
-  // resolveAppId's `res.items?.find((i) => typeof i.id === "number")` — a
-  // bundle/sub can rank above the real app and carries no numeric id.
+  // resolveAppId's `find((it) => typeof it.appid === "number")` — a store item
+  // without an appid (e.g. a bundle) must not end the lookup.
   const { client } = await setupServer(t, ENV, (url) => {
-    if (url.includes("/api/storesearch")) {
+    if (url.includes("SearchSuggestions")) {
       return jsonResponse({
-        total: 2,
-        items: [
-          { type: "bundle", name: "Portal Bundle" }, // no numeric id
-          { type: "app", name: "Portal 2", id: 620 },
-        ],
+        response: {
+          store_items: [
+            { name: "Portal Bundle" }, // no appid
+            { appid: 620, name: "Portal 2" },
+          ],
+        },
       });
     }
     if (url.includes("/api/appdetails"))
@@ -674,24 +679,12 @@ const TRAP_ITEMS = {
   },
 };
 
-/** Answer all three Storefront endpoints with the trap app, and GetItems with
- *  whatever the test wants to see happen to the correction. */
+/** Answer appdetails with the trap app, and GetItems with whatever the test
+ *  wants to see happen to the correction. */
 function trapRouter(items: unknown = TRAP_ITEMS, itemsStatus = 200) {
   return (url: string) => {
     if (url.includes("IStoreBrowseService/GetItems"))
       return jsonResponse(items, { status: itemsStatus });
-    if (url.includes("/api/storesearch"))
-      return jsonResponse({
-        total: 1,
-        items: [
-          {
-            type: "app",
-            name: "Yakuza Kiwami",
-            id: TRAP_APPID,
-            price: { currency: "IDR", initial: 2000000, final: 2000000 },
-          },
-        ],
-      });
     if (url.includes("/api/appdetails"))
       return jsonResponse({
         [String(TRAP_APPID)]: {

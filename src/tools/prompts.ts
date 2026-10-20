@@ -154,7 +154,7 @@ export function registerPrompts(server: McpServer, store: StoreServiceClient): v
             // upstream failure degrades to no suggestions instead of an error
             // surfacing in the client's live-typing UI.
             try {
-              const r = await store.searchGames(value);
+              const r = await store.searchGames(value, { namesOnly: true });
               const results = r.results as { name?: string }[] | undefined;
               return (results ?? [])
                 .map((g) => g.name)

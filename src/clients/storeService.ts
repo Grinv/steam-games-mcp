@@ -181,7 +181,15 @@ export class StoreServiceClient {
   // metacritic: it roughly doubles the upstream payload (~+0.1 s at 50 results).
   async searchGames(
     term: string,
-    opts: { country?: string; language?: string; limit?: number; gamesOnly?: boolean } = {},
+    opts: {
+      country?: string;
+      language?: string;
+      limit?: number;
+      gamesOnly?: boolean;
+      // Names only (no prices/metascore/platforms): for the prompt's per-keystroke
+      // title completions, which read nothing else.
+      namesOnly?: boolean;
+    } = {},
   ): Promise<Record<string, unknown>> {
     const res = await this.#get<SearchSuggestionsResponse>(
       "IStoreQueryService/SearchSuggestions/v1/",
@@ -200,16 +208,39 @@ export class StoreServiceClient {
             language: opts.language ?? this.#l,
             country_code: opts.country ?? this.#country,
           },
-          data_request: {
-            include_platforms: true,
-            include_all_purchase_options: true,
-            include_extra_details: true,
-          },
+          data_request: opts.namesOnly
+            ? {}
+            : {
+                include_platforms: true,
+                include_all_purchase_options: true,
+                include_extra_details: true,
+              },
         }),
       },
       { hasCredentials: false },
     );
     return summarizeSearchSuggestions(res);
+  }
+
+  // get_game's name → appid: the same search's top match, so get_game({name})
+  // and search_games agree. Every item type, unlike search_games' games-only
+  // default — a DLC looked up by its own name must resolve to the DLC
+  // (verified live: games-only turned "shadow of the erdtree" into Shadow of the
+  // Tomb Raider). Returns null when nothing matches.
+  async resolveAppId(term: string, country?: string, language?: string): Promise<number | null> {
+    const res = await this.#get<SearchSuggestionsResponse>(
+      "IStoreQueryService/SearchSuggestions/v1/",
+      {
+        input_json: JSON.stringify({
+          search_term: term,
+          max_results: 1,
+          context: { language: language ?? this.#l, country_code: country ?? this.#country },
+          data_request: {},
+        }),
+      },
+      { hasCredentials: false },
+    );
+    return res.response?.store_items?.find((it) => typeof it.appid === "number")?.appid ?? null;
   }
 
   // Batch store card (price+discount, review %, compat, popular tags, release) for
@@ -268,16 +299,18 @@ export class StoreServiceClient {
       // Period 1 is the only one Steam labels: its own chart page requests it and
       // reads "Top 100 played games on Steam Deck in the past week" (2 and 3 also
       // answer, but nothing says what they cover). Global like the others
-      // (verified live: identical for US/JP/RU); names ride along on `item`.
-      const cc = this.#country;
+      // (verified live: identical for US/JP/RU), so no country in the cache key;
+      // names ride along on `item`, localized, hence the language. `limit` goes
+      // upstream as `count`, like top_sellers' page_count: every entry carries a
+      // full store item, so count 100 is ~80 KB vs ~8 KB for 10 (measured live).
       const res = await this.#cache.wrapStaleOnError(
-        `charts:most_played_deck:${cc}:${this.#l}:${limit}`,
+        `charts:most_played_deck:${this.#l}:${limit}`,
         () =>
           this.#get<DeckMostPlayedResponse>(
             "ISteamChartsService/GetMostPlayedSteamDeckGames/v1/",
             {
               input_json: JSON.stringify({
-                context: { country_code: cc, language: this.#l },
+                context: { country_code: this.#country, language: this.#l },
                 data_request: {},
                 top_played_period: 1,
                 count: limit,

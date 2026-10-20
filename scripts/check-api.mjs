@@ -45,17 +45,6 @@ const getJson = async (url) => {
 /** @type {{name:string, skip?:string, run:() => Promise<void>}[]} */
 const checks = [
   {
-    name: "storefront storesearch",
-    run: async () => {
-      const res = await fetch(`${STORE}/api/storesearch/?term=portal&l=english&cc=US`, {
-        headers: { Accept: "application/json" },
-      });
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
-      if (!Array.isArray(body.items)) throw new Error("missing `items` array");
-    },
-  },
-  {
     name: "web IStoreQueryService/SearchSuggestions (search_games)",
     run: async () => {
       const input = {

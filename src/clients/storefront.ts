@@ -18,7 +18,6 @@ import {
   type PriceDetailsResponse,
   type ReviewHistogramResponse,
   type ReviewsResponse,
-  type SearchResponse,
   type StoreApp,
 } from "../format/storefront.js";
 import type { PurchasePrices } from "../format/store.js";
@@ -64,18 +63,6 @@ export class StorefrontClient {
       hasCredentials: false,
     });
     this.#cache = new TtlCache(config.cacheTtlMs);
-  }
-
-  // Resolve a game title to its appid via storesearch (top match), so callers
-  // can pass a name instead of an appid. Returns null when nothing matches.
-  // (search_games itself uses the store service's SearchSuggestions instead;
-  // see clients/storeService.ts.) country (cc) and language (l) fall back to
-  // the configured defaults.
-  async resolveAppId(term: string, country?: string, language?: string): Promise<number | null> {
-    const res = await this.#http.getJson<SearchResponse>("api/storesearch/", {
-      query: { term, l: language ?? this.#l, cc: country ?? this.#cc },
-    });
-    return res.items?.find((i) => typeof i.id === "number")?.id ?? null;
   }
 
   async getGame(

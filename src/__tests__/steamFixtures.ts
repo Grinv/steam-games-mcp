@@ -40,11 +40,6 @@ export const APP = {
   content_descriptors: { ids: [2, 5], notes: null },
 };
 
-// storesearch: only get_game's name → appid resolution still reads it.
-export const SEARCH = {
-  total: 1,
-  items: [{ type: "app", name: "Portal 2", id: 620, metascore: "95" }],
-};
 // IStoreQueryService/SearchSuggestions (search_games), trimmed from a live
 // response: store_items carry the card fields asked for in data_request.
 export const SUGGEST = {
@@ -373,7 +368,6 @@ export function router(url: string) {
   if (url.includes("IStoreService/GetTagList")) return jsonResponse(TAGLIST);
   if (url.includes("IStoreQueryService/Query")) return jsonResponse(DISCOVER);
   if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(ITEMS);
-  if (url.includes("/api/storesearch")) return jsonResponse(SEARCH);
   if (url.includes("IStoreQueryService/SearchSuggestions")) return jsonResponse(SUGGEST);
   if (url.includes("/api/appdetails")) {
     const id = /appids=(\d+)/.exec(url)?.[1] ?? "620";

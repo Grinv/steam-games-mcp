@@ -203,12 +203,6 @@ export function detailApp(a: StoreApp, override?: PriceOverride): z.infer<typeof
   });
 }
 
-// ---- Storefront: storesearch (name → appid resolution only) ----------------
-
-export interface SearchResponse {
-  items?: { id?: number }[];
-}
-
 // ---- Storefront: batch prices (appdetails?filters=price_overview) -----------
 
 // appdetails keyed by appid; with the price_overview filter, `data` is either

@@ -34,15 +34,15 @@ Each tool call results in outbound HTTPS requests to Valve/Steam hosts only,
 carrying only what that specific call needs:
 
 - **Steam Storefront API** (`store.steampowered.com`), needs no key. Carries
-  only the search term/appid(s) and the `cc`/`l` (country/language) query
+  only the appid(s) and the `cc`/`l` (country/language) query
   parameters. Backs the classic store tools (`get_game`,
   `get_game_reviews`, `get_review_histogram`, `get_prices`, `get_specials`,
   `get_featured`).
 - **Steam Web API** (`api.steampowered.com`), used for player data
   (profiles, libraries, achievements, friends) and several keyless endpoints:
   news, global achievement rates, current player counts, the top-sellers / most-played / Steam Deck most-played / live-players charts, a player's wishlist
-  and followed games, and the modern store-card services behind `search_games`,
-  `get_items`, `discover_games`, `get_recommended_games` and `get_wishlist`'s detailed
+  and followed games, and the modern store-card services behind `search_games`
+  and `get_game`'s name lookup (these carry the search term), `get_items`, `discover_games`, `get_recommended_games` and `get_wishlist`'s detailed
   cards. When `STEAM_API_KEY`
   is set, it travels as a `key` query parameter on every request to this
   host, per Valve's own API convention, never as a header, never logged
@@ -97,7 +97,7 @@ settings.
 Material changes will be noted in [CHANGELOG.md](CHANGELOG.md) and reflected
 here, at the same URL, with the effective date below updated.
 
-_Last updated: 2026-10-03._
+_Last updated: 2026-10-20._
 
 ## Contact
 

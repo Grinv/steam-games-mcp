@@ -52,9 +52,10 @@ the server Steam-only and dependency-free.
 ## Where prices come from
 
 Not from the Storefront API, even in the Storefront-backed tools. Both
-`appdetails`' `price_overview` and `storesearch`' `price` (which `search_games`
-no longer reads — it uses `IStoreQueryService/SearchSuggestions`, whose store
-items carry purchase options directly) are filled from the
+`appdetails`' `price_overview` and `storesearch`' `price` (no longer called at
+all: title search and get_game's name lookup use
+`IStoreQueryService/SearchSuggestions`, whose store items carry purchase
+options directly) are filled from the
 **first sub of an app's default package group** rather than from its base game,
 so an app whose first sub is an upgrade SKU is reported at the upgrade's price
 with `discount_percent: 0`. Verified live on appid 3717330 (Yakuza Kiwami,

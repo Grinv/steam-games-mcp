@@ -164,6 +164,7 @@ describe("get_charts", () => {
       mock.calls.find((c) => c.url.includes("GetMostPlayedSteamDeckGames"))!.url,
     );
     assert.match(u, /"top_played_period":1/);
+    // limit goes upstream as count: each entry carries a full store item.
     assert.match(u, /"count":2/);
     assert.ok(!mock.calls.some((c) => c.url.includes("IStoreBrowseService/GetItems")));
   });

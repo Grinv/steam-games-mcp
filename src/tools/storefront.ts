@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { StorefrontClient } from "../clients/storefront.js";
+import type { StoreServiceClient } from "../clients/storeService.js";
 import { errorResult, jsonResult } from "../lib/result.js";
 import { guard } from "./guard.js";
 import { ITEMS_MAX, PRICES_MAX, READ_ONLY, appid, country, language, reply } from "./common.js";
@@ -18,7 +19,12 @@ import {
 } from "../format/storefront.schemas.js";
 import { DLC_MAX, HISTOGRAM_HISTORY_MAX, HISTOGRAM_RECENT_MAX } from "../format/storefront.js";
 
-export function registerStorefrontTools(server: McpServer, store: StorefrontClient): void {
+export function registerStorefrontTools(
+  server: McpServer,
+  store: StorefrontClient,
+  // get_game's name lookup: the same search search_games uses.
+  search: StoreServiceClient,
+): void {
   server.registerTool(
     "get_game",
     {
@@ -62,7 +68,7 @@ export function registerStorefrontTools(server: McpServer, store: StorefrontClie
         let resolved = id;
         if (!resolved) {
           // The schema's .refine() above guarantees name is set whenever appid isn't.
-          const found = await store.resolveAppId(name!, cc, l);
+          const found = await search.resolveAppId(name!, cc, l);
           if (!found) return errorResult(`No Steam game found matching "${name}".`);
           resolved = found;
         }
