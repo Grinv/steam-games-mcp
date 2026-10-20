@@ -27,6 +27,7 @@ import {
   summarizePlayer,
   summarizePlayerBans,
   summarizeRecentlyPlayed,
+  RECENTLY_PLAYED_MAX,
   summarizeVanity,
   summarizeWishlist,
   RESULT_OK,
@@ -343,6 +344,7 @@ export class SteamWebClient {
       () =>
         this.#get<RecentlyPlayedResponse>("IPlayerService/GetRecentlyPlayedGames/v1/", {
           steamid,
+          count: RECENTLY_PLAYED_MAX,
         }),
       {},
     );

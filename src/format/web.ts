@@ -245,10 +245,13 @@ function isPrivateRecentlyPlayed(r: RecentlyPlayedResponse): boolean {
   return r.response?.total_count === undefined && r.response?.games === undefined;
 }
 
+// Sent upstream as GetRecentlyPlayedGames' `count`: Steam already returns the
+// list most-played-in-two-weeks first and caps it there, while total_count
+// stays the full number (both verified live 2026-10-20), so nothing is sorted
+// or sliced here.
 export const RECENTLY_PLAYED_MAX = 50;
 export function summarizeRecentlyPlayed(
   r: RecentlyPlayedResponse,
-  max = RECENTLY_PLAYED_MAX,
 ): z.infer<typeof getRecentlyPlayedOutput> {
   if (isPrivateRecentlyPlayed(r)) {
     return getRecentlyPlayedOutput.parse({
@@ -258,19 +261,12 @@ export function summarizeRecentlyPlayed(
       games: [],
     });
   }
-  // The two-week window keeps this list short in practice, but "in practice" is
-  // not a bound — it was the one collection summarizer with neither a cap nor a
-  // `returned` count, against AGENTS.md's trim-every-list rule. Sorted so the
-  // cap keeps the games actually played most, not an arbitrary slice.
-  const all = (r.response?.games ?? []).toSorted(
-    (a, b) => (b.playtime_2weeks ?? 0) - (a.playtime_2weeks ?? 0),
-  );
-  const { included, returned } = capList(all, max);
+  const games = r.response?.games ?? [];
   return getRecentlyPlayedOutput.parse({
     found: true,
-    total: r.response?.total_count ?? all.length,
-    returned,
-    games: included.map((g) => ({
+    total: r.response?.total_count ?? games.length,
+    returned: games.length,
+    games: games.map((g) => ({
       appid: g.appid,
       name: g.name ?? null,
       playtime_2weeks_hours: hours(g.playtime_2weeks),

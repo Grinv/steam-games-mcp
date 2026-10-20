@@ -243,7 +243,7 @@ describe("get_owned_games", () => {
 
 describe("get_recently_played", () => {
   test("get_recently_played lists games played in the last two weeks", async (t) => {
-    const { client } = await setupServer(t, ENV, router);
+    const { client, mock } = await setupServer(t, ENV, router);
     const res = await client.callTool({
       name: "get_recently_played",
       arguments: { steamid: "76561197960287930" },
@@ -257,6 +257,8 @@ describe("get_recently_played", () => {
     assert.equal(s.total, 2);
     assert.equal(s.games[0]!.appid, 620);
     assert.equal(s.games[0]!.playtime_hours, 10); // 600 min playtime_forever → 10h
+    // Steam sorts and caps the list itself.
+    assert.match(mock.calls.find((c) => c.url.includes("GetRecentlyPlayedGames"))!.url, /count=50/);
   });
 
   test("get_recently_played reports found:false for a private profile", async (t) => {

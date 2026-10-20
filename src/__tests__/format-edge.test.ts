@@ -8,7 +8,6 @@ import {
   summarizeReviewHistogram,
 } from "../format/storefront.js";
 import {
-  RECENTLY_PLAYED_MAX,
   summarizePlayer,
   summarizeOwnedGames,
   summarizeFriendsWhoOwn,
@@ -196,22 +195,24 @@ describe("summarizeFeatured", () => {
 });
 
 describe("summarizeRecentlyPlayed", () => {
-  test("caps the list most-played-first and reports `returned` alongside the true total", () => {
-    // The two-week window keeps this short in practice, but it was the one
-    // collection summarizer with neither a cap nor a returned count.
-    const games = Array.from({ length: RECENTLY_PLAYED_MAX + 20 }, (_, i) => ({
-      appid: i + 1,
-      name: `Game ${i}`,
-      playtime_2weeks: i, // ascending, so the cap must keep the LAST ones
-      playtime_forever: i * 10,
-    }));
+  test("passes Steam's order through and keeps total_count as the full total", () => {
+    // Steam sorts and caps (via `count`) upstream; total_count stays the full
+    // number even when `count` cut the list.
     const s = summarizeRecentlyPlayed({
-      response: { total_count: games.length, games },
+      response: {
+        total_count: 70,
+        games: [
+          { appid: 2, playtime_2weeks: 300 },
+          { appid: 1, playtime_2weeks: 100 },
+        ],
+      },
     }) as { total: number; returned: number; games: { appid: number }[] };
-    assert.equal(s.total, RECENTLY_PLAYED_MAX + 20);
-    assert.equal(s.returned, RECENTLY_PLAYED_MAX);
-    assert.equal(s.games.length, RECENTLY_PLAYED_MAX);
-    assert.equal(s.games[0]!.appid, games.at(-1)!.appid);
+    assert.equal(s.total, 70);
+    assert.equal(s.returned, 2);
+    assert.deepEqual(
+      s.games.map((g) => g.appid),
+      [2, 1],
+    );
   });
 
   test("a public profile with nothing played in two weeks stays found:true", () => {
