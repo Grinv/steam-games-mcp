@@ -343,7 +343,51 @@ export class StoreServiceClient {
     }
     const l = opts.language ?? this.#l;
     const cc = opts.country ?? this.#country;
-    const tagMap = await this.#tagNames(l);
+    // None of the three requests depends on another's answer, so they run
+    // concurrently. They're still awaited in the original order, so a missing
+    // tag dictionary or an empty favorite-tag set wins over a failed sample or
+    // pool request exactly as before; the no-op catches only keep a request
+    // nobody awaits (after an early throw/return) from becoming an unhandled
+    // rejection.
+    const tagMapPromise = this.#tagNames(l);
+    const sample = ownedGames
+      .slice()
+      .sort((a, b) => b.playtimeMinutes - a.playtimeMinutes)
+      .slice(0, FAVORITE_TAG_SAMPLE_SIZE);
+    const samplePromise = this.#get<StoreItemsResponse>(
+      "IStoreBrowseService/GetItems/v1/",
+      {
+        input_json: JSON.stringify({
+          ids: sample.map((g) => ({ appid: g.appid })),
+          context: { language: l, country_code: cc },
+          data_request: storeCardDataRequest(20),
+        }),
+      },
+      { hasCredentials: false },
+    );
+    // The tool schema's own min(1).max(25) already bounds this — no need to
+    // re-clamp here, just fall back for direct (non-tool) callers.
+    const count = opts.count ?? 10;
+    // Same server-side price filter #queryCatalog uses for discover_games — cuts
+    // the candidate pool down to matching deals instead of scoring 150 items and
+    // discarding most of them locally for a "good discounts only" request.
+    const filters: Record<string, unknown> = {};
+    if (typeof opts.minDiscount === "number")
+      filters.price_filters = { min_discount_percent: opts.minDiscount };
+    const poolPromise = this.#get<StoreQueryResponse>(
+      "IStoreQueryService/Query/v1/",
+      {
+        input_json: JSON.stringify({
+          query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
+          context: { language: l, country_code: cc, steam_realm: 1 },
+          data_request: storeCardDataRequest(20),
+        }),
+      },
+      { hasCredentials: false },
+    );
+    samplePromise.catch(() => {});
+    poolPromise.catch(() => {});
+    const tagMap = await tagMapPromise;
     if (tagMap === null) {
       // Same "fail loudly, don't silently degrade" rule as
       // #requireTagMapIfFiltering — recommendations are meaningless without it.
@@ -356,21 +400,7 @@ export class StoreServiceClient {
       });
     }
 
-    const sample = ownedGames
-      .slice()
-      .sort((a, b) => b.playtimeMinutes - a.playtimeMinutes)
-      .slice(0, FAVORITE_TAG_SAMPLE_SIZE);
-    const sampleRes = await this.#get<StoreItemsResponse>(
-      "IStoreBrowseService/GetItems/v1/",
-      {
-        input_json: JSON.stringify({
-          ids: sample.map((g) => ({ appid: g.appid })),
-          context: { language: l, country_code: cc },
-          data_request: storeCardDataRequest(20),
-        }),
-      },
-      { hasCredentials: false },
-    );
+    const sampleRes = await samplePromise;
     const tagWeights = computeFavoriteTagWeights(
       sampleRes.response?.store_items ?? [],
       new Map(sample.map((g) => [g.appid, g.playtimeMinutes])),
@@ -384,26 +414,7 @@ export class StoreServiceClient {
       .slice(0, BASED_ON_TAGS_LIMIT)
       .map(([tag]) => tag);
 
-    // The tool schema's own min(1).max(25) already bounds this — no need to
-    // re-clamp here, just fall back for direct (non-tool) callers.
-    const count = opts.count ?? 10;
-    // Same server-side price filter #queryCatalog uses for discover_games — cuts
-    // the candidate pool down to matching deals instead of scoring 150 items and
-    // discarding most of them locally for a "good discounts only" request.
-    const filters: Record<string, unknown> = {};
-    if (typeof opts.minDiscount === "number")
-      filters.price_filters = { min_discount_percent: opts.minDiscount };
-    const poolRes = await this.#get<StoreQueryResponse>(
-      "IStoreQueryService/Query/v1/",
-      {
-        input_json: JSON.stringify({
-          query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
-          context: { language: l, country_code: cc, steam_realm: 1 },
-          data_request: storeCardDataRequest(20),
-        }),
-      },
-      { hasCredentials: false },
-    );
+    const poolRes = await poolPromise;
     const ownedAppids = new Set(ownedGames.map((g) => g.appid));
     return summarizeRecommendations(
       poolRes.response?.store_items ?? [],
