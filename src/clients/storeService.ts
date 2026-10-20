@@ -181,7 +181,7 @@ export class StoreServiceClient {
   // metacritic: it roughly doubles the upstream payload (~+0.1 s at 50 results).
   async searchGames(
     term: string,
-    opts: { country?: string; language?: string; limit?: number } = {},
+    opts: { country?: string; language?: string; limit?: number; gamesOnly?: boolean } = {},
   ): Promise<Record<string, unknown>> {
     const res = await this.#get<SearchSuggestionsResponse>(
       "IStoreQueryService/SearchSuggestions/v1/",
@@ -189,6 +189,9 @@ export class StoreServiceClient {
         input_json: JSON.stringify({
           search_term: term,
           max_results: opts.limit ?? 10,
+          // Server-side, so `limit` is filled with games rather than shrunk by
+          // dropped DLC/soundtracks, and `total` counts games only (verified live).
+          ...(opts.gamesOnly ? { filters: { type_filters: { include_games: true } } } : {}),
           context: {
             language: opts.language ?? this.#l,
             country_code: opts.country ?? this.#country,

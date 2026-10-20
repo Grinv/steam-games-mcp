@@ -44,6 +44,7 @@ describe("search_games", () => {
       search_term: string;
       max_results: number;
       context: { country_code: string; language: string };
+      filters?: unknown;
     };
 
   test("search_games returns appids with price, metascore, type and Steam's full total", async (t) => {
@@ -75,6 +76,18 @@ describe("search_games", () => {
     const i = input(mock);
     assert.equal(i.max_results, 25);
     assert.deepEqual(i.context, { country_code: "RU", language: "russian" });
+  });
+
+  test("games_only asks Steam to filter to games; the default sends no filter", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    await client.callTool({ name: "search_games", arguments: { term: "portal" } });
+    assert.equal(input(mock).filters, undefined);
+    mock.calls.length = 0;
+    await client.callTool({
+      name: "search_games",
+      arguments: { term: "portal", games_only: true },
+    });
+    assert.deepEqual(input(mock).filters, { type_filters: { include_games: true } });
   });
 
   test("search_games rejects a limit outside 1-100 before calling the upstream", async (t) => {

@@ -70,7 +70,8 @@ export function registerStoreWebTools(
         `\`limit\` returns up to ${SEARCH_MAX} of them (there is no paging past that, so refine ` +
         "the term if the game you want isn't listed). Prices are Steam's formatted strings with " +
         "the currency symbol (no separate currency code); null for free-to-play or unpriced games. " +
-        "For review %, Steam Deck status or tags, pass the appids to get_items. No API key required.",
+        "Set games_only to leave out DLC, soundtracks, demos and other non-game items. For review " +
+        "%, Steam Deck status or tags, pass the appids to get_items. No API key required.",
       inputSchema: z.strictObject({
         term: z.string().trim().nonempty().describe("Game title to search for."),
         limit: z
@@ -79,14 +80,21 @@ export function registerStoreWebTools(
           .max(SEARCH_MAX)
           .describe(`How many matches to return (1-${SEARCH_MAX}). Default 10.`)
           .default(10),
+        games_only: z
+          .boolean()
+          .describe(
+            "Only games: drop DLC, soundtracks, demos, software and other store items. Filtered by " +
+              "Steam itself, so `limit` is still filled and `total` counts games only. Default false.",
+          )
+          .default(false),
         country,
         language,
       }),
       outputSchema: searchGamesOutput,
       annotations: READ_ONLY,
     },
-    ({ term, limit, country: cc, language: l }) =>
-      reply(() => store.searchGames(term, { country: cc, language: l, limit })),
+    ({ term, limit, games_only: gamesOnly, country: cc, language: l }) =>
+      reply(() => store.searchGames(term, { country: cc, language: l, limit, gamesOnly })),
   );
 
   server.registerTool(
