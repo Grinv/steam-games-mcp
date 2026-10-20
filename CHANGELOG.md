@@ -8,6 +8,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Add `country` and `week` to `get_charts`' `top_sellers`, for a country's own best-sellers and past weeks. ([b763cff](https://github.com/Grinv/steam-games-mcp/commit/b763cff))
+- Add `kind` to `get_game_news`: `official` for the developer's own posts, `patch_notes` for update notes only. ([5318271](https://github.com/Grinv/steam-games-mcp/commit/5318271))
+- Add `order` and `within_days` to `get_game_reviews`, for the newest reviews or the most helpful over any window. ([8495e0e](https://github.com/Grinv/steam-games-mcp/commit/8495e0e))
 - Add a `most_played_deck` chart to `get_charts`: the top 100 played on Steam Deck in the past week. ([591d130](https://github.com/Grinv/steam-games-mcp/commit/591d130))
 - Add `limit` (up to 100) to `search_games`, which returned at most ~10 matches. ([decf45e](https://github.com/Grinv/steam-games-mcp/commit/decf45e))
 
@@ -23,6 +26,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Fix `get_charts` rejecting `country` for `top_sellers` as a global-only chart; Steam ranks each country separately. ([b763cff](https://github.com/Grinv/steam-games-mcp/commit/b763cff))
 - Fix `get_wishlist`'s detailed view filtering and pricing only a wishlist's first 100 entries; it now covers the whole wishlist. ([64d5d8e](https://github.com/Grinv/steam-games-mcp/commit/64d5d8e))
 - Fix a bad or revoked API key being reported as a private profile or friends list; it now surfaces as a credentials error. ([e791dcb](https://github.com/Grinv/steam-games-mcp/commit/e791dcb))
 - Fix a request hanging past `HTTP_TIMEOUT_MS` when Steam sent the headers but stalled mid-body. ([630ff5a](https://github.com/Grinv/steam-games-mcp/commit/630ff5a))
