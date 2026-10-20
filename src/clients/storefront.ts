@@ -132,11 +132,17 @@ export class StorefrontClient {
 
   // Not cached: reviews are paginated and change as users post. `reviewLanguage`
   // filters by review language ("all" = any); `reviewType` = all|positive|negative.
+  // `order` maps to appreviews' filter: helpful = "all" (most helpful within the
+  // last `withinDays`, Steam's default window being 30 — verified live: no
+  // filter and day_range=30 return the same reviews), recent = newest first,
+  // updated = most recently edited. day_range only applies to helpful.
   async getReviews(
     appid: number,
     max: number,
     reviewLanguage = "all",
     reviewType = "all",
+    order: "helpful" | "recent" | "updated" = "helpful",
+    withinDays?: number,
   ): Promise<Record<string, unknown>> {
     const res = await this.#http.getJson<ReviewsResponse>(`appreviews/${appid}`, {
       query: {
@@ -145,6 +151,8 @@ export class StorefrontClient {
         language: reviewLanguage,
         review_type: reviewType,
         purchase_type: "all",
+        filter: order === "helpful" ? "all" : order,
+        ...(order === "helpful" && withinDays !== undefined ? { day_range: withinDays } : {}),
       },
     });
     return summarizeReviews(res, max);

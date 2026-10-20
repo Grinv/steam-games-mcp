@@ -81,51 +81,73 @@ export function registerStorefrontTools(
     {
       title: "Get game reviews",
       description:
-        "Get the review summary (score label, positive/negative counts, %) and a few recent " +
-        "reviews for a game by appid. Review text over 600 characters is truncated. An unknown " +
+        "Get the review summary (score label, positive/negative counts, %) and a few reviews for " +
+        "a game by appid — by default the most helpful ones posted in the last 30 days; set order " +
+        "for the newest or most recently edited instead, or within_days to widen/narrow the " +
+        "helpful window. Review text over 600 characters is truncated. An unknown " +
         "appid comes back as summary 'No user reviews' with zero counts rather than an error — " +
         "Steam answers success for any id — so that result means either no such appid or a game " +
         "nobody has reviewed yet; confirm the appid with get_game if that distinction matters. " +
         "For long-term trend instead of a snapshot, use get_review_histogram. Get the appid from " +
         "search_games. No API key required.",
-      inputSchema: z.strictObject({
-        appid,
-        limit: z
-          .int()
-          .positive()
-          .max(20)
-          .describe("How many recent reviews (1-20). Default 5.")
-          .default(5),
-        review_language: z
-          .string()
-          .trim()
-          // .nonempty() so a blank value can't silently narrow the result: Steam
-          // treats "" as its own filter, not as "all", so it quietly returned a
-          // subset with rescoped totals.
-          .nonempty()
-          .describe(
-            "Filter reviews by language. Use Steam's full language name — english, russian, " +
-              "schinese — NOT an ISO code like en/ru/zh: Steam answers an unrecognized value with " +
-              "zero reviews rather than an error, so a 9M-review game reads as having none. " +
-              "Default 'all'. Setting this ALSO rescopes the summary counts (total_reviews / " +
-              "positive / negative / %) to that language — they are no longer the game's global " +
-              "totals. Leave it at 'all' when you want those.",
-          )
-          .default("all"),
-        type: z
-          .enum(["all", "positive", "negative"])
-          .describe(
-            "Only positive or negative reviews. Default 'all'. Steam only computes the summary " +
-              "(score label, totals, %) for 'all' — filtering to positive/negative nulls those " +
-              "fields out, leaving only the review excerpts.",
-          )
-          .default("all"),
-      }),
+      inputSchema: z
+        .strictObject({
+          appid,
+          limit: z
+            .int()
+            .positive()
+            .max(20)
+            .describe("How many reviews (1-20). Default 5.")
+            .default(5),
+          order: z
+            .enum(["helpful", "recent", "updated"])
+            .describe(
+              "helpful (default) = most voted-helpful within within_days; recent = newest first; " +
+                "updated = most recently edited first. The summary counts are the same in every order.",
+            )
+            .default("helpful"),
+          within_days: z
+            .int()
+            .positive()
+            .max(3650)
+            .describe(
+              "order='helpful' only: how many past days the helpful ranking covers. Default 30 " +
+                "(Steam's own); e.g. 3650 for the all-time most helpful.",
+            )
+            .optional(),
+          review_language: z
+            .string()
+            .trim()
+            // .nonempty() so a blank value can't silently narrow the result: Steam
+            // treats "" as its own filter, not as "all", so it quietly returned a
+            // subset with rescoped totals.
+            .nonempty()
+            .describe(
+              "Filter reviews by language. Use Steam's full language name — english, russian, " +
+                "schinese — NOT an ISO code like en/ru/zh: Steam answers an unrecognized value with " +
+                "zero reviews rather than an error, so a 9M-review game reads as having none. " +
+                "Default 'all'. Setting this ALSO rescopes the summary counts (total_reviews / " +
+                "positive / negative / %) to that language — they are no longer the game's global " +
+                "totals. Leave it at 'all' when you want those.",
+            )
+            .default("all"),
+          type: z
+            .enum(["all", "positive", "negative"])
+            .describe(
+              "Only positive or negative reviews. Default 'all'. Steam only computes the summary " +
+                "(score label, totals, %) for 'all' — filtering to positive/negative nulls those " +
+                "fields out, leaving only the review excerpts.",
+            )
+            .default("all"),
+        })
+        .refine((a) => a.within_days === undefined || a.order === "helpful", {
+          message: "within_days only applies to order='helpful'.",
+        }),
       outputSchema: getGameReviewsOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id, limit, review_language, type }) =>
-      reply(() => store.getReviews(id, limit, review_language, type)),
+    ({ appid: id, limit, review_language, type, order, within_days }) =>
+      reply(() => store.getReviews(id, limit, review_language, type, order, within_days)),
   );
 
   server.registerTool(

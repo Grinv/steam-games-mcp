@@ -277,6 +277,26 @@ describe("get_game", () => {
   });
 });
 
+test("get_game_reviews maps order and within_days onto appreviews' filter/day_range", async (t) => {
+  const { client, mock } = await setupServer(t, ENV, router);
+  const q = () => new URL(mock.calls.at(-1)!.url).searchParams;
+  await client.callTool({ name: "get_game_reviews", arguments: { appid: 620 } });
+  assert.equal(q().get("filter"), "all");
+  assert.equal(q().get("day_range"), null);
+  await client.callTool({
+    name: "get_game_reviews",
+    arguments: { appid: 620, within_days: 3650 },
+  });
+  assert.equal(q().get("day_range"), "3650");
+  await client.callTool({ name: "get_game_reviews", arguments: { appid: 620, order: "recent" } });
+  assert.equal(q().get("filter"), "recent");
+  const bad = await client.callTool({
+    name: "get_game_reviews",
+    arguments: { appid: 620, order: "recent", within_days: 7 },
+  });
+  assert.equal(bad.isError, true);
+});
+
 test("get_game_reviews summarizes score and percentage", async (t) => {
   const { client } = await setupServer(t, ENV, router);
   const res = await client.callTool({ name: "get_game_reviews", arguments: { appid: 620 } });
