@@ -17,12 +17,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **Breaking:** `search_games` returns games only by default (`games_only: false` includes DLC, soundtracks and demos), and drops `price.currency`. ([0084dd2](https://github.com/Grinv/steam-games-mcp/commit/0084dd2), [decf45e](https://github.com/Grinv/steam-games-mcp/commit/decf45e))
-- `search_games` reports Steam's full match count as `total`, the real item `type` instead of `app`, and the game's own price instead of a bundle's. ([decf45e](https://github.com/Grinv/steam-games-mcp/commit/decf45e))
-- `discover_games` filters by tags, Steam Deck/Machine/Frame, review rating and release date across the whole catalog, not only the top `count` popular games; `min_review` now skips unrated games. ([5c1c1b2](https://github.com/Grinv/steam-games-mcp/commit/5c1c1b2))
-- `get_recommended_games` picks candidates from games carrying the player's favorite tags, not just the most popular games, which mostly helps niche tastes. ([e03ffcf](https://github.com/Grinv/steam-games-mcp/commit/e03ffcf))
-- `get_game` looks up a `name` with the same search as `search_games`, so the two agree (e.g. "portal" now resolves to Portal, not Portal 2). ([002d745](https://github.com/Grinv/steam-games-mcp/commit/002d745))
+- Report `search_games`' full match count as `total`, the real item `type` instead of `app`, and the game's own price, not a bundle's. ([decf45e](https://github.com/Grinv/steam-games-mcp/commit/decf45e))
+- Filter `discover_games` by tags, hardware, rating and release date catalog-wide, not just within the top `count`; `min_review` skips unrated games. ([5c1c1b2](https://github.com/Grinv/steam-games-mcp/commit/5c1c1b2))
+- Pick `get_recommended_games` candidates from games with the player's favorite tags, not just the most popular ones, which mostly helps niche tastes. ([e03ffcf](https://github.com/Grinv/steam-games-mcp/commit/e03ffcf))
+- Resolve `get_game`'s `name` with the same search as `search_games`, so the two agree ("portal" now finds Portal, not Portal 2). ([002d745](https://github.com/Grinv/steam-games-mcp/commit/002d745))
 - Bump the MCP TypeScript SDK to 2.3.1 and zod to 4.6.7. ([af58a4b](https://github.com/Grinv/steam-games-mcp/commit/af58a4b))
-- Speed up `get_recommended_games` by sending its three upstream requests at once. ([3074c37](https://github.com/Grinv/steam-games-mcp/commit/3074c37))
+- Speed up `get_recommended_games` by one upstream round trip. ([3074c37](https://github.com/Grinv/steam-games-mcp/commit/3074c37))
 
 ### Fixed
 
@@ -32,7 +32,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fix a request hanging past `HTTP_TIMEOUT_MS` when Steam sent the headers but stalled mid-body. ([630ff5a](https://github.com/Grinv/steam-games-mcp/commit/630ff5a))
 - Fix `get_game_achievements` caching a list without rarity for the full TTL after one failed rarity lookup. ([e791dcb](https://github.com/Grinv/steam-games-mcp/commit/e791dcb))
 - Fix `get_game_achievements` reporting an unknown unlock rate as 0% instead of null, unlike `get_global_achievements`. ([5ae5951](https://github.com/Grinv/steam-games-mcp/commit/5ae5951))
-- Fix `get_charts` occasionally leaving its last row without a name. ([5ae5951](https://github.com/Grinv/steam-games-mcp/commit/5ae5951))
+- Fix `get_charts` occasionally leaving its last row without a name. ([5ae5951](https://github.com/Grinv/steam-games-mcp/commit/5ae5951), [bea0a55](https://github.com/Grinv/steam-games-mcp/commit/bea0a55))
 - Fix tag filters with surrounding spaces silently matching or excluding nothing. ([654727b](https://github.com/Grinv/steam-games-mcp/commit/654727b))
 - Fix `is_it_worth_buying`'s `game` argument letting a newline or quote append instructions to the prompt. ([654727b](https://github.com/Grinv/steam-games-mcp/commit/654727b))
 
