@@ -387,6 +387,20 @@ price_overview`), so the suite agrees with the bug instead of catching it.
   _parsed_ value, and treat empty-but-non-null as failure: an upstream that
   signals errors as **200 + an empty body** (`GetTagList` on an unrecognized
   `language`) slips past every `catch`- and null-based guard.
+- **A code comment saying an upstream "can't" or "silently ignores" a
+  parameter is a claim to re-test, not a fact.** `discover_games` fetched the
+  top-`count` popular games and filtered tags/compat/reviews/release date
+  locally for several releases because its comments said Query ignored those
+  filters — it applies all of them catalog-wide under their real
+  `CStoreQueryFilters` names (`tagids_must_match`, `compatibility_filter`,
+  `review_score_filter`, `release_date_filter`), so niche queries went from 0
+  matches to dozens. For every client-side cap or filter over an upstream
+  response, look the request message up in SteamDatabase/Protobufs
+  (`webui/service_*.proto`, `webui/common.proto`) and probe the real field
+  names live before accepting "no server-side support": the same pass found
+  inline chart names (`data_request`) and `GetOwnedGames`' `appids_filter`.
+  Conversely, confirm a parameter is really honored — six plausible count
+  fields on the player charts are silently ignored.
 - A tool that assumes a private profile 404s instead of returning a
   restricted-but-200 shape (or vice versa) — Steam's actual behavior differs
   by endpoint, don't assume one implies the other for a sibling endpoint.
