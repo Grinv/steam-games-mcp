@@ -855,7 +855,7 @@ describe("get_friend_list", () => {
 
 describe("find_friends_who_own", () => {
   test("find_friends_who_own checks each friend's FULL library and separates private ones", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) => {
+    const { client, mock } = await setupServer(t, ENV, (url) => {
       if (url.includes("GetFriendList")) return jsonResponse(FRIENDLIST);
       if (url.includes("GetPlayerSummaries")) return jsonResponse(PLAYERS);
       if (url.includes("GetOwnedGames")) {
@@ -885,6 +885,10 @@ describe("find_friends_who_own", () => {
     assert.equal(m620.owners[0]!.playtime_hours, 10);
     const m999 = s.matches.find((m) => m.appid === 999)!;
     assert.equal(m999.owners.length, 0);
+    // Each friend's lookup asks Steam for just the requested appids, not the
+    // whole library.
+    const lookup = decodeURIComponent(mock.calls.find((c) => c.url.includes("GetOwnedGames"))!.url);
+    assert.match(lookup, /appids_filter\[0\]=620&appids_filter\[1\]=999/);
     assert.equal(s.private_friends.length, 1);
     assert.equal(s.private_friends[0]!.steamid, "76561197960287931");
   });

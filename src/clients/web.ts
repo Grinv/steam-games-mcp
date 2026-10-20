@@ -624,9 +624,15 @@ export class SteamWebClient {
     // include_played_free_games: without it Steam omits a played free-to-play
     // game (e.g. Path of Exile, Warframe) from the response entirely, so an
     // owning friend would be misreported as a non-owner rather than an owner.
+    // appids_filter has Steam return just these appids: ~77 bytes instead of a
+    // whole library (~40 KB for 1009 games), per friend checked. A public
+    // profile owning none of them still answers {game_count: 0}, while a
+    // private one answers {} as before (both verified live), so
+    // isPrivateOwnedGames tells them apart unchanged.
     const res = await this.#ownedGamesRaw(steamid, {
       include_appinfo: false,
       include_played_free_games: true,
+      ...Object.fromEntries(appids.map((appid, i) => [`appids_filter[${i}]`, appid])),
     });
     if (isPrivateOwnedGames(res)) return null;
     const wanted = new Set(appids);
