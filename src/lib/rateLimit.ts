@@ -1,25 +1,12 @@
-// Serializes calls and spaces them to respect both a minimum interval and any
-// number of sliding-window limits (e.g. an upstream that allows N req/s AND
-// M req/min). A single min-interval can satisfy a per-second cap but not a
-// sustained per-minute one, so the window rules are what keep sustained traffic
-// under the published ceiling.
+// Serializes calls and spaces them at least `minIntervalMs` apart, so a burst of
+// requests can't exceed the upstream's per-call pacing.
 //
 // Acquisitions are ordered through a tail-promise chain, so only one runs at a
-// time and the window bookkeeping stays consistent. In-flight network time still
+// time and the spacing bookkeeping stays consistent. In-flight network time still
 // overlaps because acquire() resolves before the request itself runs.
-
-interface RateRule {
-  /** Max granted acquisitions allowed within any `windowMs` span. */
-  limit: number;
-  windowMs: number;
-}
 
 export class RateLimiter {
   readonly #minIntervalMs: number;
-  readonly #rules: RateRule[];
-  readonly #maxWindowMs: number;
-  // Ascending timestamps of granted acquisitions, pruned to the largest window.
-  readonly #history: number[] = [];
   #tail: Promise<void> = Promise.resolve();
   // null = no acquisition has happened yet, so the min-interval gate doesn't
   // apply. An explicit sentinel rather than 0: comparing against 0 relied on
@@ -27,10 +14,8 @@ export class RateLimiter {
   // clock but not for a clock mocked to start at 0 (e.g. in tests).
   #lastStart: number | null = null;
 
-  constructor(minIntervalMs: number, rules: RateRule[] = []) {
+  constructor(minIntervalMs: number) {
     this.#minIntervalMs = Math.max(0, minIntervalMs);
-    this.#rules = rules;
-    this.#maxWindowMs = rules.reduce((max, r) => Math.max(max, r.windowMs), 0);
   }
 
   /** Resolves when the caller is allowed to proceed. */
@@ -44,34 +29,16 @@ export class RateLimiter {
     return prev.then(async () => {
       const wait = this.#delayUntilAllowed();
       if (wait > 0) await delay(wait);
-      const now = Date.now();
-      this.#lastStart = now;
-      this.#record(now);
+      this.#lastStart = Date.now();
       // Release the next waiter's gate; the spacing above keeps them in line.
       release();
     });
   }
 
-  /** Earliest delay (ms) before another acquisition stays within every limit. */
+  /** Delay (ms) before another acquisition may start, honoring the min interval. */
   #delayUntilAllowed(): number {
-    const now = Date.now();
-    let until = this.#lastStart !== null ? this.#lastStart + this.#minIntervalMs : 0;
-    for (const rule of this.#rules) {
-      if (this.#history.length < rule.limit) continue;
-      // Once the `limit`-th most recent request leaves the window, there is
-      // room for one more. Stale entries land in the past and drop out via max.
-      const nth = this.#history[this.#history.length - rule.limit]!;
-      until = Math.max(until, nth + rule.windowMs);
-    }
-    return Math.max(0, until - now);
-  }
-
-  #record(ts: number): void {
-    this.#history.push(ts);
-    const cutoff = ts - this.#maxWindowMs;
-    let stale = 0;
-    while (stale < this.#history.length && this.#history[stale]! <= cutoff) stale += 1;
-    if (stale > 0) this.#history.splice(0, stale);
+    if (this.#lastStart === null) return 0;
+    return Math.max(0, this.#lastStart + this.#minIntervalMs - Date.now());
   }
 }
 
