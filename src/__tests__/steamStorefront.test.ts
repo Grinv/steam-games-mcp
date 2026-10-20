@@ -131,6 +131,15 @@ describe("search_games", () => {
 });
 
 describe("get_game", () => {
+  test("get_game asks appdetails for only the sections it reads", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, router);
+    await client.callTool({ name: "get_game", arguments: { appid: 620 } });
+    const u = new URL(mock.calls.find((c) => c.url.includes("/api/appdetails"))!.url);
+    const filters = u.searchParams.get("filters")!.split(",");
+    for (const section of ["basic", "price_overview", "developers", "achievements", "demos"])
+      assert.ok(filters.includes(section), `missing ${section}`);
+  });
+
   test("get_game shapes price, platforms and metacritic", async (t) => {
     const { client } = await setupServer(t, ENV, router);
     const res = await client.callTool({ name: "get_game", arguments: { appid: 620 } });

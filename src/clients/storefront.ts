@@ -26,6 +26,31 @@ import type { Config } from "../config.js";
 
 type AppDetailsResponse = Record<string, { success?: boolean; data?: StoreApp }>;
 
+// appdetails sections detailApp reads ("basic" carries name/type/description/
+// is_free/required_age/dlc/requirements/languages/website/controller support).
+// Requested by name instead of the whole payload: 40-60% smaller (Elden Ring
+// 32 → 19 KB, Portal 2 28 → 11 KB) with every key detailApp reads byte-identical
+// (verified live 2026-10-20 on a game, a DLC, a free game and Portal 2) — the
+// rest is screenshots, movies, long HTML descriptions and package groups.
+const APPDETAILS_FILTERS = [
+  "basic",
+  "price_overview",
+  "platforms",
+  "metacritic",
+  "genres",
+  "categories",
+  "release_date",
+  "developers",
+  "publishers",
+  "achievements",
+  "demos",
+  "recommendations",
+  "content_descriptors",
+  "fullgame",
+  "drm_notice",
+  "ext_user_account_notice",
+].join(",");
+
 /** The one StoreServiceClient method this client needs (clients/storeService.ts):
  *  authoritative base-game prices, used to correct what the Storefront API says.
  *  Declared as a narrow interface rather than importing the class, so the
@@ -82,7 +107,7 @@ export class StorefrontClient {
     const [data, prices] = await Promise.all([
       this.#cache.wrapStaleOnError(`app:${appid}:${cc}:${l}`, async () => {
         const res = await this.#http.getJson<AppDetailsResponse>("api/appdetails", {
-          query: { appids: appid, cc, l },
+          query: { appids: appid, cc, l, filters: APPDETAILS_FILTERS },
         });
         const entry = res[String(appid)];
         if (!entry?.success || !entry.data) {
