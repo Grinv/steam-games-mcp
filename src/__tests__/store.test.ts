@@ -145,28 +145,6 @@ test("summarizeDiscover: empty page returns metadata + no deals", () => {
   assert.deepEqual(s.deals, []);
 });
 
-test("summarizeDiscover drops DLC/soundtracks (related_items.parent_appid set), keeping only base games", () => {
-  // Regression: discover_games used to surface a DLC/upgrade-kit as a "deal"
-  // alongside real games — verified live against a real Steam appid. A base
-  // game never carries related_items; DLC/soundtracks always do.
-  const items: StoreItem[] = [
-    { appid: 1, name: "Real Game", best_purchase_option: { discount_pct: 50 } },
-    {
-      appid: 2,
-      name: "Some DLC",
-      best_purchase_option: { discount_pct: 90 },
-      related_items: { parent_appid: 1 },
-    },
-  ];
-  const s = summarizeDiscover({ response: { store_items: items } }, {}) as {
-    deals: { appid: number }[];
-  };
-  assert.deepEqual(
-    s.deals.map((d) => d.appid),
-    [1],
-  );
-});
-
 test("summarizeDiscover re-checks minDiscount client-side (backstop for Steam's server-side no-op at 100)", () => {
   // Steam's server-side min_discount_percent filter silently returns the full
   // catalog at exactly 100, so summarizeDiscover must re-filter on discount_pct
@@ -185,8 +163,14 @@ test("summarizeDiscover re-checks minDiscount client-side (backstop for Steam's 
 });
 
 describe("summarizeWishlistDetailed", () => {
+  const mk = (appid: number, priority = 1, discount_pct = 0) => ({
+    appid,
+    priority,
+    store_item: { appid, name: `Game ${appid}`, best_purchase_option: { discount_pct } },
+  });
+
   test("empty wishlist → found:false with a private/empty reason", () => {
-    const s = summarizeWishlistDetailed({ response: { items: [] } }) as {
+    const s = summarizeWishlistDetailed({}, undefined, {}, { total: 0, exact: true }) as {
       found: boolean;
       reason: string;
       total: number;
@@ -196,70 +180,66 @@ describe("summarizeWishlistDetailed", () => {
     assert.match(s.reason, /private/i);
   });
 
+  test("nothing matching a non-empty wishlist is found:true with matched 0, not 'private'", () => {
+    // A server-filtered response lists only matches, so an empty one plus a
+    // non-zero total from the plain list means "nothing matched".
+    const s = summarizeWishlistDetailed(
+      { response: { items: [] } },
+      undefined,
+      {},
+      { total: 40, exact: true },
+    ) as { found: boolean; total: number; matched: number };
+    assert.equal(s.found, true);
+    assert.equal(s.total, 40);
+    assert.equal(s.matched, 0);
+  });
+
   test("keeps wishlist priority order when no discount filter", () => {
-    const mk = (appid: number, priority: number) => ({
-      appid,
-      priority,
-      store_item: { appid, name: `Game ${appid}`, best_purchase_option: { discount_pct: 0 } },
-    });
-    const s = summarizeWishlistDetailed({ response: { items: [mk(2, 5), mk(1, 1)] } }) as {
-      matched: number;
-      items: { appid: number }[];
-    };
+    const s = summarizeWishlistDetailed(
+      { response: { items: [mk(2, 5), mk(1, 1)] } },
+      undefined,
+      {},
+      { total: 2, exact: true },
+    ) as { matched: number; items: { appid: number }[] };
     assert.equal(s.matched, 2);
     assert.equal(s.items[0]!.appid, 1); // priority 1 sorts before priority 5
   });
 
-  test("entries Steam didn't enrich are reported via enriched/note, not silently dropped", () => {
-    const mk = (appid: number) => ({
-      appid,
-      priority: 1,
-      store_item: { appid, name: `Game ${appid}`, best_purchase_option: { discount_pct: 0 } },
-    });
-    // Steam attaches store_item to only the first ~100 wishlist entries; simulate
-    // one enriched entry plus one bare entry (appid/priority only, no store_item).
-    const s = summarizeWishlistDetailed({
-      response: { items: [mk(1), { appid: 2, priority: 2 }] },
-    }) as { total: number; enriched: number; matched: number; note: string | undefined };
-    assert.equal(s.total, 2);
-    assert.equal(s.enriched, 1);
-    assert.equal(s.matched, 1);
-    assert.match(s.note!, /1 of 2/);
-  });
-
-  test("keeps DLC/soundtracks (unlike discover_games/get_recommended_games) — a player may legitimately wishlist those", () => {
-    const s = summarizeWishlistDetailed({
-      response: {
-        items: [
-          {
-            appid: 2,
-            priority: 1,
-            store_item: {
-              appid: 2,
-              name: "Some DLC",
-              best_purchase_option: { discount_pct: 0 },
-              related_items: { parent_appid: 1 },
-            },
-          },
-        ],
-      },
-    }) as { matched: number; items: { appid: number }[] };
-    assert.equal(s.matched, 1);
-    assert.equal(s.items[0]!.appid, 2);
-  });
-
-  test("fully enriched wishlist carries no note", () => {
-    const mk = (appid: number) => ({
-      appid,
-      priority: 1,
-      store_item: { appid, name: `Game ${appid}`, best_purchase_option: { discount_pct: 0 } },
-    });
-    const s = summarizeWishlistDetailed({ response: { items: [mk(1), mk(2)] } }) as {
-      enriched: number;
-      note: string | undefined;
-    };
-    assert.equal(s.enriched, 2);
+  test("exact (all filters server-side): every listed entry counts as matched, carded or not", () => {
+    // Only the displayed page needs cards then; the rest are listed bare.
+    const s = summarizeWishlistDetailed(
+      { response: { items: [mk(1), { appid: 2, priority: 2 }, { appid: 3, priority: 3 }] } },
+      undefined,
+      {},
+      { total: 10, exact: true },
+    ) as { total: number; matched: number; returned: number; note: string | undefined };
+    assert.equal(s.total, 10);
+    assert.equal(s.matched, 3);
+    assert.equal(s.returned, 1);
     assert.equal(s.note, undefined);
+  });
+
+  test("checks run here: uncarded matches are reported via note, not silently dropped", () => {
+    const s = summarizeWishlistDetailed(
+      { response: { items: [mk(1, 1, 60), { appid: 2, priority: 2 }] } },
+      undefined,
+      { minDiscount: 50 },
+      { total: 5, exact: false },
+    ) as { matched: number; enriched: number; note: string | undefined };
+    assert.equal(s.matched, 1);
+    assert.equal(s.enriched, 1);
+    assert.match(s.note!, /2 wishlist items passed/);
+  });
+
+  test("checks run here: the own-package discount is re-checked", () => {
+    const s = summarizeWishlistDetailed(
+      { response: { items: [mk(1, 1, 60), mk(2, 2, 10)] } },
+      undefined,
+      { minDiscount: 50 },
+      { total: 2, exact: false },
+    ) as { matched: number; items: { appid: number }[] };
+    assert.equal(s.matched, 1);
+    assert.equal(s.items[0]!.appid, 1);
   });
 });
 
@@ -343,36 +323,6 @@ describe("summarizeRecommendations", () => {
     assert.equal(s.recommendations[0]!.appid, 200);
   });
 
-  test("exclude_tags drops a match even via its FULL tag set, not just the display cap", () => {
-    const candidates: StoreItem[] = [
-      {
-        appid: 500,
-        name: "Secretly a Souls-like",
-        // Souls-like (3) is present but far from the top-weighted tag, so it
-        // would fall outside resolveTags' display cap — exclusion must still see it.
-        tags: [
-          { tagid: 1, weight: 900 },
-          { tagid: 3, weight: 1 },
-        ],
-      },
-      { appid: 600, name: "Not a Souls-like", tags: [{ tagid: 1, weight: 900 }] },
-    ];
-    const tagWeights = new Map([["Roguelike", 10]]);
-    const s = summarizeRecommendations(
-      candidates,
-      tagWeights,
-      new Set(),
-      RECO_TAG_MAP,
-      10,
-      ["Roguelike"],
-      ["souls-like"], // case-insensitive
-    ) as { recommendations: { appid: number }[] };
-    assert.deepEqual(
-      s.recommendations.map((r) => r.appid),
-      [600],
-    );
-  });
-
   test("min_discount re-checks discount client-side (backstop for Steam's server-side no-op at 100)", () => {
     // Same class as the discover_games fix: Steam's server-side price filter
     // no-ops at 100, so a full-price candidate must be dropped here too.
@@ -398,34 +348,11 @@ describe("summarizeRecommendations", () => {
       RECO_TAG_MAP,
       10,
       ["Roguelike"],
-      [], // excludeTags
       50, // minDiscount
     ) as { recommendations: { appid: number }[] };
     assert.deepEqual(
       s.recommendations.map((r) => r.appid),
       [920],
-    );
-  });
-
-  test("drops DLC/soundtracks (related_items.parent_appid set), keeping only base games", () => {
-    // Regression: get_recommended_games used to surface a DLC/upgrade-kit as a
-    // pick alongside real games — verified live against a real Steam appid.
-    const candidates: StoreItem[] = [
-      { appid: 700, name: "Real Game", tags: [{ tagid: 1, weight: 900 }] },
-      {
-        appid: 800,
-        name: "Some DLC",
-        tags: [{ tagid: 1, weight: 900 }],
-        related_items: { parent_appid: 700 },
-      },
-    ];
-    const tagWeights = new Map([["Roguelike", 10]]);
-    const s = summarizeRecommendations(candidates, tagWeights, new Set(), RECO_TAG_MAP, 10, [
-      "Roguelike",
-    ]) as { recommendations: { appid: number }[] };
-    assert.deepEqual(
-      s.recommendations.map((r) => r.appid),
-      [700],
     );
   });
 });

@@ -440,10 +440,10 @@ export function registerStoreWebTools(
         "past the display cap is never hidden by it (e.g. 'top metroidvanias on my wishlist with a good " +
         "discount and reviews' → tags:['Metroidvania'] + min_discount + min_review). Results ranked by " +
         "discount when a discount filter is set, else by wishlist priority; `matched` reports the " +
-        "pre-cap count. Steam itself only attaches store data to roughly the first 100 wishlist entries " +
-        "per call — on a bigger wishlist, `enriched` reports how many of `total` got checked, and `note` " +
-        "explains when some were skipped (their filter/price data isn't available at all, not that they " +
-        "don't match). Convert a vanity name with resolve_vanity_url " +
+        "pre-cap count. tags, steam_deck, mac/linux and the discount floor are applied by Steam over " +
+        "the whole wishlist; min_review, the exact own-package discount and the other compat/" +
+        "platform filters are checked by this server over up to 1000 matching entries, and `note` " +
+        "says when a bigger match set left some unchecked. Convert a vanity name with resolve_vanity_url " +
         "first (that conversion itself needs STEAM_API_KEY, even though this tool doesn't).",
       inputSchema: z.strictObject({
         steamid,

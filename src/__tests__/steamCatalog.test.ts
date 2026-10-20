@@ -13,9 +13,21 @@ import {
   router,
   routerWithBrokenTagList,
   routerWithEmptyTagList,
+  WISHLIST,
 } from "./steamFixtures.js";
 import { ITEMS_MAX } from "../tools/common.js";
 import { DISCOVER_MAX, WISHLIST_DETAIL_MAX } from "../format/store.js";
+
+const queryFilters = (mock: { calls: { url: string }[] }) =>
+  (
+    JSON.parse(
+      new URL(
+        mock.calls.find((c) => c.url.includes("IStoreQueryService/Query"))!.url,
+      ).searchParams.get("input_json")!,
+    ) as { query: { filters: Record<string, unknown> } }
+  ).query.filters;
+const startDate = (mock: { calls: { url: string }[] }) =>
+  (queryFilters(mock).release_date_filter as { start_date: number }).start_date;
 
 // Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant
@@ -353,97 +365,32 @@ describe("get_wishlist", () => {
     assert.equal(s.items[0]!.steam_machine, "playable");
   });
 
-  test("get_wishlist tag filter matches the FULL tag set, not the capped display list", async (t) => {
-    // Regression: filtering must see every fetched tag. "Deep Cut" has 9 tags with
-    // Metroidvania the lowest-weighted (rank 9), so it falls outside the top-8 the
-    // card displays — but a tags:["Metroidvania"] filter must still match it.
-    const tagNames = {
-      1: "Action",
-      2: "Adventure",
-      3: "Indie",
-      4: "Singleplayer",
-      5: "Great Soundtrack",
-      6: "Difficult",
-      7: "Atmospheric",
-      8: "Pixel Graphics",
-      9: "Metroidvania",
-    };
-    const detailed = {
-      response: {
-        items: [
-          {
-            appid: 5001,
-            priority: 1,
-            store_item: {
-              appid: 5001,
-              name: "Deep Cut",
-              best_purchase_option: {
-                discount_pct: 75,
-                formatted_final_price: "$4.99",
-                formatted_original_price: "$19.99",
-              },
-              reviews: { summary_filtered: { percent_positive: 92, review_count: 3000 } },
-              // Metroidvania (9) has the lowest weight → past the 8-tag display cap.
-              tags: [
-                { tagid: 1, weight: 900 },
-                { tagid: 2, weight: 850 },
-                { tagid: 3, weight: 800 },
-                { tagid: 4, weight: 750 },
-                { tagid: 5, weight: 700 },
-                { tagid: 6, weight: 650 },
-                { tagid: 7, weight: 600 },
-                { tagid: 8, weight: 550 },
-                { tagid: 9, weight: 100 },
-              ],
-            },
-          },
-          {
-            appid: 5002,
-            priority: 2,
-            store_item: {
-              appid: 5002,
-              name: "Not A Metroidvania",
-              best_purchase_option: { discount_pct: 80, formatted_final_price: "$1.99" },
-              reviews: { summary_filtered: { percent_positive: 95, review_count: 9000 } },
-              tags: [
-                { tagid: 1, weight: 900 },
-                { tagid: 2, weight: 800 },
-              ],
-            },
-          },
-        ],
-      },
-    };
-    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) => {
-      if (url.includes("GetTagList"))
-        return jsonResponse({
-          response: {
-            tags: Object.entries(tagNames).map(([id, name]) => ({ tagid: Number(id), name })),
-          },
-        });
-      if (url.includes("GetWishlistSortedFiltered")) return jsonResponse(detailed);
-      return jsonResponse({});
-    });
-    const res = await client.callTool({
+  test("get_wishlist sends tags, Steam Deck, platform and a discount floor to Steam", async (t) => {
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    await client.callTool({
       name: "get_wishlist",
       arguments: {
-        steamid: "76561198028121353",
-        tags: ["Metroidvania"],
-        min_discount: 50,
-        min_review: 80,
+        steamid: "76561197960287930",
+        tags: ["deckbuilding", "Puzzle"],
+        steam_deck: "playable",
+        platform: "mac",
+        on_sale_only: true,
       },
     });
-    const s = res.structuredContent as {
-      matched: number;
-      items: { appid: number; tags: string[] }[];
+    const call = mock.calls.find((c) => c.url.includes("GetWishlistSortedFiltered"))!;
+    const input = JSON.parse(new URL(call.url).searchParams.get("input_json")!) as {
+      filters: Record<string, unknown>;
+      page_size: number;
     };
-    // Only Deep Cut matches (5002 has 80% off + 95% but isn't a Metroidvania).
-    assert.equal(s.matched, 1);
-    assert.equal(s.items[0]!.appid, 5001);
-    // The card's displayed tags are capped at 8 and therefore DON'T include the
-    // low-weighted Metroidvania tag it was matched on — proving the fix.
-    assert.equal(s.items[0]!.tags.length, 8);
-    assert.ok(!s.items[0]!.tags.includes("Metroidvania"));
+    assert.deepEqual(input.filters, {
+      tagids_must_match: [40, 10],
+      steam_deck_filters: { include_verified: true, include_playable: true },
+      macos_only: true,
+      min_discount_percent: 1,
+    });
+    // on_sale_only is re-checked here (own-package discount), so every entry
+    // needs a card: page_size is the whole wishlist's size (from the plain list).
+    assert.equal(input.page_size, WISHLIST.response.items.length);
   });
 
   test("get_wishlist returns found:false when empty/private", async (t) => {
@@ -866,31 +813,19 @@ describe("discover_games", () => {
     assert.equal(s.deals[0]!.release_date, "2011-04-18");
   });
 
-  test("discover_games recency cutoff excludes older releases", async (t) => {
-    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
-    // Cutoff in 2020 → Portal 2 (2011) is excluded; nothing else has a date.
-    const res = await client.callTool({
-      name: "discover_games",
-      arguments: { released_after: "2020-01-01" },
-    });
-    const s = res.structuredContent as { deals: unknown[] };
-    assert.equal(s.deals.length, 0);
+  test("discover_games sends released_after to Steam as the store-day (Pacific) cutoff", async (t) => {
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    await client.callTool({ name: "discover_games", arguments: { released_after: "2020-01-01" } });
+    // 2020-01-01 00:00 PST = 08:00 UTC.
+    assert.equal(startDate(mock), Date.UTC(2020, 0, 1, 8) / 1000);
+    assert.equal(queryFilters(mock).released_only, true);
   });
 
-  test("discover_games released_within_days computes a rolling cutoff (not just released_after)", async (t) => {
-    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
-    // Portal 2's fixture release date is 2011 — well outside any recent window.
-    const recent = await client.callTool({
-      name: "discover_games",
-      arguments: { released_within_days: 365 },
-    });
-    assert.equal((recent.structuredContent as { deals: unknown[] }).deals.length, 0);
-    // A window wide enough to cover 2011 must still include it.
-    const wide = await client.callTool({
-      name: "discover_games",
-      arguments: { released_within_days: 365 * 20 },
-    });
-    assert.ok((wide.structuredContent as { deals: { appid: number }[] }).deals.length >= 1);
+  test("discover_games released_within_days sends a rolling cutoff (not just released_after)", async (t) => {
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    await client.callTool({ name: "discover_games", arguments: { released_within_days: 365 } });
+    const expected = Math.floor(Date.now() / 1000) - 365 * 86400;
+    assert.ok(Math.abs(startDate(mock) - expected) < 60);
   });
 
   test(`discover_games caps its result list at ${DISCOVER_MAX}, reporting the true match count`, async (t) => {
@@ -952,15 +887,12 @@ describe("discover_games", () => {
   });
 
   test("discover_games: an explicit released_after wins over released_within_days when both are given", async (t) => {
-    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
-    const res = await client.callTool({
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    await client.callTool({
       name: "discover_games",
-      // released_after (2020) would exclude Portal 2 (2011); released_within_days
-      // (huge window) would include it — the explicit date must win.
       arguments: { released_after: "2020-01-01", released_within_days: 365 * 20 },
     });
-    const s = res.structuredContent as { deals: unknown[] };
-    assert.equal(s.deals.length, 0);
+    assert.equal(startDate(mock), Date.UTC(2020, 0, 1, 8) / 1000);
   });
 
   test("discover_games filters by Steam Deck compatibility and tags each result", async (t) => {
@@ -1024,20 +956,16 @@ describe("discover_games", () => {
     assert.deepEqual(s.deals[0]!.platforms, ["windows", "linux"]);
   });
 
-  test("discover_games surfaces resolved tags and filters by tag (client-side, case-insensitive)", async (t) => {
-    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+  test("discover_games resolves tag names to ids for Steam (case-insensitive) and shows tag names", async (t) => {
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
       name: "discover_games",
       arguments: { min_discount: 80, tags: ["puzzle"] },
     });
-    const s = res.structuredContent as {
-      deals: { appid: number; tags: string[] }[];
-    };
-    // Portal 2 (tagids 10,20 → Puzzle, Co-op) matches "puzzle"; the shovelware
-    // (tagid 50 → Shooter) has no Puzzle tag and drops out.
-    assert.equal(s.deals.length, 1);
-    assert.equal(s.deals[0]!.appid, 620);
-    assert.deepEqual(s.deals[0]!.tags, ["Puzzle", "Co-op"]);
+    assert.deepEqual(queryFilters(mock).tagids_must_match, [{ tagids: [10] }]);
+    const s = res.structuredContent as { deals: { appid: number; tags: string[] }[] };
+    // Portal 2 (tagids 10,20 → Puzzle, Co-op).
+    assert.deepEqual(s.deals.find((d) => d.appid === 620)!.tags, ["Puzzle", "Co-op"]);
   });
 
   test("discover_games sends tags, compat, review floor, release date and games-only to Steam", async (t) => {

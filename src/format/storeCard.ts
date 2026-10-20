@@ -73,13 +73,6 @@ export interface StoreItem {
   // TagMap / GetTagListResponse), so a card carries human-readable tag names.
   tags?: { tagid?: number; weight?: number }[];
   visible?: boolean;
-  // Present (with the base game's appid) on DLC, soundtracks and other
-  // non-standalone items; absent on a base game/app itself — verified live
-  // against IStoreBrowseService/GetItems (e.g. a DLC/soundtrack always carries
-  // this, a base game like Portal 2 never does). Used by isBaseGame() below to
-  // keep catalog-discovery results (discover_games, get_recommended_games) to
-  // actual games, not their DLC/soundtracks.
-  related_items?: { parent_appid?: number };
 }
 export interface StoreItemsResponse {
   response?: { store_items?: StoreItem[] };
@@ -89,14 +82,6 @@ export interface StoreItemsResponse {
 // non-nullable field on baseCardSchema) — every call site narrows to this
 // before calling either, since a StoreItem's own appid is optional.
 export type StoreItemWithAppid = StoreItem & { appid: number };
-
-// Catalog-DISCOVERY results (discover_games, get_recommended_games) should
-// surface actual games, not their DLC/soundtracks/upgrade-kits — an appid the
-// caller already knows about (get_items, get_wishlist) has no such filter,
-// since those legitimately list DLC the player owns/wants.
-export function isBaseGame(it: StoreItem): boolean {
-  return it.related_items?.parent_appid === undefined;
-}
 
 // ---- tag dictionary (IStoreService/GetTagList) ------------------------------
 
@@ -114,7 +99,7 @@ export function summarizeTagList(r: GetTagListResponse): TagMap {
 }
 // How many resolved tag names to surface per card (most-weighted first). Bounded
 // to keep batch responses (up to 100 items) token-efficient.
-const TAG_LIMIT = 8;
+export const TAG_LIMIT = 8;
 export function resolveTags(
   tags: { tagid?: number; weight?: number }[] | undefined,
   tagMap: TagMap | undefined,
@@ -126,45 +111,6 @@ export function resolveTags(
     .map((t) => (t.tagid !== undefined ? tagMap[t.tagid] : undefined))
     .filter((name): name is string => Boolean(name))
     .slice(0, TAG_LIMIT);
-}
-
-// An item's FULL resolved tag-name set, lowercased — NOT the capped display
-// list a card shows (see resolveTags' TAG_LIMIT). Shared by matchesAllTags and
-// matchesAnyTag so both see every fetched tag, not just the most-weighted ones.
-function fullTagNamesLower(
-  tags: { tagid?: number; weight?: number }[] | undefined,
-  tagMap: TagMap | undefined,
-): Set<string> {
-  return new Set(
-    (tags ?? [])
-      .map((t) => (t.tagid !== undefined ? tagMap?.[t.tagid] : undefined))
-      .filter((n): n is string => Boolean(n))
-      .map((n) => n.toLowerCase()),
-  );
-}
-
-// Case-insensitive AND-match against an item's FULL tag set — a match on a
-// lower-weighted tag (e.g. "Metroidvania" on a game whose top tags are others)
-// must still count, or it'd be dropped just because it fell past the display cap.
-function matchesAllTags(
-  tags: { tagid?: number; weight?: number }[] | undefined,
-  tagMap: TagMap | undefined,
-  wantLower: string[],
-): boolean {
-  const have = fullTagNamesLower(tags, tagMap);
-  return wantLower.every((t) => have.has(t));
-}
-
-// Case-insensitive OR-match against an item's FULL tag set — used to EXCLUDE
-// candidates carrying ANY of a set of unwanted tags (e.g. "recommend me
-// something except Souls-like").
-export function matchesAnyTag(
-  tags: { tagid?: number; weight?: number }[] | undefined,
-  tagMap: TagMap | undefined,
-  unwantedLower: string[],
-): boolean {
-  const have = fullTagNamesLower(tags, tagMap);
-  return unwantedLower.some((t) => have.has(t));
 }
 
 // ---- compatibility + native platforms ---------------------------------------
@@ -325,17 +271,18 @@ export interface CompatFilters {
   steamFrame?: z.infer<typeof compatFilterSchema>;
 }
 
-// Every filter discover_games and the wishlist detailed view apply, client-side,
-// over the raw store items. All optional — an unset field passes everything.
-// (Steam's store APIs ignore most of these server-side, hence we filter here.)
+// The filters discover_games and the wishlist detailed view re-check, or apply,
+// client-side over the raw store items. Tags, release date and games-only run
+// server-side in both (clients/storeService.ts); what stays here is what Steam
+// has no exact form for: the review %, the app's OWN-package discount (Steam's
+// is the best purchase option's, often a bundle), and compat/platform
+// dimensions the endpoint can't filter. All optional — an unset field passes.
 export interface StoreFilters extends CompatFilters {
   minReview?: number;
   minReviews?: number;
   minDiscount?: number;
   onSaleOnly?: boolean;
   platform?: keyof typeof PLATFORM_FIELD;
-  releasedAfter?: number;
-  tags?: string[];
   tagMap?: TagMap;
 }
 
@@ -361,16 +308,12 @@ export function storeItemFilter(f: StoreFilters): (it: StoreItem) => boolean {
     return [categoryField, chosen ? COMPAT_MIN[chosen] : undefined] as const;
   });
   const platformField = f.platform ? PLATFORM_FIELD[f.platform] : undefined;
-  const wantTags = f.tags?.length ? f.tags.map((t) => t.toLowerCase()) : undefined;
   return (it) => {
     const p = it.platforms;
     for (const [categoryField, min] of compatMins) {
       if (min !== undefined && (p?.[categoryField] ?? 0) < min) return false;
     }
     if (platformField && !p?.[platformField]) return false;
-    if (f.releasedAfter !== undefined && (it.release?.steam_release_date ?? 0) < f.releasedAfter)
-      return false;
-    if (wantTags && !matchesAllTags(it.tags, f.tagMap, wantTags)) return false;
     const rev = it.reviews?.summary_filtered;
     // minReview > 0 guard: a 0 threshold means "no minimum", so it must NOT
     // drop games that carry no review summary yet (the -1 missing-data sentinel

@@ -24,10 +24,8 @@ import {
 } from "./store.schemas.js";
 import {
   baseCard,
-  isBaseGame,
   isOwnPackage,
   ownPurchaseOption,
-  matchesAnyTag,
   nativePlatforms,
   priceFields,
   resolveTags,
@@ -131,7 +129,7 @@ export function summarizeDiscover(
   const rows = (r.response?.store_items ?? [])
     .filter(
       (it): it is StoreItemWithAppid =>
-        it.visible !== false && typeof it.appid === "number" && isBaseGame(it) && keep(it),
+        it.visible !== false && typeof it.appid === "number" && keep(it),
     )
     .map((it) => storeCard(it, opts.tagMap))
     .sort((a, b) => (b.discount_pct as number) - (a.discount_pct as number));
@@ -248,11 +246,15 @@ export interface WishlistDetailedResponse {
 export const WISHLIST_DETAIL_MAX = 50;
 export function summarizeWishlistDetailed(
   r: WishlistDetailedResponse,
-  tagMap?: TagMap,
-  opts: StoreFilters = {},
+  tagMap: TagMap | undefined,
+  opts: StoreFilters,
+  // total: the whole wishlist's size, from the plain GetWishlist list (a
+  // server-filtered response only lists matches). exact: every filter ran
+  // server-side, so the listed entries ARE the matches and only the displayed
+  // page needed cards; otherwise storeItemFilter re-checks each carded match.
+  ctx: { total: number; exact: boolean },
 ): z.infer<typeof wishlistNotFound> | z.infer<typeof wishlistDetailedFound> {
-  const items = r.response?.items ?? [];
-  if (items.length === 0) {
+  if (ctx.total === 0) {
     return wishlistNotFound.parse({
       found: false,
       reason: "Empty wishlist, or the profile/wishlist is private.",
@@ -260,11 +262,7 @@ export function summarizeWishlistDetailed(
       items: [],
     });
   }
-  // Steam only attaches a store_item card to the first ~100 entries of a
-  // wishlist, however many count/start params this call sends (verified live —
-  // it doesn't budge) — so on a >100-item wishlist, filters below only ever see
-  // that enriched prefix, NOT the whole wishlist as the tool description used to
-  // (wrongly) promise. Entries past it carry no price/reviews/tags to filter on.
+  const items = r.response?.items ?? [];
   const enriched = items.filter(
     (i): i is typeof i & { store_item: StoreItem } => i.store_item !== undefined,
   );
@@ -272,7 +270,7 @@ export function summarizeWishlistDetailed(
   const cards = enriched
     .filter(
       (i): i is typeof i & { store_item: StoreItemWithAppid } =>
-        typeof i.store_item.appid === "number" && keep(i.store_item),
+        typeof i.store_item.appid === "number" && (ctx.exact || keep(i.store_item)),
     )
     .map((i) => ({
       ...storeCard(i.store_item, tagMap),
@@ -285,17 +283,18 @@ export function summarizeWishlistDetailed(
     byDiscount ? b.discount_pct - a.discount_pct : (a.priority ?? 1e9) - (b.priority ?? 1e9),
   );
   const { included, returned } = capList(cards, WISHLIST_DETAIL_MAX);
+  const unchecked = ctx.exact ? 0 : items.length - enriched.length;
   return wishlistDetailedFound.parse({
     found: true,
-    total: items.length,
+    total: ctx.total,
     enriched: enriched.length,
     note:
-      enriched.length < items.length
-        ? `Steam only returned store data for ${enriched.length} of ${items.length} wishlist ` +
-          `items; filters/matches only cover those ${enriched.length} — the rest have no price, ` +
-          "reviews or tags to check."
+      unchecked > 0
+        ? `${items.length} wishlist items passed Steam's own filters, but only the first ` +
+          `${enriched.length} were checked against the rest (review %, own-package discount, ` +
+          "compat/platform) — narrow the filters to cover them all."
         : undefined,
-    matched: cards.length,
+    matched: ctx.exact ? items.length : cards.length,
     returned,
     items: included,
   });
@@ -337,18 +336,17 @@ export function summarizeRecommendations(
   tagMap: TagMap | undefined,
   max: number,
   basedOnTags: string[],
-  excludeTags: string[] = [],
   minDiscount?: number,
 ): z.infer<typeof recommendedGamesFound> {
-  const excludeLower = excludeTags.map((t) => t.toLowerCase());
+  // Games-only and exclude_tags already ran server-side on the pool
+  // (clients/storeService.ts), so only ownership and the discount backstop
+  // remain here.
   const scored = candidates
     .filter(
       (it): it is StoreItemWithAppid =>
         it.visible !== false &&
         typeof it.appid === "number" &&
-        isBaseGame(it) &&
         !ownedAppids.has(it.appid) &&
-        !(excludeLower.length && matchesAnyTag(it.tags, tagMap, excludeLower)) &&
         // Client-side discount backstop: like summarizeDiscover, Steam's
         // server-side min_discount_percent no-ops at 100, so re-check here.
         (minDiscount === undefined || (ownPurchaseOption(it)?.discount_pct ?? 0) >= minDiscount),

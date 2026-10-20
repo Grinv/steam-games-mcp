@@ -80,31 +80,6 @@ test("native-platform filter maps linux→steamos_linux and matches the right fl
   assert.ok(!mac(item({ platforms: { windows: true, steamos_linux: true } })));
 });
 
-test("tag filter matches the FULL tag set (incl. low-weighted), case-insensitive, AND", () => {
-  const tagMap = {
-    1: "Action",
-    2: "Adventure",
-    3: "Indie",
-    4: "Singleplayer",
-    5: "Story Rich",
-    6: "Great Soundtrack",
-    7: "Difficult",
-    8: "Atmospheric",
-    9: "Metroidvania",
-  };
-  // Metroidvania (tagid 9) has the lowest weight — past any display cap.
-  const it = item({
-    tags: [1, 2, 3, 4, 5, 6, 7, 8]
-      .map((tagid, i) => ({ tagid, weight: 900 - i * 10 }))
-      .concat([{ tagid: 9, weight: 5 }]),
-  });
-  assert.ok(storeItemFilter({ tags: ["Metroidvania"], tagMap })(it)); // matched despite low weight
-  assert.ok(storeItemFilter({ tags: ["metroidvania"], tagMap })(it)); // case-insensitive
-  assert.ok(storeItemFilter({ tags: ["Action", "Metroidvania"], tagMap })(it)); // AND, both present
-  assert.ok(!storeItemFilter({ tags: ["Horror"], tagMap })(it)); // absent tag
-  assert.ok(!storeItemFilter({ tags: ["Action", "Horror"], tagMap })(it)); // AND, one absent
-});
-
 test("minReview / minReviews compare on the raw summary (missing = excluded)", () => {
   const rev = (percent_positive?: number, review_count?: number) =>
     item({ reviews: { summary_filtered: { percent_positive, review_count } } });
@@ -141,54 +116,37 @@ test("minDiscount / onSaleOnly filter on discount, and minDiscount overrides onS
   assert.ok(!both(disc(10)));
 });
 
-test("releasedAfter keeps on/after the cutoff, drops older and undated", () => {
-  const cutoff = 1_600_000_000;
-  const keep = storeItemFilter({ releasedAfter: cutoff });
-  assert.ok(keep(item({ release: { steam_release_date: cutoff } })));
-  assert.ok(keep(item({ release: { steam_release_date: cutoff + 1 } })));
-  assert.ok(!keep(item({ release: { steam_release_date: cutoff - 1 } })));
-  assert.ok(!keep(item())); // no release date
-});
-
 test("multiple filters combine with AND — flipping any one dimension excludes the item", () => {
   const keep = storeItemFilter({
     minDiscount: 50,
     minReview: 80,
     platform: "linux",
-    tags: ["Roguelike"],
-    tagMap: { 1: "Roguelike" },
   });
   const good = item({
     best_purchase_option: { discount_pct: 75 },
     reviews: { summary_filtered: { percent_positive: 90 } },
     platforms: { steamos_linux: true },
-    tags: [{ tagid: 1, weight: 500 }],
   });
   assert.ok(keep(good));
   assert.ok(!keep({ ...good, best_purchase_option: { discount_pct: 40 } })); // discount fails
   assert.ok(!keep({ ...good, reviews: { summary_filtered: { percent_positive: 70 } } })); // review fails
   assert.ok(!keep({ ...good, platforms: { windows: true } })); // native platform fails
-  assert.ok(!keep({ ...good, tags: [{ tagid: 99, weight: 500 }] })); // tag fails
 });
 
-test("a full-stack combo (compat + minReviews + releasedAfter) still ANDs correctly", () => {
-  // The other combo test above never includes a compat filter or minReviews/
-  // releasedAfter alongside the rest — this is the shape discover_games
-  // actually sends when several dimensions are set at once.
+test("a compat + minReviews combo still ANDs correctly", () => {
+  // The other combo test above never includes a compat filter or minReviews
+  // alongside the rest. (Tags and the release date run server-side now.)
   const keep = storeItemFilter({
     steamDeck: "verified",
     minReviews: 100,
-    releasedAfter: 1_600_000_000,
   });
   const good = item({
     platforms: { steam_deck_compat_category: 3 },
     reviews: { summary_filtered: { review_count: 150 } },
-    release: { steam_release_date: 1_650_000_000 },
   });
   assert.ok(keep(good));
   assert.ok(!keep({ ...good, platforms: { steam_deck_compat_category: 2 } })); // compat fails
   assert.ok(
     !keep({ ...good, reviews: { summary_filtered: { review_count: 50 } } }), // minReviews fails
   );
-  assert.ok(!keep({ ...good, release: { steam_release_date: 1_500_000_000 } })); // releasedAfter fails
 });

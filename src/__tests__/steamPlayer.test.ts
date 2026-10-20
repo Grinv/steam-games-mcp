@@ -429,46 +429,6 @@ describe("get_recommended_games", () => {
     assertToolError(old, /unrecognized key/i);
   });
 
-  test("get_recommended_games: exclude_tags drops matching candidates end-to-end", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) => {
-      if (url.includes("IStoreQueryService/Query")) {
-        return jsonResponse({
-          response: {
-            store_items: [
-              {
-                appid: 30,
-                name: "New Roguelike",
-                visible: true,
-                tags: [{ tagid: 1, weight: 900 }],
-                reviews: { summary_filtered: { percent_positive: 95 } },
-              },
-              {
-                appid: 50,
-                name: "Souls-like Roguelike",
-                visible: true,
-                // Souls-like present but low-weighted — exclusion must still see it.
-                tags: [
-                  { tagid: 1, weight: 900 },
-                  { tagid: 3, weight: 1 },
-                ],
-              },
-            ],
-          },
-        });
-      }
-      return recoRouter(url);
-    });
-    const res = await client.callTool({
-      name: "get_recommended_games",
-      arguments: { steamid: "76561197960287930", exclude_tags: ["Souls-like"] },
-    });
-    const s = res.structuredContent as { recommendations: { appid: number }[] };
-    assert.deepEqual(
-      s.recommendations.map((r) => r.appid),
-      [30],
-    );
-  });
-
   test("get_recommended_games: min_discount is forwarded as a server-side price filter", async (t) => {
     const { client, mock } = await setupServer(t, ENV, recoRouter);
     await client.callTool({

@@ -175,23 +175,20 @@ export const discoverGamesOutput = z.strictObject({
 // between the two.
 export const wishlistDetailedFound = z.strictObject({
   found: z.literal(true),
-  total: z
-    .number()
-    .describe(
-      "The player's full wishlist size, including entries Steam never sent store data for (see `enriched`).",
-    ),
+  total: z.number().describe("The player's full wishlist size, before any filter."),
   enriched: z
     .number()
     .describe(
-      "How many of `total` Steam actually attached store data to (it caps around the first " +
-        "100) — every filter below only runs over these, never the full `total`.",
+      "How many entries came with store data. Filters Steam applies itself (tags, steam_deck, " +
+        "mac/linux, the discount floor) cover the whole wishlist; the review %, own-package " +
+        "discount and other compat/platform checks run over these entries only (see `note`).",
     ),
   note: z.string().optional(),
   matched: z
     .number()
     .describe(
-      "How many of the enriched items satisfied the filters, BEFORE the display cap — a big " +
-        "gap between this and `returned` means results were capped, not that fewer items matched.",
+      "How many wishlist items satisfied the filters, BEFORE the display cap — a big gap " +
+        "between this and `returned` means results were capped, not that fewer items matched.",
     ),
   returned: z
     .number()

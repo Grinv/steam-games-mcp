@@ -23,6 +23,7 @@ import {
   summarizeWishlistDetailed,
   type PurchasePrices,
   type SearchSuggestionsResponse,
+  WISHLIST_DETAIL_MAX,
   type StoreQueryResponse,
   type WishlistDetailedResponse,
 } from "../format/store.js";
@@ -43,7 +44,9 @@ import {
   type GetTagListResponse,
   type StoreItemsResponse,
   type TagMap,
+  TAG_LIMIT,
 } from "../format/storeCard.js";
+import type { WishlistResponse } from "../format/web.js";
 
 type Query = Record<string, string | number | boolean | undefined>;
 // The parent's authenticated `#get` (bakes in the key, sent when present per
@@ -51,14 +54,16 @@ type Query = Record<string, string | number | boolean | undefined>;
 type Get = <T>(path: string, query: Query, opts?: { hasCredentials?: boolean }) => Promise<T>;
 
 // The include_* flags every store-service card call needs (basic info, reviews,
-// release, native platforms + compat, popular tags). tagCount varies: fewer for
-// display-only (get_items), more when tags are also filtered (discover/wishlist).
-const storeCardDataRequest = (tagCount: number) => ({
+// release, native platforms + compat, popular tags). TAG_LIMIT tags: every card
+// and the recommendation scoring read only that many (resolveTags), Steam
+// returns the most-weighted ones first (verified live), and tag FILTERING runs
+// server-side, so a longer list was only ever discarded.
+const storeCardDataRequest = () => ({
   include_basic_info: true,
   include_reviews: true,
   include_release: true,
   include_platforms: true,
-  include_tag_count: tagCount,
+  include_tag_count: TAG_LIMIT,
   // Steam's best_purchase_option is routinely a bundle of this app AND another
   // game, so every card needs the app's own package alongside it — see
   // format/storeCard.ts's ownPurchaseOption() for why this is asked up front
@@ -142,6 +147,15 @@ function catalogFilters(
   if (tagIds?.length) filters.tagids_must_match = tagIds.map((id) => ({ tagids: [id] }));
   return filters;
 }
+
+// GetWishlistSortedFiltered lists EVERY matching entry but attaches a store
+// card only to the first `page_size` (default 100) — so without it a >100-item
+// wishlist silently lost its tail's prices, reviews and tags (verified live:
+// 180 entries, 100 enriched by default, all 180 at page_size 200). A filter
+// only Steam applies needs cards for just the displayed page; one we re-check
+// ourselves needs them for every match, up to this bound (a wishlist can hold
+// tens of thousands of entries at ~4.5 KB per card).
+const WISHLIST_CHECK_MAX = 1000;
 
 // getRecommendedGames tuning: how many of the player's most-played owned games
 // feed the tag-weighting step, how many of the resulting top tags are surfaced
@@ -331,7 +345,7 @@ export class StoreServiceClient {
     const input = {
       ids: appids.map((appid) => ({ appid })),
       context: { language: l, country_code: country ?? this.#country },
-      data_request: storeCardDataRequest(15), // 15 tags: display-only (get_items doesn't tag-filter)
+      data_request: storeCardDataRequest(),
     };
     // get_items never filters by tags — a failed dictionary just means the
     // `tags` display field comes back empty, which resolveTags already handles.
@@ -521,7 +535,7 @@ export class StoreServiceClient {
         input_json: JSON.stringify({
           ids: sample.map((g) => ({ appid: g.appid })),
           context: { language: l, country_code: cc },
-          data_request: storeCardDataRequest(20),
+          data_request: storeCardDataRequest(),
         }),
       },
       { hasCredentials: false },
@@ -544,7 +558,7 @@ export class StoreServiceClient {
           input_json: JSON.stringify({
             query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
             context: { language: l, country_code: cc, steam_realm: 1 },
-            data_request: storeCardDataRequest(20),
+            data_request: storeCardDataRequest(),
           }),
         },
         { hasCredentials: false },
@@ -598,7 +612,6 @@ export class StoreServiceClient {
       tagMap,
       count,
       basedOnTags,
-      opts.excludeTags,
       opts.minDiscount,
     );
   }
@@ -645,8 +658,6 @@ export class StoreServiceClient {
       steamMachine: p.steamMachine,
       steamFrame: p.steamFrame,
       platform: p.platform,
-      releasedAfter: p.releasedAfter,
-      tags: p.tags,
     };
     if (tagIds === null) return summarizeDiscover({}, { ...post, tagMap: filterTagMap });
     const filters = catalogFilters(p, tagIds);
@@ -657,7 +668,7 @@ export class StoreServiceClient {
         country_code: p.country ?? this.#country,
         steam_realm: 1,
       },
-      data_request: storeCardDataRequest(20), // 20 tags: full set so tag filtering isn't capped
+      data_request: storeCardDataRequest(),
     };
     // Fetch the tag dictionary alongside the page (cached, so ~free after the
     // first call) — every card surfaces resolved tag names.
@@ -710,23 +721,73 @@ export class StoreServiceClient {
     } & CompatFilters = {},
   ): Promise<Record<string, unknown>> {
     const l = opts.language ?? this.#l;
+    // CWishlistFilters, all verified live 2026-10-20 to return only entries
+    // that satisfy them: tags (every listed tagid required), Steam Deck,
+    // macOS / SteamOS-Linux native builds, and a discount floor. The discount
+    // is the best purchase option's (sometimes a bundle), so it is a superset
+    // that storeItemFilter re-checks against the app's own package.
+    const filterTagMap = opts.tags?.length
+      ? this.#requireTagMapIfFiltering(opts.tags, await this.#tagNames(l), l)
+      : undefined;
+    const tagIds =
+      opts.tags?.length && filterTagMap ? tagIdsFor(opts.tags, filterTagMap) : undefined;
+    const server: Record<string, unknown> = {};
+    if (tagIds?.length) server.tagids_must_match = tagIds;
+    if (opts.steamDeck)
+      server.steam_deck_filters =
+        opts.steamDeck === "verified"
+          ? { include_verified: true }
+          : { include_verified: true, include_playable: true };
+    if (opts.platform === "mac") server.macos_only = true;
+    if (opts.platform === "linux") server.steamos_linux_only = true;
+    const minDiscount = opts.minDiscount ?? (opts.onSaleOnly ? 1 : undefined);
+    if (minDiscount !== undefined) server.min_discount_percent = minDiscount;
+    // What only storeItemFilter can decide: the exact review %, the app's own-
+    // package discount, and compat/platform dimensions CWishlistFilters lacks.
+    const checksHere =
+      (opts.minReview ?? 0) > 0 ||
+      minDiscount !== undefined ||
+      opts.steamOs !== undefined ||
+      opts.steamMachine !== undefined ||
+      opts.steamFrame !== undefined ||
+      opts.platform === "windows";
+    // The plain id list first: the wishlist's real size (for `total`, and for
+    // telling "nothing matched" from "empty or private", which a server-
+    // filtered response alone can't), and how many cards a full check needs.
+    const total = await withFallbackOn(
+      "bad_request",
+      async () =>
+        (
+          await this.#get<WishlistResponse>(
+            "IWishlistService/GetWishlist/v1/",
+            { steamid },
+            { hasCredentials: false },
+          )
+        ).response?.items?.length ?? 0,
+      0,
+    );
+    if (total === 0 || tagIds === null)
+      return summarizeWishlistDetailed({}, filterTagMap, filters(), { total, exact: true });
     const input = {
       steamid,
       context: { language: l, country_code: opts.country ?? this.#country, steam_realm: 1 },
-      data_request: storeCardDataRequest(20), // 20 tags: full set so tag filtering isn't capped
-      sort: 0,
+      data_request: storeCardDataRequest(),
+      sort_order: 0, // wishlist priority, like the display order below
+      filters: server,
+      page_size: checksHere ? Math.min(total, WISHLIST_CHECK_MAX) : WISHLIST_DETAIL_MAX,
     };
-    const filters = {
-      onSaleOnly: opts.onSaleOnly,
-      tags: opts.tags,
-      minReview: opts.minReview,
-      minDiscount: opts.minDiscount,
-      platform: opts.platform,
-      steamDeck: opts.steamDeck,
-      steamOs: opts.steamOs,
-      steamMachine: opts.steamMachine,
-      steamFrame: opts.steamFrame,
-    };
+    function filters() {
+      return {
+        onSaleOnly: opts.onSaleOnly,
+        minReview: opts.minReview,
+        minDiscount: opts.minDiscount,
+        platform: opts.platform,
+        steamDeck: opts.steamDeck,
+        steamOs: opts.steamOs,
+        steamMachine: opts.steamMachine,
+        steamFrame: opts.steamFrame,
+      };
+    }
     // Some malformed/out-of-range steamids (e.g. accountid 0) make Steam answer
     // a raw HTTP 400 here instead of its usual empty-wishlist response — treat
     // it the same way rather than leaking the raw upstream body to the agent.
@@ -737,10 +798,9 @@ export class StoreServiceClient {
           "IWishlistService/GetWishlistSortedFiltered/v1/",
           { input_json: JSON.stringify(input) },
           l,
-          opts.tags,
         ),
       { res: {} as WishlistDetailedResponse, tagMap: undefined },
     );
-    return summarizeWishlistDetailed(res, tagMap, filters);
+    return summarizeWishlistDetailed(res, tagMap, filters(), { total, exact: !checksHere });
   }
 }
