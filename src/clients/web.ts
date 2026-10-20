@@ -91,6 +91,36 @@ const PRIVATE_FRIENDS_REASON =
 // and leaves a good-but-stale entry free to win instead.
 class NoAchievementSchema extends Error {}
 
+// Same pattern for a schema that loaded while the keyless rarity call failed
+// transiently (429/timeout/5xx): the result without rarity is still returned,
+// but carried out on the rejection so it is never cached for the full TTL —
+// and a good stale entry, rarity included, wins over it.
+class SchemaWithoutRarity extends Error {
+  constructor(readonly value: Record<string, unknown>) {
+    super("schema without rarity");
+  }
+}
+
+// A bad/revoked key gets a 403 on every key-gated endpoint with this HTML page
+// ("Access is denied. Retrying will not help. Please verify your <pre>key=</pre>
+// parameter.", verified live) — the same status a private profile gets, but
+// never its JSON body. Every site that reads a 403 as "private" or "no data for
+// this appid" must exclude it, or a key problem reads as a privacy setting.
+// (Keyless endpoints ignore a bad key and answer 200, also verified live.)
+function isBadKey(err: ApiError): boolean {
+  return err.code === "forbidden" && /verify your <pre>key=/i.test(err.message);
+}
+
+// The codes Steam answers for an appid that simply has no achievement data,
+// as opposed to a transient failure worth not caching.
+function isAppidSpecific(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    !isBadKey(err) &&
+    (err.code === "forbidden" || err.code === "bad_request" || err.code === "not_found")
+  );
+}
+
 function friendIdsOf(r: FriendListResponse): string[] {
   return (r.friendslist?.friends ?? [])
     .map((f) => f.steamid)
@@ -397,8 +427,13 @@ export class SteamWebClient {
       return this.#explainNoPlayerAchievements(appid, l, res.playerstats?.error);
     } catch (e) {
       // Steam answers 403 for a private profile, 400 for an app with no stats /
-      // not owned. Turn both into a clear, actionable reason.
-      if (e instanceof ApiError && (e.code === "forbidden" || e.code === "unauthorized")) {
+      // not owned. Turn both into a clear, actionable reason — except a bad
+      // key's 403 (see isBadKey), which keeps its credentials message.
+      if (
+        e instanceof ApiError &&
+        (e.code === "forbidden" || e.code === "unauthorized") &&
+        !isBadKey(e)
+      ) {
         return notFound(PRIVATE_PROFILE_REASON);
       }
       if (e instanceof ApiError && (e.code === "bad_request" || e.code === "not_found")) {
@@ -474,7 +509,8 @@ export class SteamWebClient {
   }
 
   // Codes GetFriendList answers with instead of its usual private-friends-list
-  // shape: forbidden/unauthorized for a private list, bad_request for some
+  // shape: forbidden/unauthorized for a private list (401 + empty JSON verified
+  // live; a bad key's 403 is excluded via isBadKey), bad_request for some
   // malformed/out-of-range steamids (e.g. accountid 0), and not_found for a
   // syntactically valid but nonexistent account (confirmed live: this was
   // leaking as a raw tool error instead of found:false, unlike every sibling
@@ -496,7 +532,11 @@ export class SteamWebClient {
         relationship: "friend",
       });
     } catch (e) {
-      if (e instanceof ApiError && SteamWebClient.#FRIENDLIST_NOT_FOUND_CODES.includes(e.code))
+      if (
+        e instanceof ApiError &&
+        !isBadKey(e) &&
+        SteamWebClient.#FRIENDLIST_NOT_FOUND_CODES.includes(e.code)
+      )
         return null;
       throw e;
     }
@@ -800,20 +840,25 @@ export class SteamWebClient {
           ),
         ]);
         if (schemaResult.status === "fulfilled") {
-          const global = globalResult.status === "fulfilled" ? globalResult.value : {};
-          return summarizeGameSchema(schemaResult.value, global);
+          if (globalResult.status === "fulfilled") {
+            return summarizeGameSchema(schemaResult.value, globalResult.value);
+          }
+          const withoutRarity = summarizeGameSchema(schemaResult.value, {});
+          if (isAppidSpecific(globalResult.reason)) return withoutRarity;
+          throw new SchemaWithoutRarity(withoutRarity);
         }
         const err = schemaResult.reason as unknown;
         // GetGlobalAchievementPercentagesForApp is keyless — if it ALSO rejects
-        // for this same appid, the block is appid-specific (no achievement
-        // schema, e.g. a DLC/soundtrack — verified live), not a credentials
-        // problem specific to the schema call. If the keyless call succeeded,
-        // the schema-only failure is genuinely ambiguous (could be a bad key),
-        // so it's left to throw and surface its own accurate message.
+        // for this same appid with an appid-specific code, the block is
+        // appid-specific (no achievement schema, e.g. a DLC/soundtrack —
+        // verified live), not a credentials problem specific to the schema
+        // call. If the keyless call succeeded or failed only transiently
+        // (429/timeout), the schema-only failure is genuinely ambiguous (could
+        // be a bad key), so it's left to throw and surface its own message.
         if (
-          err instanceof ApiError &&
-          (err.code === "forbidden" || err.code === "bad_request" || err.code === "not_found") &&
-          globalResult.status === "rejected"
+          isAppidSpecific(err) &&
+          globalResult.status === "rejected" &&
+          isAppidSpecific(globalResult.reason)
         ) {
           throw new NoAchievementSchema();
         }
@@ -821,6 +866,7 @@ export class SteamWebClient {
       });
     } catch (e) {
       if (e instanceof NoAchievementSchema) return summarizeGameSchema({}, {});
+      if (e instanceof SchemaWithoutRarity) return e.value;
       throw e;
     }
   }

@@ -606,6 +606,32 @@ describe("get_player_achievements", () => {
     assert.match(s.reason, /private/i);
   });
 
+  // A bad/revoked key also gets a 403 on every key-gated endpoint, but with
+  // this HTML page (captured live), not the private profile's JSON — it must
+  // surface as a credentials problem, not as "profile is private".
+  const BAD_KEY_403 =
+    "<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>Access is denied. " +
+    "Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>";
+
+  for (const [tool, endpoint, args] of [
+    ["get_player_achievements", "GetPlayerAchievements", { appid: 620 }],
+    ["get_friend_list", "GetFriendList", {}],
+  ] as const) {
+    test(`${tool}: a bad key's 403 reports invalid credentials, not a private profile`, async (t) => {
+      const { client } = await setupServer(t, ENV, (url) =>
+        url.includes(endpoint) ? htmlResponse(BAD_KEY_403, { status: 403 }) : jsonResponse({}),
+      );
+      const res = await client.callTool({
+        name: tool,
+        arguments: { steamid: "76561197960287930", ...args },
+      });
+      assert.equal(res.isError, true);
+      const text = (res.content as { text: string }[])[0]!.text;
+      assert.match(text, /credentials/i);
+      assert.doesNotMatch(text, /private/i);
+    });
+  }
+
   test("get_player_achievements: 200 + success:false with a 'not public' error → private reason (no schema lookup needed)", async (t) => {
     // Distinct from the 403 case above: here the HTTP call itself succeeds
     // (200), so #getPlayerAchievements never throws/catches — the private
@@ -1412,6 +1438,39 @@ describe("get_game_achievements", () => {
     const s = retried.structuredContent as { total: number; achievements: { name: string }[] };
     assert.equal(s.total, 2, "the retry must reach Steam, not a cached empty schema");
     assert.equal(s.achievements[0]!.name, "Wake Up Call");
+  });
+
+  test("returns the schema without rarity on a transient rarity failure, but never caches it", async (t) => {
+    // A 5xx on the keyless rarity call alone used to be cached as a list with
+    // every global_unlock_pct null for the full TTL.
+    let globalCalls = 0;
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (!url.includes("GetGlobalAchievementPercentagesForApp")) return router(url);
+      globalCalls++;
+      return globalCalls === 1 ? jsonResponse({}, { status: 500 }) : router(url);
+    });
+    const call = () =>
+      client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
+    type S = { total: number; achievements: { global_unlock_pct: number | null }[] };
+
+    const first = (await call()).structuredContent as S;
+    assert.equal(first.total, 2);
+    assert.equal(first.achievements[0]!.global_unlock_pct, null);
+
+    const second = (await call()).structuredContent as S;
+    assert.equal(second.achievements[0]!.global_unlock_pct, 74.2, "rarity-less result was cached");
+  });
+
+  test("a schema 403 plus a transient rarity failure stays a credentials error, not 'no achievements'", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+      url.includes("GetSchemaForGame")
+        ? jsonResponse({}, { status: 403 })
+        : url.includes("GetGlobalAchievementPercentagesForApp")
+          ? jsonResponse({}, { status: 500 })
+          : router(url),
+    );
+    const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
+    assert.equal(res.isError, true);
   });
 
   test("still surfaces a credentials-flavored error when only the schema call 403s and the keyless global-rarity call succeeds (genuinely ambiguous)", async (t) => {
