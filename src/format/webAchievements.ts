@@ -88,12 +88,10 @@ export interface GlobalAchievementsResponse {
 // Steam sends `percent` as a JSON float, but the string-coercion branch below
 // means a non-numeric value would become NaN — and z.number() rejects NaN
 // (which is typeof "number"), throwing the whole summarizer. Coerce, then fall
-// back to `fallback` when the result isn't a finite number.
-function finitePercent(v: number | string | undefined, fallback: number): number;
-function finitePercent(v: number | string | undefined, fallback: null): number | null;
-function finitePercent(v: number | string | undefined, fallback: number | null): number | null {
+// back to null (unknown) when the result isn't a finite number.
+function finitePercent(v: number | string | undefined): number | null {
   const n = typeof v === "string" ? Number(v) : v;
-  return typeof n === "number" && Number.isFinite(n) ? n : fallback;
+  return typeof n === "number" && Number.isFinite(n) ? n : null;
 }
 
 export function summarizeGlobalAchievements(
@@ -111,7 +109,7 @@ export function summarizeGlobalAchievements(
     returned,
     achievements: included.map((x) => ({
       name: x.name,
-      percent: finitePercent(x.percent, null),
+      percent: finitePercent(x.percent),
     })),
   });
 }
@@ -142,8 +140,11 @@ export function summarizeGameSchema(
 ): z.infer<typeof getGameAchievementsOutput> {
   const pct = new Map<string, number>();
   for (const x of global.achievementpercentages?.achievements ?? []) {
-    if (x.name != null) {
-      pct.set(x.name, finitePercent(x.percent, 0));
+    // A non-numeric percent stays unknown (null), as in
+    // summarizeGlobalAchievements, rather than reading as "nobody unlocked it".
+    const p = finitePercent(x.percent);
+    if (x.name != null && p !== null) {
+      pct.set(x.name, p);
     }
   }
   const list = schema.game?.availableGameStats?.achievements ?? [];

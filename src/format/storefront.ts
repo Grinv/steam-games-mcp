@@ -230,7 +230,7 @@ function searchPrice(
 ): z.infer<typeof searchPriceSchema> {
   if (!p || typeof p.final !== "number") return null;
   const discount =
-    p.initial && p.final && p.initial > p.final ? Math.round((1 - p.final / p.initial) * 100) : 0;
+    p.initial && p.initial > p.final ? Math.round((1 - p.final / p.initial) * 100) : 0;
   return overridePrice(
     {
       currency: p.currency ?? null,

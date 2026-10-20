@@ -24,6 +24,7 @@ import {
   GAME_SCHEMA_ACHIEVEMENTS_MAX,
 } from "../format/webAchievements.js";
 import { summarizePurchasePrices } from "../format/store.js";
+import { chartAppids } from "../format/charts.js";
 import { storeDayStart, storeReleaseDay, stripHtml } from "../format/shared.js";
 
 // Steam frequently omits optional fields; these exercise the sparse-payload
@@ -240,6 +241,14 @@ describe("summarizeSearch", () => {
     assert.equal(s.results[0]!.price.discount_percent, 50);
     assert.equal(s.results[0]!.price.final, "5.00 USD");
     assert.equal(s.results[1]!.price.discount_percent, 0);
+  });
+
+  test("a 100%-off row (final 0) reports discount_percent 100, not 0", () => {
+    const s = summarizeSearch({
+      items: [{ id: 1, name: "Giveaway", price: { currency: "USD", initial: 1999, final: 0 } }],
+    }) as { results: { price: { discount_percent: number; final: string } }[] };
+    assert.equal(s.results[0]!.price.discount_percent, 100);
+    assert.equal(s.results[0]!.price.final, "0.00 USD");
   });
 
   test("empty response → total 0, no results", () => {
@@ -503,6 +512,22 @@ describe("summarizeGlobalAchievements", () => {
 });
 
 describe("summarizeGameSchema", () => {
+  test("a non-numeric global percent yields global_unlock_pct null, not 0", () => {
+    const s = summarizeGameSchema(
+      { game: { availableGameStats: { achievements: [{ name: "a" }, { name: "b" }] } } },
+      {
+        achievementpercentages: {
+          achievements: [
+            { name: "a", percent: "n/a" },
+            { name: "b", percent: "12.34" },
+          ],
+        },
+      },
+    ) as { achievements: { global_unlock_pct: number | null }[] };
+    assert.equal(s.achievements[0]!.global_unlock_pct, null);
+    assert.equal(s.achievements[1]!.global_unlock_pct, 12.3);
+  });
+
   test(`a 1000+-achievement game is capped at ${GAME_SCHEMA_ACHIEVEMENTS_MAX} in definition order, total stays the true count`, () => {
     const achievements = Array.from({ length: 1328 }, (_, i) => ({
       name: `a${i}`,
@@ -573,5 +598,15 @@ describe("summarizePlayerAchievements", () => {
     assert.equal(s.unlocked, 50);
     assert.equal(s.returned, 130);
     assert.equal(s.achievements.length, 130);
+  });
+});
+
+describe("chartAppids", () => {
+  test("drops appid-less entries before slicing, like the summarizers", () => {
+    const ids = chartAppids(
+      { response: { ranks: [{ rank: 1 }, { appid: 10 }, { appid: 20 }] } },
+      2,
+    );
+    assert.deepEqual(ids, [10, 20]);
   });
 });

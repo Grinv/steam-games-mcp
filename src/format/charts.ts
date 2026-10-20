@@ -48,10 +48,12 @@ export function chartAppids(
   r: MostPlayedResponse | ConcurrentPlayersResponse,
   limit: number,
 ): number[] {
+  // Filter before slicing, like the summarizers, so an appid-less entry
+  // doesn't cost a slot (and leave the last kept entry nameless).
   return (r.response?.ranks ?? [])
-    .slice(0, limit)
     .map((e) => e.appid)
-    .filter((a): a is number => typeof a === "number");
+    .filter((a): a is number => typeof a === "number")
+    .slice(0, limit);
 }
 
 export function summarizeTopSellers(
