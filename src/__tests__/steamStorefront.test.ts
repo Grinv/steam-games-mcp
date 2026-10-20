@@ -285,9 +285,16 @@ test("get_game_reviews maps order and within_days onto appreviews' filter/day_ra
   assert.equal(q().get("day_range"), null);
   await client.callTool({
     name: "get_game_reviews",
-    arguments: { appid: 620, within_days: 3650 },
+    arguments: { appid: 620, within_days: 365 },
   });
-  assert.equal(q().get("day_range"), "3650");
+  assert.equal(q().get("day_range"), "365");
+  // Steam caps day_range at 365 (larger values return the same set), so the
+  // schema does too rather than implying an all-time window.
+  const tooWide = await client.callTool({
+    name: "get_game_reviews",
+    arguments: { appid: 620, within_days: 366 },
+  });
+  assert.equal(tooWide.isError, true);
   await client.callTool({ name: "get_game_reviews", arguments: { appid: 620, order: "recent" } });
   assert.equal(q().get("filter"), "recent");
   const bad = await client.callTool({

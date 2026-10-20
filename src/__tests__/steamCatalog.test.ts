@@ -13,7 +13,6 @@ import {
   router,
   routerWithBrokenTagList,
   routerWithEmptyTagList,
-  WISHLIST,
 } from "./steamFixtures.js";
 import { ITEMS_MAX } from "../tools/common.js";
 import { DISCOVER_MAX, WISHLIST_DETAIL_MAX } from "../format/store.js";
@@ -377,6 +376,19 @@ describe("get_wishlist", () => {
     assert.equal(s.items[0]!.steam_machine, "playable");
   });
 
+  test("get_wishlist: a refused filtered call on a non-empty wishlist is an error, not 'nothing matched'", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+      url.includes("GetWishlistSortedFiltered")
+        ? jsonResponse({ error: "bad" }, { status: 400 })
+        : router(url),
+    );
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561197960287930", min_review: 80 },
+    });
+    assertToolError(res, /refused the filtered wishlist/i);
+  });
+
   test("get_wishlist sends tags, Steam Deck, platform and a discount floor to Steam", async (t) => {
     const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     await client.callTool({
@@ -400,9 +412,9 @@ describe("get_wishlist", () => {
       macos_only: true,
       min_discount_percent: 1,
     });
-    // on_sale_only is re-checked here (own-package discount), so every entry
-    // needs a card: page_size is the whole wishlist's size (from the plain list).
-    assert.equal(input.page_size, WISHLIST.response.items.length);
+    // on_sale_only is re-checked here (own-package discount), so every match
+    // needs a card, not just the 50-item display page.
+    assert.ok(input.page_size > 50);
   });
 
   test("get_wishlist returns found:false when empty/private", async (t) => {
@@ -1005,6 +1017,11 @@ describe("discover_games", () => {
     // Machine requirement is left to the client-side re-check.
     assert.deepEqual(f.compatibility_filter, { device: 1, categories: [2, 3] });
     assert.deepEqual(f.review_score_filter, { min_score: 7 });
+    // At exactly a bucket edge the floor drops one bucket: a 79.6% game reads
+    // 80 but sits in Mostly Positive (6), and must reach the exact re-check.
+    mock.calls.length = 0;
+    await client.callTool({ name: "discover_games", arguments: { min_review: 80 } });
+    assert.deepEqual(queryFilters(mock).review_score_filter, { min_score: 6 });
     assert.equal((f.release_date_filter as { release_date_type: number }).release_date_type, 1);
     assert.equal(f.released_only, true);
   });

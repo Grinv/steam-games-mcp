@@ -109,10 +109,11 @@ export function registerStorefrontTools(
           within_days: z
             .int()
             .positive()
-            .max(3650)
+            .max(365)
             .describe(
-              "order='helpful' only: how many past days the helpful ranking covers. Default 30 " +
-                "(Steam's own); e.g. 3650 for the all-time most helpful.",
+              "order='helpful' only: how many past days the helpful ranking covers (1-365). " +
+                "Default 30 (Steam's own); 365 is Steam's ceiling — larger windows return the same " +
+                "reviews (verified live), so there is no all-time ranking.",
             )
             .optional(),
           review_language: z

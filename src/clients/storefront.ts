@@ -135,7 +135,8 @@ export class StorefrontClient {
   // `order` maps to appreviews' filter: helpful = "all" (most helpful within the
   // last `withinDays`, Steam's default window being 30 — verified live: no
   // filter and day_range=30 return the same reviews), recent = newest first,
-  // updated = most recently edited. day_range only applies to helpful.
+  // updated = most recently edited. day_range only applies to helpful, and
+  // Steam caps it at 365 (366/1000/3650 return the 365-day set, verified live).
   async getReviews(
     appid: number,
     max: number,

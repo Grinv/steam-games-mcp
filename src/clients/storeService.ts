@@ -79,9 +79,11 @@ const storeCardDataRequest = () => ({
 // matches that happen to sit inside the top `count` (verified live 2026-10-20:
 // Roguelike + Indie + Deck Verified + Very Positive found 155 games
 // server-side, 0 inside a 50-game popularity window). Every value below was
-// verified live. Each filter stays a superset of what summarizeDiscover then
-// re-checks exactly (review %, the Pacific release day, every compat dimension),
-// so the client-side pass is unchanged; it just starts from real matches.
+// verified live. Tags, the release date (release_date_filter compares
+// steam_release_date with >=, exact to the second — verified live), games-only
+// and one compat dimension are exact, so nothing re-checks them; the review
+// bucket and the discount are supersets that summarizeDiscover re-checks
+// exactly, along with the filters Steam has no form for.
 
 // compatibility_filter.device per compat dimension. There is no device for
 // SteamOS in general, and Steam takes ONE compatibility_filter, so a second
@@ -94,11 +96,15 @@ const COMPAT_DEVICE = [
 // "playable" here means playable OR verified, like COMPAT_MIN in storeCard.ts.
 const COMPAT_CATEGORIES = { verified: [3], playable: [2, 3] } as const;
 
-// The lowest EUserReviewScore bucket whose every game reaches `pct` positive:
-// Positive (7) and up are all 80%+, Mostly Positive (6) 70-79%, Mixed (5)
-// 40-69%, Mostly Negative (4) 20-39%. Only games with a Steam rating (10+
-// reviews) carry a bucket at all, so min_review leaves out unrated games.
-function reviewScoreFloor(pct: number): number {
+// The lowest EUserReviewScore bucket that can still hold a game at `pct`
+// positive: Positive (7) and up are all 80%+, Mostly Positive (6) 70-79%,
+// Mixed (5) 40-69%, Mostly Negative (4) 20-39%. Taken one point below the
+// threshold because Steam buckets the exact ratio while percent_positive is
+// rounded: a 79.6% game reads 80 but sits in Mostly Positive, and must reach
+// the exact re-check. Only games with a Steam rating (10+ reviews) carry a
+// bucket at all, so min_review leaves out unrated games.
+function reviewScoreFloor(threshold: number): number {
+  const pct = threshold - 1;
   if (pct >= 80) return 7;
   if (pct >= 70) return 6;
   if (pct >= 40) return 5;
@@ -219,6 +225,18 @@ export class StoreServiceClient {
     } catch {
       return null;
     }
+  }
+
+  // Tag names → ids for a server-side tag filter, which needs the dictionary
+  // BEFORE the query (cached per language, so usually free). tagIds is null
+  // when a name isn't a Steam tag (nothing can match), undefined with no tags.
+  async #resolveTagFilter(
+    tags: string[] | undefined,
+    language: string,
+  ): Promise<{ tagMap: TagMap | undefined; tagIds: number[] | null | undefined }> {
+    if (!tags?.length) return { tagMap: undefined, tagIds: undefined };
+    const tagMap = this.#requireTagMapIfFiltering(tags, await this.#tagNames(language), language)!;
+    return { tagMap, tagIds: tagIdsFor(tags, tagMap) };
   }
 
   // Throws when a tags filter was requested but the tag dictionary is
@@ -643,13 +661,7 @@ export class StoreServiceClient {
     } & CompatFilters,
   ): Promise<Record<string, unknown>> {
     const l = p.language ?? this.#l;
-    // Tag ids for the server-side filter need the dictionary BEFORE the query
-    // (cached per language, so usually free); without tags the two still load
-    // in parallel inside #fetchWithTags.
-    const filterTagMap = p.tags?.length
-      ? this.#requireTagMapIfFiltering(p.tags, await this.#tagNames(l), l)
-      : undefined;
-    const tagIds = p.tags?.length && filterTagMap ? tagIdsFor(p.tags, filterTagMap) : undefined;
+    const { tagMap: filterTagMap, tagIds } = await this.#resolveTagFilter(p.tags, l);
     const post = {
       // Passed through so summarizeDiscover's storeItemFilter re-checks the
       // discount client-side: Steam's server-side min_discount_percent filter
@@ -731,11 +743,7 @@ export class StoreServiceClient {
     // macOS / SteamOS-Linux native builds, and a discount floor. The discount
     // is the best purchase option's (sometimes a bundle), so it is a superset
     // that storeItemFilter re-checks against the app's own package.
-    const filterTagMap = opts.tags?.length
-      ? this.#requireTagMapIfFiltering(opts.tags, await this.#tagNames(l), l)
-      : undefined;
-    const tagIds =
-      opts.tags?.length && filterTagMap ? tagIdsFor(opts.tags, filterTagMap) : undefined;
+    const { tagMap: filterTagMap, tagIds } = await this.#resolveTagFilter(opts.tags, l);
     const server: Record<string, unknown> = {};
     if (tagIds?.length) server.tagids_must_match = tagIds;
     if (opts.steamDeck)
@@ -756,31 +764,6 @@ export class StoreServiceClient {
       opts.steamMachine !== undefined ||
       opts.steamFrame !== undefined ||
       opts.platform === "windows";
-    // The plain id list first: the wishlist's real size (for `total`, and for
-    // telling "nothing matched" from "empty or private", which a server-
-    // filtered response alone can't), and how many cards a full check needs.
-    const total = await withFallbackOn(
-      "bad_request",
-      async () =>
-        (
-          await this.#get<WishlistResponse>(
-            "IWishlistService/GetWishlist/v1/",
-            { steamid },
-            { hasCredentials: false },
-          )
-        ).response?.items?.length ?? 0,
-      0,
-    );
-    if (total === 0 || tagIds === null)
-      return summarizeWishlistDetailed({}, filterTagMap, filters(), { total, exact: true });
-    const input = {
-      steamid,
-      context: { language: l, country_code: opts.country ?? this.#country, steam_realm: 1 },
-      data_request: storeCardDataRequest(),
-      sort_order: 0, // wishlist priority, like the display order below
-      filters: server,
-      page_size: checksHere ? Math.min(total, WISHLIST_CHECK_MAX) : WISHLIST_DETAIL_MAX,
-    };
     function filters() {
       return {
         onSaleOnly: opts.onSaleOnly,
@@ -793,19 +776,68 @@ export class StoreServiceClient {
         steamFrame: opts.steamFrame,
       };
     }
-    // Some malformed/out-of-range steamids (e.g. accountid 0) make Steam answer
-    // a raw HTTP 400 here instead of its usual empty-wishlist response — treat
-    // it the same way rather than leaking the raw upstream body to the agent.
-    const { res, tagMap } = await withFallbackOn(
+    if (tagIds === null) {
+      // An unknown tag matches nothing; only the wishlist's size is needed.
+      const total = await this.#wishlistSize(steamid);
+      return summarizeWishlistDetailed({}, filterTagMap, filters(), { total, exact: true });
+    }
+    const input = {
+      steamid,
+      context: { language: l, country_code: opts.country ?? this.#country, steam_realm: 1 },
+      data_request: storeCardDataRequest(),
+      sort_order: 0, // wishlist priority, like the display order below
+      filters: server,
+      // A page_size past the wishlist's size is harmless (Steam cards only
+      // the entries that exist, verified live), so this needn't wait for it.
+      page_size: checksHere ? WISHLIST_CHECK_MAX : WISHLIST_DETAIL_MAX,
+    };
+    // In parallel: the plain id list for the wishlist's real size (`total`,
+    // and telling "nothing matched" from "empty or private", which a
+    // server-filtered response alone can't), and the filtered cards.
+    const [total, filtered] = await Promise.all([
+      this.#wishlistSize(steamid),
+      // Some malformed/out-of-range steamids (e.g. accountid 0) make Steam
+      // answer a raw HTTP 400 instead of its usual empty-wishlist response; the
+      // plain list then reads as empty (total 0) and this result is unused.
+      withFallbackOn(
+        "bad_request",
+        () =>
+          this.#fetchWithTags<WishlistDetailedResponse>(
+            "IWishlistService/GetWishlistSortedFiltered/v1/",
+            { input_json: JSON.stringify(input) },
+            l,
+          ),
+        null,
+      ),
+    ]);
+    if (total > 0 && filtered === null)
+      // The id list exists but the filtered call was refused: say so rather
+      // than reporting that nothing matched.
+      throw new ApiError({
+        code: "unknown",
+        message: "Steam refused the filtered wishlist request; retry, or drop some filters.",
+        retryable: true,
+      });
+    return summarizeWishlistDetailed(filtered?.res ?? {}, filtered?.tagMap, filters(), {
+      total,
+      exact: !checksHere,
+    });
+  }
+
+  // The wishlist's size from the plain GetWishlist id list; 0 for an empty or
+  // private wishlist, and for a malformed steamid Steam answers with a 400.
+  async #wishlistSize(steamid: string): Promise<number> {
+    return withFallbackOn(
       "bad_request",
-      () =>
-        this.#fetchWithTags<WishlistDetailedResponse>(
-          "IWishlistService/GetWishlistSortedFiltered/v1/",
-          { input_json: JSON.stringify(input) },
-          l,
-        ),
-      { res: {} as WishlistDetailedResponse, tagMap: undefined },
+      async () =>
+        (
+          await this.#get<WishlistResponse>(
+            "IWishlistService/GetWishlist/v1/",
+            { steamid },
+            { hasCredentials: false },
+          )
+        ).response?.items?.length ?? 0,
+      0,
     );
-    return summarizeWishlistDetailed(res, tagMap, filters(), { total, exact: !checksHere });
   }
 }
