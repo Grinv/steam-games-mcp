@@ -98,12 +98,6 @@ export const getItemsOutput = z.strictObject({
   ),
 });
 
-// store.ts's summarizePurchasePrices() — the base-game purchase price of each
-// appid, keyed by appid, used to correct the Storefront API's unreliable
-// price_overview (see format/storefront.ts's overridePrice()). Internal to the
-// clients, not a tool output: it carries no currency code, because GetItems
-// never returns one (verified live against every data_request flag), so the
-// Storefront row being corrected keeps supplying that field.
 // store.ts's summarizeSearchSuggestions() (search_games). No `currency` code:
 // the store services never return one (verified live against every
 // data_request flag); the formatted strings already carry the symbol, in
@@ -136,6 +130,12 @@ export const searchGamesOutput = z.strictObject({
   ),
 });
 
+// store.ts's summarizePurchasePrices() — the base-game purchase price of each
+// appid, keyed by appid, used to correct the Storefront API's unreliable
+// price_overview (see format/storefront.ts's overridePrice()). Internal to the
+// clients, not a tool output: it carries no currency code, because GetItems
+// never returns one (verified live against every data_request flag), so the
+// Storefront row being corrected keeps supplying that field.
 export const purchasePricesSchema = z.record(
   z.string(),
   z.strictObject({

@@ -73,17 +73,21 @@ export function summarizeSearchSuggestions(
   const results = (r.response?.store_items ?? [])
     .filter((it): it is StoreItemWithAppid => typeof it.appid === "number")
     .map((it) => {
-      // Same rule as every card: the app's OWN package, never a bundle it sits
-      // in, and no price at all for a free app (its packages are paid add-ons).
-      const p = it.is_free ? undefined : priceFields(ownPurchaseOption(it));
+      // Same rule as every card (ownPurchaseOption): the app's OWN package, never
+      // a bundle it sits in, and never a free app's paid add-on.
+      const p = priceFields(ownPurchaseOption(it));
       return {
         appid: it.appid,
         name: it.name ?? null,
         type: (typeof it.type === "number" && STORE_APP_TYPE[it.type]) || null,
-        price: p?.final
+        price: p.final
           ? { final: p.final, initial: p.original, discount_percent: p.discount_pct }
           : null,
-        metascore: it.extra_details?.metacritic?.score?.toString() ?? null,
+        // 0 would read as a real (terrible) score; treat it as unscored, like
+        // storesearch's empty string was.
+        metascore: it.extra_details?.metacritic?.score
+          ? String(it.extra_details.metacritic.score)
+          : null,
         platforms: nativePlatforms(it.platforms),
         store_url: storeUrl(it.appid),
       };
