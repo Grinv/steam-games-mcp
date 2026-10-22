@@ -40,7 +40,7 @@ function need(cond: unknown, what: string): asserts cond {
  * optional/`unknown`, and each check asserts what it relies on itself.
  */
 const json = <T>(res: Response): Promise<T> => res.json() as Promise<T>;
-/** GET + 200 + JSON, the common prologue of every Web API check. */
+/** GET + 200 + JSON, the common prologue of every check without its own status handling. */
 const getJson = async <T>(url: string): Promise<T> => {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
@@ -110,11 +110,9 @@ const checks: Check[] = [
   {
     name: "storefront appdetails",
     run: async () => {
-      const res = await fetch(`${STORE}/api/appdetails?appids=${APPID}&cc=US&l=english`, {
-        headers: { Accept: "application/json" },
-      });
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<Record<string, { success?: boolean; data?: { name?: string } }>>(res);
+      const body = await getJson<Record<string, { success?: boolean; data?: { name?: string } }>>(
+        `${STORE}/api/appdetails?appids=${APPID}&cc=US&l=english`,
+      );
       const entry = body[String(APPID)];
       if (!entry?.success || !entry.data?.name) throw new Error("missing success/data.name");
     },
@@ -122,23 +120,18 @@ const checks: Check[] = [
   {
     name: "storefront appreviews",
     run: async () => {
-      const res = await fetch(`${STORE}/appreviews/${APPID}?json=1&num_per_page=1`, {
-        headers: { Accept: "application/json" },
-      });
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<{ success?: unknown; query_summary?: unknown }>(res);
+      const body = await getJson<{ success?: unknown; query_summary?: unknown }>(
+        `${STORE}/appreviews/${APPID}?json=1&num_per_page=1`,
+      );
       if (body.success !== 1 || !body.query_summary) throw new Error("missing query_summary");
     },
   },
   {
     name: "web GetGlobalAchievementPercentagesForApp",
     run: async () => {
-      const res = await fetch(
+      const body = await getJson<{ achievementpercentages?: { achievements?: unknown } }>(
         `${API}/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=${APPID}`,
-        { headers: { Accept: "application/json" } },
       );
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<{ achievementpercentages?: { achievements?: unknown } }>(res);
       if (!Array.isArray(body.achievementpercentages?.achievements))
         throw new Error("missing achievementpercentages.achievements");
     },
@@ -147,14 +140,9 @@ const checks: Check[] = [
     name: "web GetPlayerSummaries (key)",
     skip: KEY ? undefined : "STEAM_API_KEY not set",
     run: async () => {
-      const res = await fetch(
-        `${API}/ISteamUser/GetPlayerSummaries/v2/?key=${KEY}&steamids=${PLAYER}`,
-        { headers: { Accept: "application/json" } },
-      );
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<{
+      const body = await getJson<{
         response?: { players?: { communityvisibilitystate?: unknown }[] };
-      }>(res);
+      }>(`${API}/ISteamUser/GetPlayerSummaries/v2/?key=${KEY}&steamids=${PLAYER}`);
       if (!Array.isArray(body.response?.players)) throw new Error("missing response.players");
       need(
         typeof body.response.players[0]?.communityvisibilitystate === "number",
@@ -171,14 +159,11 @@ const checks: Check[] = [
     name: "web GetOwnedGames (key)",
     skip: KEY ? undefined : "STEAM_API_KEY not set",
     run: async () => {
-      const res = await fetch(
-        `${API}/IPlayerService/GetOwnedGames/v1/?key=${KEY}&steamid=${PLAYER}&include_appinfo=true`,
-        { headers: { Accept: "application/json" } },
-      );
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<{
+      const body = await getJson<{
         response?: { game_count?: unknown; games?: { playtime_forever?: unknown }[] };
-      }>(res);
+      }>(
+        `${API}/IPlayerService/GetOwnedGames/v1/?key=${KEY}&steamid=${PLAYER}&include_appinfo=true`,
+      );
       if (typeof body.response !== "object" || body.response === null)
         throw new Error("missing response object");
       if (Object.keys(body.response).length === 0) return void privateOnly.push("GetOwnedGames");
@@ -194,12 +179,9 @@ const checks: Check[] = [
     name: "web GetRecentlyPlayedGames (key)",
     skip: KEY ? undefined : "STEAM_API_KEY not set",
     run: async () => {
-      const res = await fetch(
+      const body = await getJson<PlayerResponse>(
         `${API}/IPlayerService/GetRecentlyPlayedGames/v1/?key=${KEY}&steamid=${PLAYER}`,
-        { headers: { Accept: "application/json" } },
       );
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<PlayerResponse>(res);
       if (typeof body.response !== "object" || body.response === null)
         throw new Error("missing response object");
       if (Object.keys(body.response).length === 0)
@@ -213,12 +195,9 @@ const checks: Check[] = [
     name: "web GetSteamLevel (key)",
     skip: KEY ? undefined : "STEAM_API_KEY not set",
     run: async () => {
-      const res = await fetch(
+      const body = await getJson<PlayerResponse>(
         `${API}/IPlayerService/GetSteamLevel/v1/?key=${KEY}&steamid=${PLAYER}`,
-        { headers: { Accept: "application/json" } },
       );
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<PlayerResponse>(res);
       if (typeof body.response !== "object" || body.response === null)
         throw new Error("missing response object");
       if (Object.keys(body.response).length === 0) return void privateOnly.push("GetSteamLevel");
@@ -250,11 +229,9 @@ const checks: Check[] = [
     name: "web GetPlayerBans (key)",
     skip: KEY ? undefined : "STEAM_API_KEY not set",
     run: async () => {
-      const res = await fetch(`${API}/ISteamUser/GetPlayerBans/v1/?key=${KEY}&steamids=${PLAYER}`, {
-        headers: { Accept: "application/json" },
-      });
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<{ players?: { VACBanned?: unknown }[] }>(res);
+      const body = await getJson<{ players?: { VACBanned?: unknown }[] }>(
+        `${API}/ISteamUser/GetPlayerBans/v1/?key=${KEY}&steamids=${PLAYER}`,
+      );
       if (!Array.isArray(body.players) || typeof body.players[0]?.VACBanned !== "boolean")
         throw new Error("missing players[0].VACBanned");
     },
@@ -265,12 +242,9 @@ const checks: Check[] = [
     name: "web ResolveVanityURL (key)",
     skip: KEY ? undefined : "STEAM_API_KEY not set",
     run: async () => {
-      const res = await fetch(
+      const body = await getJson<{ response?: { success?: unknown; steamid?: unknown } }>(
         `${API}/ISteamUser/ResolveVanityURL/v1/?key=${KEY}&vanityurl=gabelogannewell`,
-        { headers: { Accept: "application/json" } },
       );
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<{ response?: { success?: unknown; steamid?: unknown } }>(res);
       if (body.response?.success !== 1 || typeof body.response?.steamid !== "string")
         throw new Error("missing response.steamid");
     },
@@ -281,12 +255,9 @@ const checks: Check[] = [
     name: "web GetSchemaForGame (key)",
     skip: KEY ? undefined : "STEAM_API_KEY not set",
     run: async () => {
-      const res = await fetch(
+      const body = await getJson<{ game?: { availableGameStats?: { achievements?: unknown } } }>(
         `${API}/ISteamUserStats/GetSchemaForGame/v2/?key=${KEY}&appid=${APPID}`,
-        { headers: { Accept: "application/json" } },
       );
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<{ game?: { availableGameStats?: { achievements?: unknown } } }>(res);
       if (!Array.isArray(body.game?.availableGameStats?.achievements))
         throw new Error("missing game.availableGameStats.achievements");
     },
@@ -304,16 +275,13 @@ const checks: Check[] = [
         context: { language: "english", country_code: "US" },
         data_request: { include_platforms: true, include_tag_count: 5 },
       };
-      const res = await fetch(
-        `${API}/IStoreBrowseService/GetItems/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
-        { headers: { Accept: "application/json" } },
-      );
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<{
+      const body = await getJson<{
         response?: {
           store_items?: { platforms?: Record<string, unknown>; tags?: { tagid?: unknown }[] }[];
         };
-      }>(res);
+      }>(
+        `${API}/IStoreBrowseService/GetItems/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
+      );
       const item = body.response?.store_items?.[0];
       const platforms = item?.platforms;
       if (!platforms) throw new Error("missing store_items[0].platforms");
@@ -333,11 +301,9 @@ const checks: Check[] = [
     run: async () => {
       // The keyless tag dictionary that resolves store_items' numeric tagids to
       // readable names. Without it get_items / discover_games would emit empty tags.
-      const res = await fetch(`${API}/IStoreService/GetTagList/v1/?language=english`, {
-        headers: { Accept: "application/json" },
-      });
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<{ response?: { tags?: { tagid?: unknown; name?: unknown }[] } }>(res);
+      const body = await getJson<{ response?: { tags?: { tagid?: unknown; name?: unknown }[] } }>(
+        `${API}/IStoreService/GetTagList/v1/?language=english`,
+      );
       const tags = body.response?.tags;
       if (!Array.isArray(tags) || !tags.length) throw new Error("missing response.tags");
       if (typeof tags[0]?.tagid !== "number" || typeof tags[0]?.name !== "string")
@@ -357,14 +323,11 @@ const checks: Check[] = [
         context: { language: "english", country_code: "US" },
         data_request: { include_basic_info: true },
       };
-      const res = await fetch(
-        `${API}/IWishlistService/GetWishlistSortedFiltered/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
-        { headers: { Accept: "application/json" } },
-      );
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<{
+      const body = await getJson<{
         response?: { items?: { appid?: unknown; store_item?: { appid?: unknown } }[] };
-      }>(res);
+      }>(
+        `${API}/IWishlistService/GetWishlistSortedFiltered/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
+      );
       const items = body.response?.items;
       if (!Array.isArray(items) || !items.length)
         throw new Error("missing response.items — is the test wishlist still public/non-empty?");
@@ -382,13 +345,10 @@ const checks: Check[] = [
         context: { language: "english", country_code: "US", steam_realm: 1 },
         data_request: { include_basic_info: true },
       };
-      const res = await fetch(
+      const body = await getJson<{
+        response?: { metadata?: { total_matching_records?: unknown } };
+      }>(
         `${API}/IStoreQueryService/Query/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
-        { headers: { Accept: "application/json" } },
-      );
-      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await json<{ response?: { metadata?: { total_matching_records?: unknown } } }>(
-        res,
       );
       if (typeof body.response?.metadata?.total_matching_records !== "number")
         throw new Error("missing metadata.total_matching_records");
