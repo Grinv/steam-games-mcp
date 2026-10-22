@@ -422,7 +422,10 @@ const checks: Check[] = [
         `${API}/ISteamUserStats/GetPlayerAchievements/v1/?key=${KEY}&steamid=${PLAYER}&appid=${APPID}`,
         { headers: { Accept: "application/json" } },
       );
-      const body = await json<{ playerstats?: { error?: unknown; success?: unknown } }>(res);
+      // Parse leniently: a 5xx HTML error page must still reach the status
+      // check below, not surface as a JSON SyntaxError hiding the status.
+      type Body = { playerstats?: { error?: unknown; success?: unknown } };
+      const body = await json<Body>(res).catch((): Body => ({}));
       if (res.status === 403 && typeof body.playerstats?.error === "string")
         return void privateOnly.push("GetPlayerAchievements");
       if (res.status === 400 && body.playerstats?.success === false) return; // doesn't own it
