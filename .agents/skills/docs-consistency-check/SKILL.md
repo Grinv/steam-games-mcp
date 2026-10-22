@@ -9,9 +9,10 @@ Check every one of these, not just a sample:
 
 - `README.md`'s tool table matches `src/server.ts`'s registrations (names,
   and the keyless-vs-key-gated column against each tool's actual behavior).
-- `manifest.json`'s and `server.json`'s `tools` arrays list the same tool
-  **names** as what's actually registered (`npm test`'s `e2e.test.ts` already
-  asserts this — treat a failure there as authoritative). Their `description`
+- `manifest.json`'s `tools` and `prompts` arrays list the same **names** as
+  what's actually registered (`server.json` has no tool list; `npm test`'s
+  `version.test.ts` already asserts this — treat a failure there as
+  authoritative). Their `description`
   fields are deliberately short, independent marketing-style summaries, NOT a
   copy of the tool's full `.describe()`/`description` text in
   `src/tools/*.ts` — don't "fix" them to match verbatim, that's not a bug. Do
@@ -30,9 +31,9 @@ Check every one of these, not just a sample:
 - `CHANGELOG.md`'s `[Unreleased]` section (see the `changelog-style` skill for
   entry style) has one line per real behavior change made in this pass — add
   missing entries, don't just flag them as missing.
-- `AGENTS.md`'s "Keyless caveat" list and its `src/` tree (and this
-  `.agents/skills/` entry) still match the filesystem and the actual keyless
-  method list.
+- `docs/architecture.md`'s "Keyless caveat" list still matches the actual
+  keyless method list in `src/clients/`, and `AGENTS.md`'s `src/`/`scripts/`
+  tree (and this `.agents/skills/` entry) still match the filesystem.
 - `docs/notes.md`, `docs/clients.md` and any other `docs/*.md` for stale
   phrasing (e.g. describing something as "once published"/"upcoming" that
   already shipped).

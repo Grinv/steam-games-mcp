@@ -90,7 +90,7 @@ concretely: `cacheHints` (added for `tools/list`/`prompts/list`/
 and a spy `ResponseCacheStore`, since the legacy-era suite would stay green
 whether or not it worked at all.
 
-Don't try to run the whole unit suite (the ~240+ `helpers.ts`-based tests)
+Don't try to run the whole unit suite (the `helpers.ts`-based tests)
 under both eras — confirmed by direct test: a bare `McpServer.connect()` over
 `InMemoryTransport` (what every one of those tests uses) doesn't negotiate
 the modern era at all (`'auto'` silently falls back to legacy; `{pin:

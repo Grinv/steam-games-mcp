@@ -2,7 +2,7 @@
 // API is unofficial but public and needs no key — it backs all the game/store
 // tools. Region/locale-aware via cc (country) and l (language). Wraps the
 // generic HttpClient with a polite rate limiter (the store is burst-sensitive)
-// and a TTL cache; all shaping lives in ../format/storefront.js.
+// and a TTL cache; all shaping lives in ../format/storefront.ts.
 import { HttpClient } from "../lib/http.ts";
 import { RateLimiter } from "../lib/rateLimit.ts";
 import { TtlCache } from "../lib/cache.ts";
