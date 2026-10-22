@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-22
+
 ### Changed
 
 - **Breaking:** Raise runtime floor to Node ≥ 22.18 (was ≥ 20.11); Node 20 reached end-of-life in April 2026. ([955ab8b](https://github.com/Grinv/steam-games-mcp/commit/955ab8b))
