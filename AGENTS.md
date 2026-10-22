@@ -82,6 +82,10 @@ npm run inspector      # run under the MCP Inspector
 - Runtime floor is **Node ≥ 22.18** — the first 22.x where type stripping is
   on by default (and warning-free), which is what lets `npm test` and every
   `scripts/*.ts` run as plain `.ts` with no build step; tsup 9 needs it too.
+  The range stays open-ended (`>=22.18.0`) because it guards the _runtime_
+  bundle, which needs nothing newer. For development use 22.18+, 24.11+ or
+  26+: Node 23.0–23.5 has no default type stripping, and tsup 9's own engines
+  skip 23.x and 24.0–24.10.
   Declared in both `package.json` `engines` and `manifest.json`
   `compatibility.runtimes.node` — a test keeps them equal. Because Node only
   _strips_ types, `tsconfig.json` sets `erasableSyntaxOnly` (no enums,
