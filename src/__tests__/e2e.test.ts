@@ -1,12 +1,12 @@
-import { describe, test } from "node:test";
+import { describe, test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, copyFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { Client, type CacheKey, type ResponseCacheStore } from "@modelcontextprotocol/client";
-import { textOf } from "./helpers.js";
-import { VERSION } from "../version.js";
+import { textOf } from "./helpers.ts";
+import { VERSION } from "../version.ts";
 
 // The unit suite exercises the code via an in-memory transport against src (see
 // helpers.ts's connectServer()) — that only ever drives a bare McpServer, never
@@ -22,10 +22,7 @@ const distPath = join(process.cwd(), "..", "dist", "index.js");
 
 // Copy the bundle to a dir with no node_modules: if it weren't self-contained,
 // the child would die with ERR_MODULE_NOT_FOUND and connect() would reject.
-// `using`-able (Symbol.dispose removes it) for the call sites that manage
-// just this one resource — the multi-resource tests further down still
-// clean it up via their own try/finally instead.
-function makeSandbox(): { path: string } & Disposable {
+function makeSandbox(): { path: string } {
   const path = join(tmpdir(), `steam-mcp-e2e-${process.pid}-${Date.now()}`);
   mkdirSync(path, { recursive: true });
   copyFileSync(distPath, join(path, "index.js"));
@@ -34,13 +31,16 @@ function makeSandbox(): { path: string } & Disposable {
   // on Node < 20.19 (which lacks ESM syntax auto-detection) and the child dies
   // with "Cannot use import statement outside a module".
   writeFileSync(join(path, "package.json"), JSON.stringify({ type: "module" }));
-  return { path, [Symbol.dispose]: () => rmSync(path, { recursive: true, force: true }) };
+  return { path };
 }
 
-// Wraps an already-constructed client as `await using`-able, for the tests
-// below that just need `client.close()` on scope exit alongside the sandbox.
-function disposableClient(client: Client): AsyncDisposable {
-  return { [Symbol.asyncDispose]: () => client.close() };
+// Teardown for the tests below that own just one client + its sandbox: close
+// the client (stopping the child) before removing the dir it runs from.
+function cleanupAfter(t: TestContext, client: Client, sandbox: { path: string }): void {
+  t.after(async () => {
+    await client.close();
+    rmSync(sandbox.path, { recursive: true, force: true });
+  });
 }
 
 // Inherit env but force the player credentials unset, to test the key gate.
@@ -58,9 +58,9 @@ describe("e2e (real built bundle over stdio)", () => {
       return;
     }
 
-    using sandbox = makeSandbox();
+    const sandbox = makeSandbox();
     const client = new Client({ name: "e2e", version: "0" });
-    await using _client = disposableClient(client);
+    cleanupAfter(t, client, sandbox);
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [join(sandbox.path, "index.js")],
@@ -92,12 +92,12 @@ describe("e2e (real built bundle over stdio)", () => {
       return;
     }
 
-    using sandbox = makeSandbox();
+    const sandbox = makeSandbox();
     const client = new Client(
       { name: "e2e-modern", version: "0" },
       { versionNegotiation: { mode: "auto" } },
     );
-    await using _client = disposableClient(client);
+    cleanupAfter(t, client, sandbox);
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [join(sandbox.path, "index.js")],

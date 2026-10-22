@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyStatus, redact } from "../lib/errors.js";
+import { classifyStatus, redact } from "../lib/errors.ts";
 
 test("classifyStatus maps HTTP codes to error codes and retryability", () => {
   assert.equal(classifyStatus(401).code, "unauthorized");

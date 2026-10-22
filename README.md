@@ -195,7 +195,7 @@ npm run check:api    # live upstream health-check (key-gated checks need STEAM_A
 npm run inspector    # run under the MCP Inspector
 ```
 
-Runtime requires Node ≥ 20.11. Contributor/agent guidance:
+Runtime requires Node ≥ 22.18. Contributor/agent guidance:
 [AGENTS.md](https://github.com/Grinv/steam-games-mcp/blob/main/AGENTS.md).
 Security policy: [SECURITY.md](https://github.com/Grinv/steam-games-mcp/blob/main/SECURITY.md).
 Per-client config and all tunables:

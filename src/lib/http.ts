@@ -1,9 +1,9 @@
 // Thin fetch wrapper shared by both API clients: timeouts, bounded retries
 // with exponential backoff (honoring Retry-After), a default User-Agent, and
 // uniform mapping of failures to ApiError.
-import { ApiError, classifyStatus } from "./errors.js";
-import type { Logger } from "./logger.js";
-import { USER_AGENT } from "../version.js";
+import { ApiError, classifyStatus } from "./errors.ts";
+import type { Logger } from "./logger.ts";
+import { USER_AGENT } from "../version.ts";
 
 interface RequestOptions {
   method?: string;
@@ -108,9 +108,11 @@ export class HttpClient {
     timeoutMs: number,
   ): Promise<string | undefined> {
     // Deliberately NOT AbortSignal.timeout(): its internal timer is unref'd
-    // by design (won't keep the event loop alive on its own) — confirmed by
-    // a test whose mocked fetch has no other pending I/O, which hung forever
-    // instead of firing. A plain (ref'd) setTimeout doesn't have that risk.
+    // by design (won't keep the event loop alive on its own). On Node 22 a
+    // test whose mocked fetch has no other pending I/O gets cancelled ("event
+    // loop has already resolved") before the timeout fires; Node 24+ passes.
+    // Revisit once the floor reaches 24. A plain (ref'd) setTimeout doesn't
+    // have that risk on any version.
     // The timer stays armed until the body is read, not just the headers: an
     // upstream that sends headers and then stalls mid-body would otherwise
     // hang res.text() forever.

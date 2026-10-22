@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { TtlCache } from "../lib/cache.js";
+import { TtlCache } from "../lib/cache.ts";
 
 const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

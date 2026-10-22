@@ -12,8 +12,8 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
-import { capList, isoDay, storeUrl } from "./shared.js";
-import { wishlistNotFound } from "./shared.schemas.js";
+import { capList, isoDay, storeUrl } from "./shared.ts";
+import { wishlistNotFound } from "./shared.schemas.ts";
 import {
   discoverGamesOutput,
   getItemsOutput,
@@ -21,7 +21,7 @@ import {
   recommendedGamesFound,
   searchGamesOutput,
   wishlistDetailedFound,
-} from "./store.schemas.js";
+} from "./store.schemas.ts";
 import {
   baseCard,
   isOwnPackage,
@@ -36,7 +36,7 @@ import {
   type StoreItemsResponse,
   type StoreItemWithAppid,
   type TagMap,
-} from "./storeCard.js";
+} from "./storeCard.ts";
 
 // ---- IStoreQueryService/SearchSuggestions (keyless title search) ------------
 

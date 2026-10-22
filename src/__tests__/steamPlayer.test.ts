@@ -5,10 +5,10 @@
 // (keyless-capable Web API store tools).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { setupServer, jsonResponse, htmlResponse, assertToolError, textOf } from "./helpers.js";
-import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.js";
-import { FRIENDS_CHECKED_MAX, FRIENDS_MAX } from "../format/web.js";
-import { OWNED_GAMES_LIMIT_MAX } from "../tools/webPlayer.js";
+import { setupServer, jsonResponse, htmlResponse, assertToolError, textOf } from "./helpers.ts";
+import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.ts";
+import { FRIENDS_CHECKED_MAX, FRIENDS_MAX } from "../format/web.ts";
+import { OWNED_GAMES_LIMIT_MAX } from "../tools/webPlayer.ts";
 
 // Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant

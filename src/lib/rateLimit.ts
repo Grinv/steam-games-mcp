@@ -21,10 +21,8 @@ export class RateLimiter {
   /** Resolves when the caller is allowed to proceed. */
   acquire(): Promise<void> {
     const prev = this.#tail;
-    let release!: () => void;
-    this.#tail = new Promise<void>((resolve) => {
-      release = resolve;
-    });
+    const { promise, resolve: release } = Promise.withResolvers<void>();
+    this.#tail = promise;
 
     return prev.then(async () => {
       const wait = this.#delayUntilAllowed();

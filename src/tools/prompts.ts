@@ -4,10 +4,10 @@
 // orchestration lives in the prompt text.
 import { z } from "zod";
 import { completable, type McpServer } from "@modelcontextprotocol/server";
-import type { StoreServiceClient } from "../clients/storeService.js";
-import { steamId64Base } from "./webShared.js";
-import { CHECK_APPIDS_MAX } from "./webPlayer.js";
-import { OWNED_GAMES_MAX } from "../format/web.js";
+import type { StoreServiceClient } from "../clients/storeService.ts";
+import { steamId64Base } from "./webShared.ts";
+import { CHECK_APPIDS_MAX } from "./webPlayer.ts";
+import { OWNED_GAMES_MAX } from "../format/web.ts";
 
 // How many title matches to offer as completions — a client's prompt-argument
 // UI shows these live as the user types; keep it short and fast.

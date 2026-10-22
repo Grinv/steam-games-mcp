@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { createLogger, type LogLevel } from "../lib/logger.js";
-import { connectServer } from "./helpers.js";
+import { createLogger, type LogLevel } from "../lib/logger.ts";
+import { connectServer } from "./helpers.ts";
 
 type SinkCall = { level: Exclude<LogLevel, "silent">; message: string };
 
@@ -84,11 +84,12 @@ describe("createLogger", () => {
   });
 });
 
-test("server advertises no logging capability — logging is stderr-only (SEP-2577)", async () => {
+test("server advertises no logging capability — logging is stderr-only (SEP-2577)", async (t) => {
   // Regression: `capabilities.logging` + `sendLoggingMessage`/`logging/setLevel`
   // are deprecated as of protocol 2026-07-28 (SEP-2577) in favor of stderr
   // logging for stdio servers, which lib/logger.ts already provides. We
   // deliberately don't declare the capability or push notifications/message.
-  await using conn = await connectServer();
+  const conn = await connectServer();
+  t.after(conn.close);
   assert.equal(conn.client.getServerCapabilities()?.logging, undefined);
 });

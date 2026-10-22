@@ -6,7 +6,7 @@
 // error at call time when it is missing. Empty strings AND unsubstituted .mcpb
 // placeholders (e.g. "${user_config.steam_id}") are treated as unset.
 import { z } from "zod";
-import type { LogLevel } from "./lib/logger.js";
+import type { LogLevel } from "./lib/logger.ts";
 
 const EnvSchema = z.object({
   // --- Steam Web API: free key (player data). https://steamcommunity.com/dev/apikey

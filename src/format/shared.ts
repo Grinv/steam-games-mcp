@@ -1,6 +1,6 @@
 // Generic field helpers shared by the storefront and web formatters. Pure,
 // dependency-free transforms used to keep tool responses token-efficient.
-import { notFoundReason } from "./shared.schemas.js";
+import { notFoundReason } from "./shared.schemas.ts";
 import type { z } from "zod";
 
 // The client layer (clients/web.ts, clients/storeService.ts) short-circuits to

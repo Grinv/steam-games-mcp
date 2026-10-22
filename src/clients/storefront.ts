@@ -3,10 +3,10 @@
 // tools. Region/locale-aware via cc (country) and l (language). Wraps the
 // generic HttpClient with a polite rate limiter (the store is burst-sensitive)
 // and a TTL cache; all shaping lives in ../format/storefront.js.
-import { HttpClient } from "../lib/http.js";
-import { RateLimiter } from "../lib/rateLimit.js";
-import { TtlCache } from "../lib/cache.js";
-import { ApiError } from "../lib/errors.js";
+import { HttpClient } from "../lib/http.ts";
+import { RateLimiter } from "../lib/rateLimit.ts";
+import { TtlCache } from "../lib/cache.ts";
+import { ApiError } from "../lib/errors.ts";
 import {
   detailApp,
   summarizeFeatured,
@@ -19,10 +19,10 @@ import {
   type ReviewHistogramResponse,
   type ReviewsResponse,
   type StoreApp,
-} from "../format/storefront.js";
-import type { PurchasePrices } from "../format/store.js";
-import type { Logger } from "../lib/logger.js";
-import type { Config } from "../config.js";
+} from "../format/storefront.ts";
+import type { PurchasePrices } from "../format/store.ts";
+import type { Logger } from "../lib/logger.ts";
+import type { Config } from "../config.ts";
 
 type AppDetailsResponse = Record<string, { success?: boolean; data?: StoreApp }>;
 

@@ -4,8 +4,8 @@
 // appid, name, link and the chart's own metrics; price/reviews/compat are what
 // get_items is for.
 import { z } from "zod";
-import { isoDateTime, storeUrl } from "./shared.js";
-import { getChartsOutput, type chartSchema } from "./charts.schemas.js";
+import { isoDateTime, storeUrl } from "./shared.ts";
+import { getChartsOutput, type chartSchema } from "./charts.schemas.ts";
 
 export interface TopSellersResponse {
   response?: {

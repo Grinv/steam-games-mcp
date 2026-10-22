@@ -4,7 +4,6 @@
 node_modules/
 src/
 scripts/
-dist-tests/
 docs/
 coverage/
 

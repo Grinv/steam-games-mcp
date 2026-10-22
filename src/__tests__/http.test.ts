@@ -1,9 +1,9 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { HttpClient } from "../lib/http.js";
-import { ApiError } from "../lib/errors.js";
-import { silentLogger, jsonResponse, htmlResponse, mockFetch, installFetch } from "./helpers.js";
-import { USER_AGENT } from "../version.js";
+import { HttpClient } from "../lib/http.ts";
+import { ApiError } from "../lib/errors.ts";
+import { silentLogger, jsonResponse, htmlResponse, mockFetch, installFetch } from "./helpers.ts";
+import { USER_AGENT } from "../version.ts";
 
 function client(extra: { retries?: number; timeoutMs?: number } = {}): HttpClient {
   return new HttpClient({ baseUrl: "https://example.test/api", logger: silentLogger(), ...extra });

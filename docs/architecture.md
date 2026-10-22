@@ -128,5 +128,5 @@ read as "not sold in this country".
 
 Generated from the **`mcp-server-template`** repository: a generic carcass
 (`src/lib/` + build tooling, tests infra, CI) plus a thin domain layer
-(`config.ts`, `format/`, `clients/`, domain `tools/`, `check-api.mjs`). When
+(`config.ts`, `format/`, `clients/`, domain `tools/`, `check-api.ts`). When
 fixing carcass bugs, consider whether the fix belongs upstream in the template.

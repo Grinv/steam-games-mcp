@@ -1,7 +1,7 @@
 // Helpers that build MCP tool results. Tool handlers return these objects;
 // failures become { isError: true } results (never thrown) so the agent
 // receives an actionable message instead of a protocol error.
-import { redact, type ApiError } from "./errors.js";
+import { redact, type ApiError } from "./errors.ts";
 
 export interface ToolResult {
   content: { type: "text"; text: string }[];

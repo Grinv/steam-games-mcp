@@ -22,7 +22,7 @@
     "url": "git+https://github.com/Grinv/steam-games-mcp.git"
   },
   "engines": {
-    "node": ">=20.11"
+    "node": ">=22.18.0"
   },
   "bin": {
     "steam-games-mcp": "dist/index.js"
@@ -38,13 +38,12 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && tsup",
-    "build:tests": "node scripts/build-tests.mjs",
-    "test": "npm run build:tests && node scripts/run-tests.mjs",
-    "test:coverage": "npm run build:tests && node scripts/run-tests.mjs --coverage",
-    "preversion": "node scripts/preversion-check.mjs",
-    "version": "node scripts/sync-version.mjs && git add src/version.ts manifest.json server.json CHANGELOG.md",
+    "test": "node scripts/run-tests.ts",
+    "test:coverage": "node scripts/run-tests.ts --coverage",
+    "preversion": "node scripts/preversion-check.ts",
+    "version": "node scripts/sync-version.ts && git add src/version.ts manifest.json server.json CHANGELOG.md",
     "lint": "eslint .",
-    "check:api": "node scripts/check-api.mjs",
+    "check:api": "node scripts/check-api.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "start": "node dist/index.js",
@@ -59,11 +58,10 @@
     "@eslint/js": "10.0.1",
     "@modelcontextprotocol/client": "2.3.1",
     "@types/node": "26.6.5",
-    "esbuild": "0.28.2",
     "eslint": "10.13.0",
     "eslint-config-prettier": "10.1.8",
     "prettier": "3.9.10",
-    "tsup": "8.5.1",
+    "tsup": "9.0.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.0"
   }

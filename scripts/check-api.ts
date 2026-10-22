@@ -16,7 +16,7 @@ const API = process.env.STEAM_API_BASE_URL ?? "https://api.steampowered.com";
 const COMMUNITY = "https://steamcommunity.com";
 const KEY = process.env.STEAM_API_KEY;
 const SPACING_MS = 400;
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const APPID = 620; // Portal 2 — stable, always present.
 
@@ -29,25 +29,48 @@ const APPID = 620; // Portal 2 — stable, always present.
 // silently mean "nothing was actually verified".
 const GABE = "76561197960287930";
 const PLAYER = /^\d{17}$/.test(process.env.STEAM_ID ?? "") ? process.env.STEAM_ID : GABE;
-/** Names of checks that only saw a private-profile shape. @type {string[]} */
-const privateOnly = [];
+/** Names of checks that only saw a private-profile shape. */
+const privateOnly: string[] = [];
 /** Throws unless `cond`, naming the missing field. */
-const need = (cond, what) => {
+function need(cond: unknown, what: string): asserts cond {
   if (!cond) throw new Error(`missing ${what}`);
-};
+}
+/**
+ * Parses a response body as `T`. Unchecked: every field in these shapes is
+ * optional/`unknown`, and each check asserts what it relies on itself.
+ */
+const json = <T>(res: Response): Promise<T> => res.json() as Promise<T>;
 /** GET + 200 + JSON, the common prologue of every Web API check. */
-const getJson = async (url) => {
+const getJson = async <T>(url: string): Promise<T> => {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-  return res.json();
+  return json<T>(res);
 };
+
+/** A chart rank's fields; each chart service fills a different subset. */
+interface Rank {
+  rank?: unknown;
+  appid?: unknown;
+  last_period_rank?: unknown;
+  peak_in_game?: unknown;
+  concurrent_in_game?: unknown;
+  item?: { name?: unknown };
+}
+/** The `response` envelope the player-scoped Web API checks read. */
+interface PlayerResponse {
+  response?: Record<string, unknown>;
+}
+interface Check {
+  name: string;
+  skip?: string;
+  run: () => Promise<void>;
+}
 
 // get_charts' player charts: names ride along on each rank's item only when a
 // data_request is sent.
 const CHART_INPUT = { context: { country_code: "US", language: "english" }, data_request: {} };
 
-/** @type {{name:string, skip?:string, run:() => Promise<void>}[]} */
-const checks = [
+const checks: Check[] = [
   {
     name: "web IStoreQueryService/SearchSuggestions (search_games)",
     run: async () => {
@@ -61,7 +84,17 @@ const checks = [
           include_extra_details: true,
         },
       };
-      const body = await getJson(
+      const body = await getJson<{
+        response?: {
+          metadata?: { total_matching_records?: unknown };
+          store_items?: {
+            appid?: unknown;
+            type?: unknown;
+            purchase_options?: unknown;
+            extra_details?: { metacritic?: { score?: unknown } };
+          }[];
+        };
+      }>(
         `${API}/IStoreQueryService/SearchSuggestions/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
       );
       const it = body.response?.store_items?.[0];
@@ -81,7 +114,7 @@ const checks = [
         headers: { Accept: "application/json" },
       });
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<Record<string, { success?: boolean; data?: { name?: string } }>>(res);
       const entry = body[String(APPID)];
       if (!entry?.success || !entry.data?.name) throw new Error("missing success/data.name");
     },
@@ -93,7 +126,7 @@ const checks = [
         headers: { Accept: "application/json" },
       });
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{ success?: unknown; query_summary?: unknown }>(res);
       if (body.success !== 1 || !body.query_summary) throw new Error("missing query_summary");
     },
   },
@@ -105,7 +138,7 @@ const checks = [
         { headers: { Accept: "application/json" } },
       );
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{ achievementpercentages?: { achievements?: unknown } }>(res);
       if (!Array.isArray(body.achievementpercentages?.achievements))
         throw new Error("missing achievementpercentages.achievements");
     },
@@ -119,7 +152,9 @@ const checks = [
         { headers: { Accept: "application/json" } },
       );
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{
+        response?: { players?: { communityvisibilitystate?: unknown }[] };
+      }>(res);
       if (!Array.isArray(body.response?.players)) throw new Error("missing response.players");
       need(
         typeof body.response.players[0]?.communityvisibilitystate === "number",
@@ -141,7 +176,9 @@ const checks = [
         { headers: { Accept: "application/json" } },
       );
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{
+        response?: { game_count?: unknown; games?: { playtime_forever?: unknown }[] };
+      }>(res);
       if (typeof body.response !== "object" || body.response === null)
         throw new Error("missing response object");
       if (Object.keys(body.response).length === 0) return void privateOnly.push("GetOwnedGames");
@@ -162,7 +199,7 @@ const checks = [
         { headers: { Accept: "application/json" } },
       );
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<PlayerResponse>(res);
       if (typeof body.response !== "object" || body.response === null)
         throw new Error("missing response object");
       if (Object.keys(body.response).length === 0)
@@ -181,7 +218,7 @@ const checks = [
         { headers: { Accept: "application/json" } },
       );
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<PlayerResponse>(res);
       if (typeof body.response !== "object" || body.response === null)
         throw new Error("missing response object");
       if (Object.keys(body.response).length === 0) return void privateOnly.push("GetSteamLevel");
@@ -203,7 +240,7 @@ const checks = [
       if (res.status === 401 || res.status === 403) return void privateOnly.push("GetFriendList");
       if (res.status !== 200)
         throw new Error(`expected 200 (or 401/403 private), got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{ friendslist?: unknown }>(res);
       if (typeof body.friendslist !== "object" || body.friendslist === null)
         throw new Error("missing friendslist object");
     },
@@ -217,7 +254,7 @@ const checks = [
         headers: { Accept: "application/json" },
       });
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{ players?: { VACBanned?: unknown }[] }>(res);
       if (!Array.isArray(body.players) || typeof body.players[0]?.VACBanned !== "boolean")
         throw new Error("missing players[0].VACBanned");
     },
@@ -233,7 +270,7 @@ const checks = [
         { headers: { Accept: "application/json" } },
       );
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{ response?: { success?: unknown; steamid?: unknown } }>(res);
       if (body.response?.success !== 1 || typeof body.response?.steamid !== "string")
         throw new Error("missing response.steamid");
     },
@@ -249,7 +286,7 @@ const checks = [
         { headers: { Accept: "application/json" } },
       );
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{ game?: { availableGameStats?: { achievements?: unknown } } }>(res);
       if (!Array.isArray(body.game?.availableGameStats?.achievements))
         throw new Error("missing game.availableGameStats.achievements");
     },
@@ -272,7 +309,11 @@ const checks = [
         { headers: { Accept: "application/json" } },
       );
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{
+        response?: {
+          store_items?: { platforms?: Record<string, unknown>; tags?: { tagid?: unknown }[] }[];
+        };
+      }>(res);
       const item = body.response?.store_items?.[0];
       const platforms = item?.platforms;
       if (!platforms) throw new Error("missing store_items[0].platforms");
@@ -283,7 +324,7 @@ const checks = [
       ]) {
         if (typeof platforms[field] !== "number") throw new Error(`missing platforms.${field}`);
       }
-      if (!Array.isArray(item.tags) || typeof item.tags[0]?.tagid !== "number")
+      if (!Array.isArray(item?.tags) || typeof item.tags[0]?.tagid !== "number")
         throw new Error("missing store_items[0].tags[].tagid");
     },
   },
@@ -296,7 +337,7 @@ const checks = [
         headers: { Accept: "application/json" },
       });
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{ response?: { tags?: { tagid?: unknown; name?: unknown }[] } }>(res);
       const tags = body.response?.tags;
       if (!Array.isArray(tags) || !tags.length) throw new Error("missing response.tags");
       if (typeof tags[0]?.tagid !== "number" || typeof tags[0]?.name !== "string")
@@ -321,12 +362,14 @@ const checks = [
         { headers: { Accept: "application/json" } },
       );
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{
+        response?: { items?: { appid?: unknown; store_item?: { appid?: unknown } }[] };
+      }>(res);
       const items = body.response?.items;
       if (!Array.isArray(items) || !items.length)
         throw new Error("missing response.items — is the test wishlist still public/non-empty?");
       const item = items[0];
-      if (typeof item.appid !== "number") throw new Error("missing items[0].appid");
+      if (typeof item?.appid !== "number") throw new Error("missing items[0].appid");
       if (typeof item.store_item?.appid !== "number")
         throw new Error("missing items[0].store_item.appid");
     },
@@ -344,7 +387,9 @@ const checks = [
         { headers: { Accept: "application/json" } },
       );
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      const body = await res.json();
+      const body = await json<{ response?: { metadata?: { total_matching_records?: unknown } } }>(
+        res,
+      );
       if (typeof body.response?.metadata?.total_matching_records !== "number")
         throw new Error("missing metadata.total_matching_records");
     },
@@ -368,18 +413,23 @@ const checks = [
   {
     name: "storefront featuredcategories",
     run: async () => {
-      const body = await getJson(`${STORE}/api/featuredcategories?cc=US&l=english`);
+      const body = await getJson<Record<string, { items?: { type?: unknown }[] } | undefined>>(
+        `${STORE}/api/featuredcategories?cc=US&l=english`,
+      );
       for (const k of ["specials", "top_sellers", "new_releases", "coming_soon"])
         need(Array.isArray(body[k]?.items), `${k}.items`);
       // format/storefront.ts's featuredItems() keeps only type 0 (apps): a
       // top_sellers bundle arrives as type 2 with a bundle id in `id`.
-      need(typeof body.top_sellers.items[0]?.type === "number", "top_sellers.items[0].type");
+      need(typeof body.top_sellers?.items?.[0]?.type === "number", "top_sellers.items[0].type");
     },
   },
   {
     name: "storefront appreviewhistogram",
     run: async () => {
-      const body = await getJson(`${STORE}/appreviewhistogram/${APPID}?l=english`);
+      const body = await getJson<{
+        success?: unknown;
+        results?: { rollups?: unknown; recent?: unknown };
+      }>(`${STORE}/appreviewhistogram/${APPID}?l=english`);
       need(body.success === 1 && Array.isArray(body.results?.rollups), "results.rollups");
       need(Array.isArray(body.results.recent), "results.recent");
     },
@@ -387,7 +437,7 @@ const checks = [
   {
     name: "web GetNewsForApp",
     run: async () => {
-      const body = await getJson(
+      const body = await getJson<{ appnews?: { newsitems?: unknown } }>(
         `${API}/ISteamNews/GetNewsForApp/v2/?appid=${APPID}&count=1&maxlength=50`,
       );
       need(Array.isArray(body.appnews?.newsitems), "appnews.newsitems");
@@ -396,7 +446,7 @@ const checks = [
   {
     name: "web GetNumberOfCurrentPlayers",
     run: async () => {
-      const body = await getJson(
+      const body = await getJson<{ response?: { player_count?: unknown } }>(
         `${API}/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=${APPID}`,
       );
       need(typeof body.response?.player_count === "number", "response.player_count");
@@ -412,7 +462,7 @@ const checks = [
         `${API}/ISteamUserStats/GetPlayerAchievements/v1/?key=${KEY}&steamid=${PLAYER}&appid=${APPID}`,
         { headers: { Accept: "application/json" } },
       );
-      const body = await res.json();
+      const body = await json<{ playerstats?: { error?: unknown; success?: unknown } }>(res);
       if (res.status === 403 && typeof body.playerstats?.error === "string")
         return void privateOnly.push("GetPlayerAchievements");
       if (res.status === 400 && body.playerstats?.success === false) return; // doesn't own it
@@ -425,7 +475,9 @@ const checks = [
     // empty) wishlist/follow list — healthy, just unverifiable.
     name: "web IWishlistService/GetWishlist",
     run: async () => {
-      const body = await getJson(`${API}/IWishlistService/GetWishlist/v1/?steamid=${PLAYER}`);
+      const body = await getJson<{
+        response?: { items?: { appid?: unknown }[] };
+      }>(`${API}/IWishlistService/GetWishlist/v1/?steamid=${PLAYER}`);
       need(typeof body.response === "object" && body.response !== null, "response object");
       if (!Array.isArray(body.response.items)) return void privateOnly.push("GetWishlist");
       need(typeof body.response.items[0]?.appid === "number", "items[0].appid");
@@ -434,7 +486,9 @@ const checks = [
   {
     name: "web IStoreService/GetGamesFollowed",
     run: async () => {
-      const body = await getJson(`${API}/IStoreService/GetGamesFollowed/v1/?steamid=${PLAYER}`);
+      const body = await getJson<PlayerResponse>(
+        `${API}/IStoreService/GetGamesFollowed/v1/?steamid=${PLAYER}`,
+      );
       need(typeof body.response === "object" && body.response !== null, "response object");
       if (!Array.isArray(body.response.appids)) privateOnly.push("GetGamesFollowed");
     },
@@ -442,7 +496,7 @@ const checks = [
   {
     name: "web IStoreService/GetGamesFollowedCount",
     run: async () => {
-      const body = await getJson(
+      const body = await getJson<PlayerResponse>(
         `${API}/IStoreService/GetGamesFollowedCount/v1/?steamid=${PLAYER}`,
       );
       need(typeof body.response === "object" && body.response !== null, "response object");
@@ -454,7 +508,7 @@ const checks = [
     name: "web IStoreTopSellersService/GetWeeklyTopSellers (charts)",
     run: async () => {
       const input = { context: { country_code: "US", language: "english" }, page_count: 3 };
-      const body = await getJson(
+      const body = await getJson<{ response?: { start_date?: unknown; ranks?: Rank[] } }>(
         `${API}/IStoreTopSellersService/GetWeeklyTopSellers/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
       );
       const r = body.response?.ranks?.[0];
@@ -465,7 +519,7 @@ const checks = [
   {
     name: "web ISteamChartsService/GetMostPlayedGames (charts)",
     run: async () => {
-      const body = await getJson(
+      const body = await getJson<{ response?: { rollup_date?: unknown; ranks?: Rank[] } }>(
         `${API}/ISteamChartsService/GetMostPlayedGames/v1/?input_json=${encodeURIComponent(JSON.stringify(CHART_INPUT))}`,
       );
       const r = body.response?.ranks?.[0];
@@ -483,7 +537,7 @@ const checks = [
         top_played_period: 1,
         count: 3,
       };
-      const body = await getJson(
+      const body = await getJson<{ response?: { ranks?: Rank[] } }>(
         `${API}/ISteamChartsService/GetMostPlayedSteamDeckGames/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
       );
       const r = body.response?.ranks?.[0];
@@ -495,7 +549,7 @@ const checks = [
   {
     name: "web ISteamChartsService/GetGamesByConcurrentPlayers (charts)",
     run: async () => {
-      const body = await getJson(
+      const body = await getJson<{ response?: { last_update?: unknown; ranks?: Rank[] } }>(
         `${API}/ISteamChartsService/GetGamesByConcurrentPlayers/v1/?input_json=${encodeURIComponent(JSON.stringify(CHART_INPUT))}`,
       );
       const r = body.response?.ranks?.[0];
@@ -506,7 +560,7 @@ const checks = [
   },
 ];
 
-const failures = [];
+const failures: string[] = [];
 let ran = 0;
 for (const check of checks) {
   if (check.skip) {

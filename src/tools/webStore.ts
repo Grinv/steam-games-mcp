@@ -6,8 +6,8 @@
 // key-required half.
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
-import type { SteamWebClient } from "../clients/web.js";
-import type { StoreServiceClient } from "../clients/storeService.js";
+import type { SteamWebClient } from "../clients/web.ts";
+import type { StoreServiceClient } from "../clients/storeService.ts";
 import {
   COUNTRY_UNKNOWN_WARNING,
   LANGUAGE_ISO_WARNING,
@@ -25,27 +25,27 @@ import {
   steamMachine,
   steamOs,
   toCompatFilters,
-} from "./common.js";
-import { steamid, steamIdTool } from "./webShared.js";
-import { wishlistNotFound, withNotFound } from "../format/shared.schemas.js";
-import { DISCOVER_MAX, WISHLIST_DETAIL_MAX } from "../format/store.js";
-import { FOLLOWED_MAX, WISHLIST_LIGHT_MAX } from "../format/web.js";
-import { ACHIEVEMENTS_MAX } from "../format/webAchievements.js";
+} from "./common.ts";
+import { steamid, steamIdTool } from "./webShared.ts";
+import { wishlistNotFound, withNotFound } from "../format/shared.schemas.ts";
+import { DISCOVER_MAX, WISHLIST_DETAIL_MAX } from "../format/store.ts";
+import { FOLLOWED_MAX, WISHLIST_LIGHT_MAX } from "../format/web.ts";
+import { ACHIEVEMENTS_MAX } from "../format/webAchievements.ts";
 import {
   discoverGamesOutput,
   getItemsOutput,
   searchGamesOutput,
   wishlistDetailedFound,
-} from "../format/store.schemas.js";
+} from "../format/store.schemas.ts";
 import {
   getCurrentPlayersOutput,
   getFollowedGamesOutput,
   getGameNewsOutput,
   wishlistLightFound,
-} from "../format/web.schemas.js";
-import { storeDayStart } from "../format/shared.js";
-import { getChartsOutput, chartSchema } from "../format/charts.schemas.js";
-import { getGlobalAchievementsOutput } from "../format/webAchievements.schemas.js";
+} from "../format/web.schemas.ts";
+import { storeDayStart } from "../format/shared.ts";
+import { getChartsOutput, chartSchema } from "../format/charts.schemas.ts";
+import { getGlobalAchievementsOutput } from "../format/webAchievements.schemas.ts";
 
 // get_wishlist dispatches to the light summarizer (format/web.ts) or the
 // detailed one (format/store.ts) depending on the given filters — this union

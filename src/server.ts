@@ -3,15 +3,15 @@ import { McpServer } from "@modelcontextprotocol/server";
 
 // Server construction and stdio startup. Kept separate from the bin entry
 // (index.ts) so tests can import buildServer without triggering startup.
-import { loadConfig, type Config } from "./config.js";
-import { createLogger, type Logger } from "./lib/logger.js";
-import { StorefrontClient } from "./clients/storefront.js";
-import { SteamWebClient } from "./clients/web.js";
-import { registerStorefrontTools } from "./tools/storefront.js";
-import { registerStoreWebTools } from "./tools/webStore.js";
-import { registerPlayerWebTools } from "./tools/webPlayer.js";
-import { registerPrompts } from "./tools/prompts.js";
-import { VERSION } from "./version.js";
+import { loadConfig, type Config } from "./config.ts";
+import { createLogger, type Logger } from "./lib/logger.ts";
+import { StorefrontClient } from "./clients/storefront.ts";
+import { SteamWebClient } from "./clients/web.ts";
+import { registerStorefrontTools } from "./tools/storefront.ts";
+import { registerStoreWebTools } from "./tools/webStore.ts";
+import { registerPlayerWebTools } from "./tools/webPlayer.ts";
+import { registerPrompts } from "./tools/prompts.ts";
+import { VERSION } from "./version.ts";
 
 const INSTRUCTIONS =
   "Query Steam games and players. Store data needs no key: search_games → get_game / " +

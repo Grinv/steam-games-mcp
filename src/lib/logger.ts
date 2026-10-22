@@ -2,7 +2,7 @@
 // MCP stdio protocol); an optional sink can mirror each line onto a second
 // channel (e.g. MCP `notifications/message`). All messages are redacted of
 // credentials before either channel sees them.
-import { redact } from "./errors.js";
+import { redact } from "./errors.ts";
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 

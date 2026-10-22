@@ -2,8 +2,8 @@
 // template, so these check registration + that args are woven into the text.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { connectServer, setupServer } from "./helpers.js";
-import { ENV, router } from "./steamFixtures.js";
+import { connectServer, setupServer } from "./helpers.ts";
+import { ENV, router } from "./steamFixtures.ts";
 
 describe("prompts", () => {
   test("all three prompts are listed", async (t) => {

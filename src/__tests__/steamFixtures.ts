@@ -2,7 +2,7 @@
 // (steamStorefront.test.ts, steamCatalog.test.ts, steamPlayer.test.ts) — one
 // `router()` covering every endpoint those three files exercise, so a single
 // connectServer() + installFetch(t, mockFetch(router)) setup works everywhere.
-import { jsonResponse } from "./helpers.js";
+import { jsonResponse } from "./helpers.ts";
 
 // Key present + throttling disabled so tests run offline and fast.
 export const ENV = {

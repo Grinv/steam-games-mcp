@@ -6,6 +6,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** Raise runtime floor to Node ≥ 22.18 (was ≥ 20.11); Node 20 reached end-of-life in April 2026.
+- Declare the Node runtime floor in `manifest.json`, so MCPB hosts can check it before launching the server.
+
 ## [0.16.0] - 2026-10-20
 
 ### Added

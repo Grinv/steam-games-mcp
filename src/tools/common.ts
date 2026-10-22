@@ -3,10 +3,10 @@
 // the calling model), and the reply() wrapper that turns a formatter result into
 // a guarded ToolResult. Kept here so the two registration files stay DRY.
 import { z } from "zod";
-import { jsonResult, type ToolResult } from "../lib/result.js";
-import type { CompatFilters } from "../format/storeCard.js";
-import { compatFilterSchema } from "../format/store.schemas.js";
-import { guard } from "./guard.js";
+import { jsonResult, type ToolResult } from "../lib/result.ts";
+import type { CompatFilters } from "../format/storeCard.ts";
+import { compatFilterSchema } from "../format/store.schemas.ts";
+import { guard } from "./guard.ts";
 
 export const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
 

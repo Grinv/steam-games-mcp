@@ -7,18 +7,18 @@
 // keyless-capable half.
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
-import type { SteamWebClient } from "../clients/web.js";
-import { LANGUAGE_ISO_WARNING, READ_ONLY, appid, language } from "./common.js";
+import type { SteamWebClient } from "../clients/web.ts";
+import { LANGUAGE_ISO_WARNING, READ_ONLY, appid, language } from "./common.ts";
 import {
   PUBLIC_PROFILE_NOTE,
   requireKey as makeRequireKey,
   otherSteamid,
   steamid,
   steamIdTool,
-} from "./webShared.js";
-import { notFoundReason, withNotFound } from "../format/shared.schemas.js";
-import { recommendedGamesFound } from "../format/store.schemas.js";
-import { FAVORITE_TAG_SAMPLE_SIZE, RECOMMENDATION_POOL_SIZE } from "../clients/storeService.js";
+} from "./webShared.ts";
+import { notFoundReason, withNotFound } from "../format/shared.schemas.ts";
+import { recommendedGamesFound } from "../format/store.schemas.ts";
+import { FAVORITE_TAG_SAMPLE_SIZE, RECOMMENDATION_POOL_SIZE } from "../clients/storeService.ts";
 import {
   COMPARE_SHARED_MAX,
   FRIENDS_CHECKED_MAX,
@@ -26,8 +26,8 @@ import {
   FRIENDS_WHO_OWN_MAX,
   OWNED_GAMES_MAX,
   RECENTLY_PLAYED_MAX,
-} from "../format/web.js";
-import { ACHIEVEMENTS_MAX, GAME_SCHEMA_ACHIEVEMENTS_MAX } from "../format/webAchievements.js";
+} from "../format/web.ts";
+import { ACHIEVEMENTS_MAX, GAME_SCHEMA_ACHIEVEMENTS_MAX } from "../format/webAchievements.ts";
 import {
   comparePlayersFound,
   findFriendsWhoOwnFound,
@@ -37,11 +37,11 @@ import {
   getPlayerSummaryOutput,
   getRecentlyPlayedOutput,
   vanityFound,
-} from "../format/web.schemas.js";
+} from "../format/web.schemas.ts";
 import {
   getGameAchievementsOutput,
   playerAchievementsFound,
-} from "../format/webAchievements.schemas.js";
+} from "../format/webAchievements.schemas.ts";
 
 // Each of these tools has a found:false shape parsed against the generic
 // `notFoundReason` fragment — the union with the summarizer's own found:true

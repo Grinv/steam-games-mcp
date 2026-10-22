@@ -10,9 +10,9 @@
 // Shares the parent's HttpClient/TtlCache (passed in) rather than owning its
 // own — both clients hit the same api.steampowered.com host and must honor one
 // rate limiter and one cache, not one each.
-import { ApiError, withFallbackOn } from "../lib/errors.js";
-import type { TtlCache } from "../lib/cache.js";
-import { notFound } from "../format/shared.js";
+import { ApiError, withFallbackOn } from "../lib/errors.ts";
+import type { TtlCache } from "../lib/cache.ts";
+import { notFound } from "../format/shared.ts";
 import {
   computeFavoriteTagWeights,
   summarizeDiscover,
@@ -26,7 +26,7 @@ import {
   WISHLIST_DETAIL_MAX,
   type StoreQueryResponse,
   type WishlistDetailedResponse,
-} from "../format/store.js";
+} from "../format/store.ts";
 import {
   summarizeConcurrentPlayers,
   summarizeMostPlayed,
@@ -36,8 +36,8 @@ import {
   type DeckMostPlayedResponse,
   type MostPlayedResponse,
   type TopSellersResponse,
-} from "../format/charts.js";
-import type { ChartName } from "../format/charts.js";
+} from "../format/charts.ts";
+import type { ChartName } from "../format/charts.ts";
 import {
   summarizeTagList,
   type CompatFilters,
@@ -45,8 +45,8 @@ import {
   type StoreItemsResponse,
   type TagMap,
   TAG_LIMIT,
-} from "../format/storeCard.js";
-import type { WishlistResponse } from "../format/web.js";
+} from "../format/storeCard.ts";
+import type { WishlistResponse } from "../format/web.ts";
 
 type Query = Record<string, string | number | boolean | undefined>;
 // The parent's authenticated `#get` (bakes in the key, sent when present per

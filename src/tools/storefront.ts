@@ -4,11 +4,11 @@
 // failures become actionable tool errors.
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
-import type { StorefrontClient } from "../clients/storefront.js";
-import type { StoreServiceClient } from "../clients/storeService.js";
-import { errorResult, jsonResult } from "../lib/result.js";
-import { guard } from "./guard.js";
-import { ITEMS_MAX, PRICES_MAX, READ_ONLY, appid, country, language, reply } from "./common.js";
+import type { StorefrontClient } from "../clients/storefront.ts";
+import type { StoreServiceClient } from "../clients/storeService.ts";
+import { errorResult, jsonResult } from "../lib/result.ts";
+import { guard } from "./guard.ts";
+import { ITEMS_MAX, PRICES_MAX, READ_ONLY, appid, country, language, reply } from "./common.ts";
 import {
   getFeaturedOutput,
   getGameOutput,
@@ -16,8 +16,8 @@ import {
   getPricesOutput,
   getReviewHistogramOutput,
   getSpecialsOutput,
-} from "../format/storefront.schemas.js";
-import { DLC_MAX, HISTOGRAM_HISTORY_MAX, HISTOGRAM_RECENT_MAX } from "../format/storefront.js";
+} from "../format/storefront.schemas.ts";
+import { DLC_MAX, HISTOGRAM_HISTORY_MAX, HISTOGRAM_RECENT_MAX } from "../format/storefront.ts";
 
 export function registerStorefrontTools(
   server: McpServer,

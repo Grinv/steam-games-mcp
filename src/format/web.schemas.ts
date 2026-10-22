@@ -9,7 +9,7 @@
 // owned-library, ...) — those parse against the shared `notFoundReason`
 // fragment (format/shared.schemas.ts) at their own construction site, not here.
 import { z } from "zod";
-import { gamesNotFound } from "./shared.schemas.js";
+import { gamesNotFound } from "./shared.schemas.ts";
 
 // Steam's `personastate` is a small fixed index (0-6, per the Web API docs);
 // format/web.ts's summarizers map it through this same list, so the two

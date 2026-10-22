@@ -12,12 +12,11 @@
 // Uses targeted token replacement — not JSON re-serialization — to preserve
 // each file's exact formatting.
 import { readFileSync, writeFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
 
-function patch(rel, edits) {
+function patch(rel: string, edits: [RegExp, string][]): void {
   const file = join(root, rel);
   let text = readFileSync(file, "utf8");
   for (const [pattern, replacement] of edits) {
@@ -32,13 +31,13 @@ function patch(rel, edits) {
 // The leading quote means this never matches `"manifest_version"` in manifest.json.
 const versionField = /("version":\s*")[^"]*(")/;
 
-// Shared with preversion-check.mjs's checkChangelog(): does CHANGELOG.md's
+// Shared with preversion-check.ts's checkChangelog(): does CHANGELOG.md's
 // [Unreleased] section (everything up to the next "## [" heading) contain a
 // real bullet? Checks for an actual bullet (`- `) rather than just "is a
 // heading immediately next" — robust to stray blank lines. Exported so both
 // scripts encode this one rule exactly once instead of two independently
 // drifting regexes.
-export function unreleasedHasBullets(text) {
+export function unreleasedHasBullets(text: string): boolean {
   const marker = "## [Unreleased]\n";
   const idx = text.indexOf(marker);
   if (idx === -1) {
@@ -46,7 +45,7 @@ export function unreleasedHasBullets(text) {
   }
   const afterMarker = text.slice(idx + marker.length);
   const bodyMatch = /^([\s\S]*?)(?=\n## \[|$)/.exec(afterMarker);
-  const body = bodyMatch ? bodyMatch[1] : afterMarker;
+  const body = bodyMatch?.[1] ?? afterMarker;
   return /^-\s/m.test(body.trim());
 }
 
@@ -58,9 +57,9 @@ export function unreleasedHasBullets(text) {
 // or release.yml's own fail-loud "no CHANGELOG section found" guard fires on
 // exactly the scenario that escape hatch exists to allow. Idempotent: a
 // re-run once this version's heading already exists (e.g. a second
-// sync-version.mjs invocation after a failed release) finds nothing left to
+// sync-version.ts invocation after a failed release) finds nothing left to
 // do and returns the input unchanged.
-export function renderChangelogRelease(text, version, date) {
+export function renderChangelogRelease(text: string, version: string, date: string): string {
   if (text.includes(`## [${version}] - `)) {
     return text;
   }
@@ -82,8 +81,10 @@ export function renderChangelogRelease(text, version, date) {
   return text.slice(0, idx + marker.length) + heading + afterMarker;
 }
 
-function main() {
-  const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+function main(): void {
+  const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+    version: string;
+  };
 
   patch("src/version.ts", [[/(export const VERSION = ")[^"]*(")/, `$1${version}$2`]]);
   patch("manifest.json", [[versionField, `$1${version}$2`]]);
@@ -111,13 +112,6 @@ function main() {
 }
 
 // Only run as a script (not when version.test.ts imports renderChangelogRelease).
-// pathToFileURL (not a naive `file://${...}` template) is required for this to
-// work on Windows: process.argv[1] is a raw OS path (backslash-separated,
-// no scheme), which never string-equals import.meta.url's well-formed
-// file:// URL if concatenated directly — pathToFileURL normalizes both to
-// the same form. The `process.argv[1] &&` guard matters too: it's undefined
-// for invocations with no script path (e.g. `node -e`/`--eval`), and
-// pathToFileURL(undefined) throws rather than just failing to match.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (import.meta.main) {
   main();
 }

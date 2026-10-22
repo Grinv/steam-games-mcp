@@ -19,8 +19,8 @@ import {
   notFound,
   storeUrl,
   stripHtml,
-} from "./shared.js";
-import { notFoundReason, wishlistNotFound } from "./shared.schemas.js";
+} from "./shared.ts";
+import { notFoundReason, wishlistNotFound } from "./shared.schemas.ts";
 import {
   comparePlayersFound,
   findFriendsWhoOwnFound,
@@ -36,7 +36,7 @@ import {
   vanityFound,
   visibilitySchema,
   wishlistLightFound,
-} from "./web.schemas.js";
+} from "./web.schemas.ts";
 
 // ---- Web API: player summary ------------------------------------------------
 

@@ -2,9 +2,9 @@
 import type { TestContext } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import assert from "node:assert/strict";
-import { createLogger, type Logger } from "../lib/logger.js";
-import { buildServer } from "../server.js";
-import { loadConfig } from "../config.js";
+import { createLogger, type Logger } from "../lib/logger.ts";
+import { buildServer } from "../server.ts";
+import { loadConfig } from "../config.ts";
 
 export function silentLogger(): Logger {
   return createLogger("silent");
@@ -65,7 +65,7 @@ export function textOf(res: unknown): string {
 }
 
 /** Install a fetch mock for the duration of the current test. Scoped to `t.mock`
- * (Node 20's stable node:test mocking), which auto-restores the original
+ * (node:test's built-in mocking), which auto-restores the original
  * `globalThis.fetch` when the test finishes — callers don't call anything to
  * undo it themselves. */
 export function installFetch(t: TestContext, mock: FetchMock): void {
@@ -73,12 +73,10 @@ export function installFetch(t: TestContext, mock: FetchMock): void {
 }
 
 /** Build the server and connect an in-memory client for end-to-end tool tests.
- *  The return value is itself `await using`-able (Symbol.asyncDispose calls
- *  `close`), for a call site that isn't already covered by setupServer's own
- *  t.after(close) — `close` stays exposed too for that existing callers. */
+ *  The caller owns teardown (`t.after(close)`); setupServer does that for you. */
 export async function connectServer(
   env: NodeJS.ProcessEnv = {},
-): Promise<{ client: Client; close: () => Promise<void>; [Symbol.asyncDispose](): Promise<void> }> {
+): Promise<{ client: Client; close: () => Promise<void> }> {
   const server = buildServer(loadConfig(env), silentLogger());
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
@@ -87,7 +85,7 @@ export async function connectServer(
     await client.close();
     await server.close();
   };
-  return { client, close, [Symbol.asyncDispose]: close };
+  return { client, close };
 }
 
 /** The near-universal integration-test setup: mock fetch (if a handler is

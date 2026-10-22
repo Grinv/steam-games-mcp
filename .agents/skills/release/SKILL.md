@@ -6,7 +6,7 @@ description: Cut a release of steam-games-mcp — draft CHANGELOG entries, check
 # Releasing
 
 `package.json` is the **single source of truth** for the version. The npm
-`version` lifecycle hook runs `scripts/sync-version.mjs`, which propagates it to
+`version` lifecycle hook runs `scripts/sync-version.ts`, which propagates it to
 `src/version.ts`, `manifest.json` and `server.json` (incl. the `.mcpb` release-asset
 URL); `version.test.ts` guards that they never drift. The same script also dates
 `CHANGELOG.md`'s `[Unreleased]` section into this version's own heading (and
@@ -15,7 +15,7 @@ before or after `npm version`; that manual step was forgotten twice before this
 automation existed. `version.test.ts` guards this too (the newest dated heading
 must match `package.json`'s version).
 
-A `preversion` hook (`scripts/preversion-check.mjs`) runs first, with two checks:
+A `preversion` hook (`scripts/preversion-check.ts`) runs first, with two checks:
 
 - **Unpushed-tag race**: if the _current_ `package.json` version already has a
   local git tag, it blocks unless that tag is also on `origin` — this is the
@@ -62,7 +62,7 @@ don't rely on the `preversion` hook alone to catch a skipped one:
 The tag push (`v*`) runs the **Release** workflow: `check:api` gate → build → test
 → pack `.mcpb` → extract `CHANGELOG.md`'s section for this version (fails loudly,
 not silently, if that section is empty — the workflow's own safety net for
-whatever slipped past `sync-version.mjs`/`preversion-check.mjs`) → GitHub Release
+whatever slipped past `sync-version.ts`/`preversion-check.ts`) → GitHub Release
 → `npm publish` (OIDC trusted publishing, with provenance, pinned to an exact
 verified-good npm version — no token; skipped without failing the job if this
 version is already on npm, so a re-run after a partial failure doesn't abort) →

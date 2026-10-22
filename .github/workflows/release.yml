@@ -48,7 +48,7 @@ jobs:
           # Fail loudly instead of shipping an empty GitHub Release body — this
           # exact failure happened on 2026-07-29 (v0.11.0): the tagged commit's
           # CHANGELOG.md still said "## [Unreleased]" instead of "## [$VERSION]",
-          # so this awk matched nothing. sync-version.mjs now renames the heading
+          # so this awk matched nothing. sync-version.ts now renames the heading
           # itself, but this is the safety net for whatever slips past that.
           if [ ! -s RELEASE_NOTES.md ] || ! grep -q '[^[:space:]]' RELEASE_NOTES.md; then
             echo "::error::No CHANGELOG.md section found for '## [$VERSION]' — RELEASE_NOTES.md is empty. Check that CHANGELOG.md's heading was renamed from '## [Unreleased]'."

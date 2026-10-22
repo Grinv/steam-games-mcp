@@ -7,13 +7,13 @@
 // rarity data (get_game_achievements merges it into the schema), and the
 // finitePercent coercion.
 import { z } from "zod";
-import { capList, isoDay, notFound } from "./shared.js";
-import { notFoundReason } from "./shared.schemas.js";
+import { capList, isoDay, notFound } from "./shared.ts";
+import { notFoundReason } from "./shared.schemas.ts";
 import {
   getGameAchievementsOutput,
   getGlobalAchievementsOutput,
   playerAchievementsFound,
-} from "./webAchievements.schemas.js";
+} from "./webAchievements.schemas.ts";
 
 // ---- Web API: player achievements -------------------------------------------
 

@@ -5,7 +5,7 @@
 // (Storefront tools) and steamPlayer.test.ts (key-gated player tools).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { setupServer, jsonResponse, htmlResponse, assertToolError } from "./helpers.js";
+import { setupServer, jsonResponse, htmlResponse, assertToolError } from "./helpers.ts";
 import {
   ENV,
   FOLLOWED,
@@ -13,9 +13,9 @@ import {
   router,
   routerWithBrokenTagList,
   routerWithEmptyTagList,
-} from "./steamFixtures.js";
-import { ITEMS_MAX } from "../tools/common.js";
-import { DISCOVER_MAX, WISHLIST_DETAIL_MAX } from "../format/store.js";
+} from "./steamFixtures.ts";
+import { ITEMS_MAX } from "../tools/common.ts";
+import { DISCOVER_MAX, WISHLIST_DETAIL_MAX } from "../format/store.ts";
 
 const queryFilters = (mock: { calls: { url: string }[] }) =>
   (

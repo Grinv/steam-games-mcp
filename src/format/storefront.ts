@@ -10,8 +10,8 @@
 // `outputSchema` advertised to MCP clients.
 
 import { z } from "zod";
-import type { PurchasePrices } from "./store.js";
-import { capList, hours, isoDay, money, names, storeUrl, stripHtml } from "./shared.js";
+import type { PurchasePrices } from "./store.ts";
+import { capList, hours, isoDay, money, names, storeUrl, stripHtml } from "./shared.ts";
 import {
   detailPriceSchema,
   featuredItemSchema,
@@ -23,7 +23,7 @@ import {
   getSpecialsOutput,
   priceFieldsSchema,
   rollupSchema,
-} from "./storefront.schemas.js";
+} from "./storefront.schemas.ts";
 
 // ---- Storefront: appdetails -------------------------------------------------
 

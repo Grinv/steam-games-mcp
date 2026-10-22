@@ -7,14 +7,14 @@
 // card/filter primitives live in one place, separate from the response shapers
 // that consume them. Zod schemas in store.schemas.ts.
 import { z } from "zod";
-import { isoDateTime, storeReleaseDay, storeUrl } from "./shared.js";
+import { isoDateTime, storeReleaseDay, storeUrl } from "./shared.ts";
 import {
   baseCardSchema,
   compatBadgeSchema,
   compatFilterSchema,
   storeCardSchema,
   vrSupportSchema,
-} from "./store.schemas.js";
+} from "./store.schemas.ts";
 
 // ---- shared StoreItem shape -------------------------------------------------
 

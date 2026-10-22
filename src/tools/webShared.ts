@@ -4,9 +4,9 @@
 // tools/common.ts, which stays domain-agnostic (shared with tools/storefront.ts
 // too) — `steamid` and the steamid-resolving helper below are Web-API-specific.
 import { z } from "zod";
-import { errorResult, type ToolResult } from "../lib/result.js";
-import { STEAMID64_RE } from "../format/shared.js";
-import { reply } from "./common.js";
+import { errorResult, type ToolResult } from "../lib/result.ts";
+import { STEAMID64_RE } from "../format/shared.ts";
+import { reply } from "./common.ts";
 
 // Appended to the key-gate message, but only for the tools that ALSO need the
 // target profile's privacy opened up. Four key-gated tools don't:

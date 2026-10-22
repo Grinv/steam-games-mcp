@@ -9,7 +9,7 @@ import { join } from "node:path";
 // client that doesn't install deps for us. This guards against that regression:
 // if a new dependency is added without `noExternal`, this fails.
 //
-// Tests run from dist-tests/; the repo root is one level up, and the tsup bundle
+// Tests run from src/; the repo root is one level up, and the tsup bundle
 // is at repo/dist/index.js (built by `npm run build`, which CI runs before tests).
 const root = join(process.cwd(), "..");
 

@@ -6,13 +6,13 @@
 // also answer without a key; we send the key when present and let them work
 // either way.
 // Reference: https://developer.valvesoftware.com/wiki/Steam_Web_API
-import { HttpClient } from "../lib/http.js";
-import { RateLimiter } from "../lib/rateLimit.js";
-import { TtlCache } from "../lib/cache.js";
-import { ApiError, type ApiErrorCode, withFallbackOn } from "../lib/errors.js";
-import { messageFor } from "../lib/result.js";
-import { settledWithLimit } from "../lib/concurrency.js";
-import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.js";
+import { HttpClient } from "../lib/http.ts";
+import { RateLimiter } from "../lib/rateLimit.ts";
+import { TtlCache } from "../lib/cache.ts";
+import { ApiError, type ApiErrorCode, withFallbackOn } from "../lib/errors.ts";
+import { messageFor } from "../lib/result.ts";
+import { settledWithLimit } from "../lib/concurrency.ts";
+import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.ts";
 import {
   FRIENDS_CHECKED_MAX,
   friendIdsToEnrich,
@@ -44,7 +44,7 @@ import {
   type SteamLevelResponse,
   type VanityResponse,
   type WishlistResponse,
-} from "../format/web.js";
+} from "../format/web.ts";
 import {
   summarizeGameSchema,
   summarizeGlobalAchievements,
@@ -52,10 +52,10 @@ import {
   type GameSchemaResponse,
   type GlobalAchievementsResponse,
   type PlayerAchievementsResponse,
-} from "../format/webAchievements.js";
-import { StoreServiceClient } from "./storeService.js";
-import type { Logger } from "../lib/logger.js";
-import type { Config } from "../config.js";
+} from "../format/webAchievements.ts";
+import { StoreServiceClient } from "./storeService.ts";
+import type { Logger } from "../lib/logger.ts";
+import type { Config } from "../config.ts";
 
 type Query = Record<string, string | number | boolean | undefined>;
 
@@ -97,8 +97,10 @@ class NoAchievementSchema extends Error {}
 // but carried out on the rejection so it is never cached for the full TTL —
 // and a good stale entry, rarity included, wins over it.
 class SchemaWithoutRarity extends Error {
-  constructor(readonly value: Record<string, unknown>) {
+  readonly value: Record<string, unknown>;
+  constructor(value: Record<string, unknown>) {
     super("schema without rarity");
+    this.value = value;
   }
 }
 

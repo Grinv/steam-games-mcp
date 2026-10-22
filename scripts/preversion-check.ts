@@ -10,7 +10,7 @@
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { unreleasedHasBullets } from "./sync-version.mjs";
+import { unreleasedHasBullets } from "./sync-version.ts";
 
 const root = join(import.meta.dirname, "..");
 
@@ -23,7 +23,7 @@ const root = join(import.meta.dirname, "..");
 // locally sidesteps that parsing entirely.
 // Includes this process's pid so two concurrent `npm version` invocations
 // checking the same tag never collide on the same scratch ref.
-function remoteTagCommitSha(tag, root) {
+function remoteTagCommitSha(tag: string, root: string): string | undefined {
   const tmpRef = `refs/tmp-preversion-check/${process.pid}-${tag}`;
   try {
     execFileSync("git", ["fetch", "--quiet", "origin", `refs/tags/${tag}:${tmpRef}`], {
@@ -34,7 +34,7 @@ function remoteTagCommitSha(tag, root) {
     // Only a missing remote ref means "not pushed yet" — anything else
     // (network down, DNS failure, auth failure) is a real problem the
     // caller needs to know about, not silently treated the same way.
-    const stderr = err.stderr ? err.stderr.toString() : "";
+    const stderr = String((err as { stderr?: Buffer }).stderr ?? "");
     if (/couldn't find remote ref/i.test(stderr)) {
       return undefined;
     }
@@ -55,7 +55,7 @@ function remoteTagCommitSha(tag, root) {
 // version already has a local tag, either it was pushed (fine, this is a
 // normal second release) or it wasn't (the first run's tag/commit is about to
 // be orphaned the moment this second run creates a new one on top of it).
-function checkUnpushedTagRace() {
+function checkUnpushedTagRace(): void {
   const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   const tag = `v${version}`;
   const localTagExists =
@@ -73,7 +73,7 @@ function checkUnpushedTagRace() {
   } catch (err) {
     console.error(
       `preversion-check: could not verify whether git tag ${tag} is on origin ` +
-        `(${err.message}) — this looks like a network/auth problem, not necessarily an ` +
+        `(${(err as Error).message}) — this looks like a network/auth problem, not necessarily an ` +
         "unpushed tag. Check connectivity to origin and retry; if the tag turns out to " +
         `genuinely be unpushed, push it (git push origin ${tag}) or delete it ` +
         `(git tag -d ${tag}) if it was a mistake.`,
@@ -105,13 +105,13 @@ function checkUnpushedTagRace() {
   console.log(`preversion-check: git tag ${tag} matches origin — OK.`);
 }
 
-function checkChangelog() {
+function checkChangelog(): void {
   const changelog = readFileSync(join(root, "CHANGELOG.md"), "utf8");
   let hasBullets;
   try {
     hasBullets = unreleasedHasBullets(changelog);
   } catch (err) {
-    console.error(`preversion-check: ${err.message}`);
+    console.error(`preversion-check: ${(err as Error).message}`);
     process.exit(1);
   }
   if (hasBullets) {

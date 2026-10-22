@@ -2,7 +2,7 @@
 // behind findFriendsWhoOwn's per-friend GetOwnedGames calls.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { settledWithLimit } from "../lib/concurrency.js";
+import { settledWithLimit } from "../lib/concurrency.ts";
 
 describe("settledWithLimit", () => {
   test("never runs more than `limit` tasks at once, and still runs all of them", async () => {

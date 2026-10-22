@@ -48,9 +48,9 @@ src/
                   #   wrapper across storefront+web), guard.ts, prompts.ts (MCP
                   #   Prompts)
   __tests__/      # node:test (*.test.ts) + helpers.ts
-scripts/          # build-tests.mjs, run-tests.mjs, sync-version.mjs (+ its
-                  #   sync-version.d.mts declaration) (generic), check-api.mjs
-                  #   (domain), preversion-check.mjs (CHANGELOG gate)
+scripts/          # run-tests.ts, sync-version.ts (generic), check-api.ts
+                  #   (domain), preversion-check.ts (CHANGELOG gate) — plain
+                  #   .ts run directly by Node's type stripping, no build step
 .agents/skills/   # reusable agent workflows for this repo (e.g. live-audit/) —
                   #   plain Markdown with a YAML frontmatter name/description,
                   #   not tied to any one tool's orchestration features. Same
@@ -65,7 +65,7 @@ scripts/          # build-tests.mjs, run-tests.mjs, sync-version.mjs (+ its
 
 ```sh
 npm run build          # tsc --noEmit + tsup → dist/index.js (single ESM bundle)
-npm test               # build tests with esbuild, run with node:test
+npm test               # node:test straight on src/**/*.test.ts (native type stripping, no build)
 npm run test:coverage  # same, with coverage (gate: ~80%)
 npm run lint           # eslint
 npm run format         # prettier --write
@@ -79,17 +79,32 @@ npm run inspector      # run under the MCP Inspector
   descriptions, error messages) — and so is everything posted to a public/shared
   surface (commit messages, GitHub issue/PR comments and bodies), regardless of
   what language the working conversation happens to be in.
-- Runtime floor is **Node ≥ 20.11** (global `fetch`, stable `node:test`,
-  `context.mock.timers` used throughout `__tests__/`, and `import.meta.dirname`
-  in the `scripts/*.mjs` helpers — need 20.4+/20.11+ respectively, so `>=20`
-  alone would understate the real requirement); tsup targets `node20`
-  (esbuild's Node targets are major-version-only, so this doesn't need to track
-  the patch floor). `.nvmrc`
-  pins the maintainer's local dev version (currently `22`) for convenience, not
-  the supported floor — CI's `node: [20, 22, 24]` matrix is what actually
-  enforces `>=20.11`. Note `@types/node` tracks current Node, not the floor, so
-  `tsc` will happily accept an API that only exists past 20.11; the CI node-20
-  job is the only thing that catches it.
+- Runtime floor is **Node ≥ 22.18** — the first 22.x where type stripping is
+  on by default (and warning-free), which is what lets `npm test` and every
+  `scripts/*.ts` run as plain `.ts` with no build step; tsup 9 needs it too.
+  Declared in both `package.json` `engines` and `manifest.json`
+  `compatibility.runtimes.node` — a test keeps them equal. Because Node only
+  _strips_ types, `tsconfig.json` sets `erasableSyntaxOnly` (no enums,
+  namespaces or parameter properties) and `allowImportingTsExtensions`
+  (relative imports use `.ts`, not `.js`). **No `using`/`await using`** —
+  esbuild used to downlevel it for tests, but Node 22's V8 12.4 can't parse
+  it; register cleanup with `t.after()` instead. tsup targets `node22`
+  (esbuild's Node targets are major-version-only, so this doesn't need to
+  track the patch floor); `tsconfig.json` targets `ES2024` plus only the
+  ES2025 libs V8 12.4 ships (`ES2025.Collection` Set methods,
+  `ES2025.Iterator` helpers) — not full `ES2025`, whose `Promise.try`,
+  `RegExp.escape` and `Float16Array` need Node 24. `.nvmrc` pins the
+  maintainer's local dev version (currently `22`) for convenience, not the
+  supported floor — CI's `node: ["22.18", 22, 24, 26]` matrix is what actually
+  enforces `>=22.18` (the pinned `22.18` job tests the exact floor, not just the
+  latest 22.x). Note `@types/node` tracks current Node, not the floor, so `tsc`
+  will happily accept an API that only exists past 22.18; that CI job is the
+  only thing that catches it.
+- `tsc` (`npm run typecheck`, part of `npm run build`) also covers
+  `scripts/`, `tsup.config.ts` and `eslint.config.js` — the latter via
+  `allowJs`/`checkJs` plus ESLint's typed `defineConfig()` — so a config typo
+  (unknown key, misspelled severity or preset) fails the build. Rule _options_
+  stay untyped (`unknown[]`); `eslint` itself validates those at run time.
 - **Never write to stdout** — it is the MCP protocol channel. Use the logger,
   which writes to **stderr only** and redacts credentials (the Web API key
   travels as a `key` query param). There is no MCP `logging` capability and no

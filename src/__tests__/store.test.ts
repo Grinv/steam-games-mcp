@@ -6,8 +6,8 @@ import {
   summarizeWishlistDetailed,
   computeFavoriteTagWeights,
   summarizeRecommendations,
-} from "../format/store.js";
-import { summarizeTagList, type StoreItem, type TagMap } from "../format/storeCard.js";
+} from "../format/store.ts";
+import { summarizeTagList, type StoreItem, type TagMap } from "../format/storeCard.ts";
 
 // Focused unit tests for the store-service card builders and their edge cases —
 // discount-end resolution, availability/free handling, empty responses — that the

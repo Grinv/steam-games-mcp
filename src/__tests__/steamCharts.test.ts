@@ -2,8 +2,8 @@
 // most_played_deck and concurrent_players — mirrors tools/webStore.ts's get_charts registration.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { setupServer, jsonResponse, assertToolError } from "./helpers.js";
-import { router } from "./steamFixtures.js";
+import { setupServer, jsonResponse, assertToolError } from "./helpers.ts";
+import { router } from "./steamFixtures.ts";
 
 const ENV = { STEAM_API_MIN_INTERVAL_MS: "0", STEAM_STORE_MIN_INTERVAL_MS: "0" };
 

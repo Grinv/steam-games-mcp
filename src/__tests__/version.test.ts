@@ -2,17 +2,22 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { VERSION } from "../version.js";
-import { connectServer } from "./helpers.js";
-import { renderChangelogRelease, unreleasedHasBullets } from "../../scripts/sync-version.mjs";
+import { VERSION } from "../version.ts";
+import { connectServer } from "./helpers.ts";
+import { renderChangelogRelease, unreleasedHasBullets } from "../../scripts/sync-version.ts";
 
-// Tests run from the dist-tests/ working directory; the repo root is one level up.
+// Tests run from the src/ working directory; the repo root is one level up.
 const root = join(process.cwd(), "..");
 const readJson = (rel: string) => JSON.parse(readFileSync(join(root, rel), "utf8"));
 
-const pkg = readJson("package.json") as { version: string; mcpName: string };
+const pkg = readJson("package.json") as {
+  version: string;
+  mcpName: string;
+  engines: { node: string };
+};
 const manifest = readJson("manifest.json") as {
   version: string;
+  compatibility: { runtimes: { node: string } };
   user_config: Record<string, unknown>;
   tools: { name: string }[];
   prompts: { name: string }[];
@@ -29,7 +34,7 @@ const server = readJson("server.json") as {
   }[];
 };
 
-// package.json is the single source of truth; scripts/sync-version.mjs (the npm
+// package.json is the single source of truth; scripts/sync-version.ts (the npm
 // `version` hook) propagates it everywhere below. These assertions fail loudly
 // if any file drifts — including a hand-edit that bypassed the hook.
 test("VERSION constant matches package.json", () => {
@@ -40,12 +45,19 @@ test("manifest.json version matches package.json", () => {
   assert.equal(manifest.version, pkg.version);
 });
 
+// The .mcpb host checks manifest.json's runtime range before launching the
+// server, npm checks engines — a floor bump has to land in both.
+test("manifest.json compatibility.runtimes.node matches package.json engines", () => {
+  assert.equal(manifest.compatibility.runtimes.node, pkg.engines.node);
+});
+
 // manifest.json's `tools` array is a hand-maintained short-description list (not
 // generated — tools_generated:false), so a new/removed tool can silently drift
 // from what the server actually registers. This catches that at test time
 // instead of at .mcpb-install time.
-test("manifest.json's tools list matches every tool the server actually registers", async () => {
-  await using conn = await connectServer({});
+test("manifest.json's tools list matches every tool the server actually registers", async (t) => {
+  const conn = await connectServer({});
+  t.after(conn.close);
   const registered = new Set((await conn.client.listTools()).tools.map((t) => t.name));
   const declared = new Set(manifest.tools.map((t) => t.name));
   assert.deepEqual(declared, registered);
@@ -54,8 +66,9 @@ test("manifest.json's tools list matches every tool the server actually register
 // AGENTS.md mandates a .describe() on every tool parameter, written for the
 // calling model — this guards that convention going forward instead of relying
 // on review to catch a new undocumented parameter (see the tool-description-check skill).
-test("every tool parameter has a .describe() for the calling model", async () => {
-  await using conn = await connectServer({});
+test("every tool parameter has a .describe() for the calling model", async (t) => {
+  const conn = await connectServer({});
+  t.after(conn.close);
   const { tools } = await conn.client.listTools();
   const missing: string[] = [];
   for (const tool of tools) {
@@ -68,14 +81,15 @@ test("every tool parameter has a .describe() for the calling model", async () =>
 });
 
 // Same drift risk as the tools list above, for manifest.json's `prompts` array.
-test("manifest.json's prompts list matches every prompt the server actually registers", async () => {
-  await using conn = await connectServer({});
+test("manifest.json's prompts list matches every prompt the server actually registers", async (t) => {
+  const conn = await connectServer({});
+  t.after(conn.close);
   const registered = new Set((await conn.client.listPrompts()).prompts.map((p) => p.name));
   const declared = new Set(manifest.prompts.map((p) => p.name));
   assert.deepEqual(declared, registered);
 });
 
-// scripts/sync-version.mjs dates CHANGELOG.md's [Unreleased] section into this
+// scripts/sync-version.ts dates CHANGELOG.md's [Unreleased] section into this
 // version's own heading as part of `npm version` — this guards that it actually
 // ran (a version bump with a still-undated [Unreleased] slipped through twice
 // before that automation existed).

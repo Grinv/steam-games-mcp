@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { RateLimiter } from "../lib/rateLimit.js";
+import { RateLimiter } from "../lib/rateLimit.ts";
 
 // Small windows keep the test fast while exercising the real timing logic.
 async function timeAcquires(limiter: RateLimiter, n: number): Promise<number[]> {

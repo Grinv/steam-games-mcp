@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ApiError } from "../lib/errors.js";
-import { guard } from "../tools/guard.js";
+import { ApiError } from "../lib/errors.ts";
+import { guard } from "../tools/guard.ts";
 
 test("guard converts an ApiError into its mapped, actionable message", async () => {
   const r = await guard(() => {

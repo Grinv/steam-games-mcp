@@ -1,7 +1,7 @@
 // Shared helper: run a tool body and convert any failure into a tool result
 // (never throw), so the agent receives an actionable message.
-import { ApiError } from "../lib/errors.js";
-import { apiErrorToResult, errorResult, type ToolResult } from "../lib/result.js";
+import { ApiError } from "../lib/errors.ts";
+import { apiErrorToResult, errorResult, type ToolResult } from "../lib/result.ts";
 
 export async function guard(fn: () => Promise<ToolResult>): Promise<ToolResult> {
   try {

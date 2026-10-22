@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ApiError, type ApiErrorCode } from "../lib/errors.js";
-import { apiErrorToResult, errorResult, jsonResult, messageFor } from "../lib/result.js";
+import { ApiError, type ApiErrorCode } from "../lib/errors.ts";
+import { apiErrorToResult, errorResult, jsonResult, messageFor } from "../lib/result.ts";
 
 test("jsonResult carries both text and structuredContent", () => {
   const r = jsonResult({ a: 1 });

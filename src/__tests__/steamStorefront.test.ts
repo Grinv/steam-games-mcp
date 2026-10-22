@@ -12,12 +12,12 @@ import {
   mockFetch,
   installFetch,
   silentLogger,
-} from "./helpers.js";
-import { APP, ENV, router } from "./steamFixtures.js";
-import { PRICES_MAX } from "../tools/common.js";
-import { StorefrontClient } from "../clients/storefront.js";
-import { loadConfig } from "../config.js";
-import { PRICE_LOOKUP_CHUNK } from "../clients/storeService.js";
+} from "./helpers.ts";
+import { APP, ENV, router } from "./steamFixtures.ts";
+import { PRICES_MAX } from "../tools/common.ts";
+import { StorefrontClient } from "../clients/storefront.ts";
+import { loadConfig } from "../config.ts";
+import { PRICE_LOOKUP_CHUNK } from "../clients/storeService.ts";
 
 test("the server advertises store and player tools", async (t) => {
   const { client } = await setupServer(t, ENV, router);
