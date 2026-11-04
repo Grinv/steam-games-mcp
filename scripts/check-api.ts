@@ -118,15 +118,6 @@ const checks: Check[] = [
     },
   },
   {
-    name: "storefront appreviews",
-    run: async () => {
-      const body = await getJson<{ success?: unknown; query_summary?: unknown }>(
-        `${STORE}/appreviews/${APPID}?json=1&num_per_page=1`,
-      );
-      if (body.success !== 1 || !body.query_summary) throw new Error("missing query_summary");
-    },
-  },
-  {
     name: "web GetGlobalAchievementPercentagesForApp",
     run: async () => {
       const body = await getJson<{ achievementpercentages?: { achievements?: unknown } }>(
@@ -401,6 +392,22 @@ const checks: Check[] = [
         `${API}/ISteamNews/GetNewsForApp/v2/?appid=${APPID}&count=1&maxlength=50`,
       );
       need(Array.isArray(body.appnews?.newsitems), "appnews.newsitems");
+    },
+  },
+  {
+    name: "web IUserReviewsService/GetAppReviews",
+    run: async () => {
+      const input = { appid: APPID, num_per_page: 1, languages: ["all"], purchase_type: 1 };
+      const body = await getJson<{
+        response?: { query_summary?: { total_reviews?: unknown }; reviews?: unknown };
+      }>(
+        `${API}/IUserReviewsService/GetAppReviews/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
+      );
+      need(
+        typeof body.response?.query_summary?.total_reviews === "number",
+        "query_summary.total_reviews",
+      );
+      need(Array.isArray(body.response?.reviews), "reviews");
     },
   },
   {

@@ -71,22 +71,6 @@ export const getGameOutput = z.strictObject({
   store_url: z.string().nullable(),
 });
 
-export const getGameReviewsOutput = z.strictObject({
-  summary: z.string().nullable(),
-  total_reviews: z.number().nullable(),
-  total_positive: z.number().nullable(),
-  total_negative: z.number().nullable(),
-  positive_pct: z.number().nullable(),
-  reviews: z.array(
-    z.strictObject({
-      voted_up: z.boolean().nullable(),
-      votes_up: z.number(),
-      author_playtime_hours: z.number().nullable(),
-      text: z.string().nullable(),
-    }),
-  ),
-});
-
 // summarizePrices' three literal row shapes.
 export const getPricesOutput = z.strictObject({
   count: z.number(),

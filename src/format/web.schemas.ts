@@ -108,6 +108,22 @@ export const getRecentlyPlayedOutput = z.discriminatedUnion("found", [
   }),
 ]);
 
+export const getGameReviewsOutput = z.strictObject({
+  summary: z.string().nullable(),
+  total_reviews: z.number().nullable(),
+  total_positive: z.number().nullable(),
+  total_negative: z.number().nullable(),
+  positive_pct: z.number().nullable(),
+  reviews: z.array(
+    z.strictObject({
+      voted_up: z.boolean().nullable(),
+      votes_up: z.number(),
+      author_playtime_hours: z.number().nullable(),
+      text: z.string().nullable(),
+    }),
+  ),
+});
+
 export const getGameNewsOutput = z.strictObject({
   items: z.array(
     z.strictObject({

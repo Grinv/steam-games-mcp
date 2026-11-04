@@ -62,14 +62,15 @@ export const SUGGEST = {
   },
 };
 export const REVIEWS = {
-  success: 1,
-  query_summary: {
-    review_score_desc: "Overwhelmingly Positive",
-    total_positive: 90,
-    total_negative: 10,
-    total_reviews: 100,
+  response: {
+    query_summary: {
+      review_score_desc: "Overwhelmingly Positive",
+      total_positive: 90,
+      total_negative: 10,
+      total_reviews: 100,
+    },
+    reviews: [{ review: "Great", voted_up: true, votes_up: 5, author: { playtime_forever: 600 } }],
   },
-  reviews: [{ review: "Great", voted_up: true, votes_up: 5, author: { playtime_forever: 600 } }],
 };
 export const FEATURED = {
   specials: {
@@ -374,7 +375,7 @@ export function router(url: string) {
     return jsonResponse({ [id]: { success: true, data: APP } });
   }
   if (url.includes("/appreviewhistogram/")) return jsonResponse(HISTOGRAM);
-  if (url.includes("/appreviews/")) return jsonResponse(REVIEWS);
+  if (url.includes("IUserReviewsService/GetAppReviews")) return jsonResponse(REVIEWS);
   if (url.includes("/api/featuredcategories")) return jsonResponse(FEATURED);
   if (url.includes("GetNewsForApp")) return jsonResponse(NEWS);
   if (url.includes("GetSchemaForGame")) return jsonResponse(SCHEMA);

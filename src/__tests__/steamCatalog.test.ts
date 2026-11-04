@@ -1,5 +1,5 @@
 // Integration tests for the keyless-capable Web API tools (get_game_news,
-// get_global_achievements, get_current_players, get_items, discover_games,
+// get_game_reviews, get_global_achievements, get_current_players, get_items, discover_games,
 // get_wishlist, get_followed_games) — mirrors tools/webStore.ts. Split out of a
 // single steam.test.ts once it grew past 1600 lines; see steamStorefront.test.ts
 // (Storefront tools) and steamPlayer.test.ts (key-gated player tools).
@@ -71,6 +71,90 @@ test("get_game_news degrades to a clean empty result for a large/unassigned appi
   const res = await client.callTool({ name: "get_game_news", arguments: { appid: 99999999 } });
   assert.equal(res.isError, undefined);
   assert.deepEqual(res.structuredContent, { items: [] });
+});
+
+test("get_game_reviews maps its args onto GetAppReviews' input_json enums", async (t) => {
+  const { client, mock } = await setupServer(t, ENV, router);
+  const q = () =>
+    JSON.parse(new URL(mock.calls.at(-1)!.url).searchParams.get("input_json")!) as Record<
+      string,
+      unknown
+    >;
+  await client.callTool({ name: "get_game_reviews", arguments: { appid: 620 } });
+  assert.ok(mock.calls.at(-1)!.url.includes("IUserReviewsService/GetAppReviews/v1/"));
+  // purchase_type 1 = every buyer (Steam's default 0 is Steam purchases only);
+  // an empty languages list would mean english, so "all" is sent explicitly.
+  assert.deepEqual(
+    { ...q() },
+    {
+      appid: 620,
+      num_per_page: 5,
+      languages: ["all"],
+      review_type: 0,
+      purchase_type: 1,
+      filter: 0,
+    },
+  );
+  await client.callTool({
+    name: "get_game_reviews",
+    arguments: { appid: 620, type: "negative", review_language: "russian" },
+  });
+  assert.equal(q().review_type, 2);
+  assert.deepEqual(q().languages, ["russian"]);
+  await client.callTool({
+    name: "get_game_reviews",
+    arguments: { appid: 620, within_days: 365 },
+  });
+  assert.equal(q().day_range, 365);
+  // Steam caps day_range at 365 (larger values return the same set), so the
+  // schema does too rather than implying an all-time window.
+  const tooWide = await client.callTool({
+    name: "get_game_reviews",
+    arguments: { appid: 620, within_days: 366 },
+  });
+  assert.equal(tooWide.isError, true);
+  await client.callTool({ name: "get_game_reviews", arguments: { appid: 620, order: "recent" } });
+  assert.equal(q().filter, 1);
+  await client.callTool({ name: "get_game_reviews", arguments: { appid: 620, order: "updated" } });
+  assert.equal(q().filter, 2);
+  const bad = await client.callTool({
+    name: "get_game_reviews",
+    arguments: { appid: 620, order: "recent", within_days: 7 },
+  });
+  assert.equal(bad.isError, true);
+});
+
+test("get_game_reviews summarizes score and percentage", async (t) => {
+  const { client } = await setupServer(t, ENV, router);
+  const res = await client.callTool({ name: "get_game_reviews", arguments: { appid: 620 } });
+  const s = res.structuredContent as { summary: string; positive_pct: number };
+  assert.equal(s.summary, "Overwhelmingly Positive");
+  assert.equal(s.positive_pct, 90);
+});
+
+test("get_game_reviews: filtering by type nulls the summary (Steam only computes it for 'all')", async (t) => {
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("IUserReviewsService/GetAppReviews")
+      ? jsonResponse({
+          response: {
+            query_summary: { num_reviews: 1 },
+            reviews: [{ review: "meh", voted_up: false, votes_up: 0, author: {} }],
+          },
+        })
+      : jsonResponse({}),
+  );
+  const res = await client.callTool({
+    name: "get_game_reviews",
+    arguments: { appid: 620, type: "negative" },
+  });
+  const s = res.structuredContent as {
+    summary: string | null;
+    total_reviews: number | null;
+    positive_pct: number | null;
+  };
+  assert.equal(s.summary, null);
+  assert.equal(s.total_reviews, null);
+  assert.equal(s.positive_pct, null);
 });
 
 test("get_global_achievements parses percentages as numbers", async (t) => {

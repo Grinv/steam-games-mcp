@@ -23,6 +23,7 @@ import {
   summarizeFriendList,
   summarizeFriendsWhoOwn,
   summarizeNews,
+  summarizeReviews,
   summarizeOwnedGames,
   summarizePlayer,
   summarizePlayerBans,
@@ -44,6 +45,7 @@ import {
   type SteamLevelResponse,
   type VanityResponse,
   type WishlistResponse,
+  type ReviewsResponse,
 } from "../format/web.ts";
 import {
   summarizeGameSchema,
@@ -649,6 +651,40 @@ export class SteamWebClient {
   }
 
   // ---- keyless-capable (key sent when present) ------------------------------
+
+  // Not cached: reviews change as users post. Enums per Valve's
+  // IUserReviewsService docs: filter helpful 0 / recent 1 / updated 2,
+  // review_type all 0 / positive 1 / negative 2, purchase_type 1 = every buyer
+  // (the default 0 is Steam purchases only). An empty `languages` means
+  // english, not all. day_range only applies to helpful; Steam caps it at 365
+  // and widens it on its own when the window has no reviews (verified live:
+  // day_range 1 searched 30). A bad key is ignored here, not a 403 (verified
+  // live).
+  async getReviews(
+    appid: number,
+    max: number,
+    reviewLanguage = "all",
+    reviewType: "all" | "positive" | "negative" = "all",
+    order: "helpful" | "recent" | "updated" = "helpful",
+    withinDays?: number,
+  ): Promise<Record<string, unknown>> {
+    const res = await this.#get<{ response?: ReviewsResponse }>(
+      "IUserReviewsService/GetAppReviews/v1/",
+      {
+        input_json: JSON.stringify({
+          appid,
+          num_per_page: max,
+          languages: [reviewLanguage],
+          review_type: { all: 0, positive: 1, negative: 2 }[reviewType],
+          purchase_type: 1,
+          filter: { helpful: 0, recent: 1, updated: 2 }[order],
+          ...(order === "helpful" && withinDays !== undefined ? { day_range: withinDays } : {}),
+        }),
+      },
+      { hasCredentials: false },
+    );
+    return summarizeReviews(res, max);
+  }
 
   // kind narrows the feed server-side (verified live on 6 games): "official"
   // keeps only the developer's own Steam announcements (the default list mixes

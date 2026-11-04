@@ -4,12 +4,12 @@ import {
   DLC_MAX,
   detailApp,
   summarizeFeatured,
-  summarizeReviews,
   summarizeReviewHistogram,
 } from "../format/storefront.ts";
 import {
   summarizePlayer,
   summarizeOwnedGames,
+  summarizeReviews,
   summarizeFriendsWhoOwn,
   summarizeNews,
   summarizeRecentlyPlayed,
@@ -411,7 +411,7 @@ test("summarizeReviews: empty payload → null summary and no reviews; long text
   assert.deepEqual(empty.reviews, []);
 
   const long = "x".repeat(700);
-  const s = summarizeReviews({ reviews: [{ review: long, voted_up: true }] }) as {
+  const s = summarizeReviews({ response: { reviews: [{ review: long, voted_up: true }] } }) as {
     reviews: { text: string }[];
   };
   assert.equal(s.reviews[0]!.text.length, 601); // 600 chars + ellipsis

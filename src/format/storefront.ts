@@ -11,13 +11,12 @@
 
 import { z } from "zod";
 import type { PurchasePrices } from "./store.ts";
-import { capList, hours, isoDay, money, names, storeUrl, stripHtml } from "./shared.ts";
+import { capList, isoDay, money, names, storeUrl, stripHtml } from "./shared.ts";
 import {
   detailPriceSchema,
   featuredItemSchema,
   getFeaturedOutput,
   getGameOutput,
-  getGameReviewsOutput,
   getPricesOutput,
   getReviewHistogramOutput,
   getSpecialsOutput,
@@ -243,52 +242,6 @@ export function summarizePrices(
     };
   });
   return getPricesOutput.parse({ count: prices.length, prices });
-}
-
-// ---- Storefront: appreviews -------------------------------------------------
-
-export interface ReviewsResponse {
-  success?: number;
-  query_summary?: {
-    num_reviews?: number;
-    review_score?: number;
-    review_score_desc?: string;
-    total_positive?: number;
-    total_negative?: number;
-    total_reviews?: number;
-  };
-  reviews?: {
-    review?: string;
-    voted_up?: boolean;
-    votes_up?: number;
-    timestamp_created?: number;
-    author?: { playtime_forever?: number };
-  }[];
-}
-
-export function summarizeReviews(
-  r: ReviewsResponse,
-  max = 5,
-): z.infer<typeof getGameReviewsOutput> {
-  const q = r.query_summary ?? {};
-  return getGameReviewsOutput.parse({
-    summary: q.review_score_desc ?? null,
-    total_reviews: q.total_reviews ?? null,
-    total_positive: q.total_positive ?? null,
-    total_negative: q.total_negative ?? null,
-    // Guard on the denominator only: an all-negative game (total_positive 0,
-    // total_reviews > 0) is genuinely 0%, not unknown — guarding on
-    // total_positive too would report null and conflate it with "no data".
-    positive_pct: q.total_reviews
-      ? Math.round(((q.total_positive ?? 0) / q.total_reviews) * 100)
-      : null,
-    reviews: (r.reviews ?? []).slice(0, max).map((x) => ({
-      voted_up: x.voted_up ?? null,
-      votes_up: x.votes_up ?? 0,
-      author_playtime_hours: hours(x.author?.playtime_forever),
-      text: x.review ? (x.review.length > 600 ? x.review.slice(0, 600) + "…" : x.review) : null,
-    })),
-  });
 }
 
 // ---- Storefront: featuredcategories -----------------------------------------

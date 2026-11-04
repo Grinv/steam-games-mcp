@@ -1,5 +1,5 @@
 // Integration tests for the keyless Storefront tools (search_games, get_game,
-// get_game_reviews, get_specials, get_review_histogram) — mirrors
+// get_specials, get_review_histogram) — mirrors
 // tools/storefront.ts. Split out of a single steam.test.ts once it grew past
 // 1600 lines; see steamCatalog.test.ts (keyless Web API store tools) and
 // steamPlayer.test.ts (key-gated player tools) for the rest.
@@ -277,65 +277,6 @@ describe("get_game", () => {
   });
 });
 
-test("get_game_reviews maps order and within_days onto appreviews' filter/day_range", async (t) => {
-  const { client, mock } = await setupServer(t, ENV, router);
-  const q = () => new URL(mock.calls.at(-1)!.url).searchParams;
-  await client.callTool({ name: "get_game_reviews", arguments: { appid: 620 } });
-  assert.equal(q().get("filter"), "all");
-  assert.equal(q().get("day_range"), null);
-  await client.callTool({
-    name: "get_game_reviews",
-    arguments: { appid: 620, within_days: 365 },
-  });
-  assert.equal(q().get("day_range"), "365");
-  // Steam caps day_range at 365 (larger values return the same set), so the
-  // schema does too rather than implying an all-time window.
-  const tooWide = await client.callTool({
-    name: "get_game_reviews",
-    arguments: { appid: 620, within_days: 366 },
-  });
-  assert.equal(tooWide.isError, true);
-  await client.callTool({ name: "get_game_reviews", arguments: { appid: 620, order: "recent" } });
-  assert.equal(q().get("filter"), "recent");
-  const bad = await client.callTool({
-    name: "get_game_reviews",
-    arguments: { appid: 620, order: "recent", within_days: 7 },
-  });
-  assert.equal(bad.isError, true);
-});
-
-test("get_game_reviews summarizes score and percentage", async (t) => {
-  const { client } = await setupServer(t, ENV, router);
-  const res = await client.callTool({ name: "get_game_reviews", arguments: { appid: 620 } });
-  const s = res.structuredContent as { summary: string; positive_pct: number };
-  assert.equal(s.summary, "Overwhelmingly Positive");
-  assert.equal(s.positive_pct, 90);
-});
-
-test("get_game_reviews: filtering by type nulls the summary (Steam's own appreviews only computes it for 'all')", async (t) => {
-  const { client } = await setupServer(t, ENV, (url) =>
-    url.includes("/appreviews/")
-      ? jsonResponse({
-          success: 1,
-          query_summary: { num_reviews: 1 },
-          reviews: [{ review: "meh", voted_up: false, votes_up: 0, author: {} }],
-        })
-      : jsonResponse({}),
-  );
-  const res = await client.callTool({
-    name: "get_game_reviews",
-    arguments: { appid: 620, type: "negative" },
-  });
-  const s = res.structuredContent as {
-    summary: string | null;
-    total_reviews: number | null;
-    positive_pct: number | null;
-  };
-  assert.equal(s.summary, null);
-  assert.equal(s.total_reviews, null);
-  assert.equal(s.positive_pct, null);
-});
-
 test("get_specials lists discounted games with formatted prices, deduping repeated appids", async (t) => {
   const { client } = await setupServer(t, ENV, router);
   const res = await client.callTool({ name: "get_specials", arguments: {} });
@@ -601,7 +542,7 @@ describe("zod input boundaries are rejected before reaching the client", () => {
       });
       assert.equal(res.isError, true, `limit ${bad} should be rejected`);
     }
-    assert.equal(mock.calls.filter((c) => c.url.includes("/appreviews/")).length, 0);
+    assert.equal(mock.calls.filter((c) => c.url.includes("GetAppReviews")).length, 0);
     for (const ok of [1, 20]) {
       const res = await client.callTool({
         name: "get_game_reviews",
