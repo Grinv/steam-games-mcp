@@ -6,6 +6,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix `get_game_reviews` failing on every call after Steam retired its store reviews endpoint; it now uses the Web API's `IUserReviewsService/GetAppReviews`. ([b506114](https://github.com/Grinv/steam-games-mcp/commit/b506114))
+
+### Changed
+
+- Change `get_game_reviews` to return a null summary and counts for an unknown appid, instead of 'No user reviews' with zeros. ([b506114](https://github.com/Grinv/steam-games-mcp/commit/b506114))
+- Bump the MCP TypeScript SDK to 2.4.0. ([2e625b3](https://github.com/Grinv/steam-games-mcp/commit/2e625b3))
+
 ## [0.17.0] - 2026-10-22
 
 ### Changed
