@@ -6,9 +6,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-11-04
+
 ### Fixed
 
-- Fix `get_game_reviews` failing on every call after Steam retired its store reviews endpoint; it now uses the Web API's `IUserReviewsService/GetAppReviews`. ([b506114](https://github.com/Grinv/steam-games-mcp/commit/b506114))
+- Fix `get_game_reviews` failing on every call since Steam retired its reviews endpoint; it now uses `IUserReviewsService/GetAppReviews`. ([b506114](https://github.com/Grinv/steam-games-mcp/commit/b506114))
 
 ### Changed
 
