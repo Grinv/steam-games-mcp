@@ -179,9 +179,6 @@ export function registerStoreWebTools(
           review_language: z
             .string()
             .trim()
-            // .nonempty() so a blank value can't silently narrow the result: Steam
-            // treats "" as its own filter, not as "all", so it quietly returned a
-            // subset with rescoped totals.
             .nonempty()
             .describe(
               "Filter reviews by language. Use Steam's full language name — english, russian, " +

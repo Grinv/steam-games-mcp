@@ -297,8 +297,6 @@ export interface NewsResponse {
 
 export interface ReviewsResponse {
   query_summary?: {
-    num_reviews?: number;
-    review_score?: number;
     review_score_desc?: string;
     total_positive?: number;
     total_negative?: number;
@@ -308,7 +306,6 @@ export interface ReviewsResponse {
     review?: string;
     voted_up?: boolean;
     votes_up?: number;
-    timestamp_created?: number;
     author?: { playtime_forever?: number };
   }[];
 }

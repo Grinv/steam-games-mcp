@@ -84,17 +84,14 @@ test("get_game_reviews maps its args onto GetAppReviews' input_json enums", asyn
   assert.ok(mock.calls.at(-1)!.url.includes("IUserReviewsService/GetAppReviews/v1/"));
   // purchase_type 1 = every buyer (Steam's default 0 is Steam purchases only);
   // an empty languages list would mean english, so "all" is sent explicitly.
-  assert.deepEqual(
-    { ...q() },
-    {
-      appid: 620,
-      num_per_page: 5,
-      languages: ["all"],
-      review_type: 0,
-      purchase_type: 1,
-      filter: 0,
-    },
-  );
+  assert.deepEqual(q(), {
+    appid: 620,
+    num_per_page: 5,
+    languages: ["all"],
+    review_type: 0,
+    purchase_type: 1,
+    filter: 0,
+  });
   await client.callTool({
     name: "get_game_reviews",
     arguments: { appid: 620, type: "negative", review_language: "russian" },
