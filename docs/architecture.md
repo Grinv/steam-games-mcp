@@ -18,7 +18,8 @@ and store details compose without the agent threading ids between servers.
 
 Valve states _all_ Web API use requires a key
 (https://steamcommunity.com/dev), but several endpoints answer without one and
-we rely on that: `GetNewsForApp`, `GetGlobalAchievementPercentagesForApp`,
+we rely on that: `GetNewsForApp`, `IUserReviewsService/GetAppReviews` (keyless
+by Valve's own docs), `GetGlobalAchievementPercentagesForApp`,
 `GetNumberOfCurrentPlayers`, `IWishlistService/GetWishlist`,
 `IStoreService/GetGamesFollowed`(+`Count`), the charts services
 (`IStoreTopSellersService/GetWeeklyTopSellers`, `ISteamChartsService/GetMostPlayedGames`,
