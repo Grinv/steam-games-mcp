@@ -8,12 +8,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Fix `get_game` and `get_prices` reporting an upgrade SKU's price when Steam's best purchase option is a bundle (Yakuza Kiwami: $1.99 instead of $19.99). ([e3baf80](https://github.com/Grinv/steam-games-mcp/commit/e3baf80))
+- Fix `get_game` and `get_prices` showing an upgrade SKU's price when the best purchase option is a bundle (Yakuza Kiwami: $1.99, not $19.99). ([e3baf80](https://github.com/Grinv/steam-games-mcp/commit/e3baf80))
 - Fix `get_wishlist` listing unranked entries first, which pushed a large wishlist's top-ranked games past the cap. ([7fac52b](https://github.com/Grinv/steam-games-mcp/commit/7fac52b))
 - Fix `discover_games` and `get_recommended_games` with `min_discount: 100` searching only one popularity page instead of the whole catalog. ([44bdd42](https://github.com/Grinv/steam-games-mcp/commit/44bdd42))
 - Name a nonexistent account, not only a private profile, as the cause of a player tool's `found:false`. ([2ef6245](https://github.com/Grinv/steam-games-mcp/commit/2ef6245))
 - Name a game removed from the store as a cause in `get_game`'s not-found error. ([4a75395](https://github.com/Grinv/steam-games-mcp/commit/4a75395))
-- Keep the tag dictionary's stale copy available during a Steam outage in a long-running session. ([548f35c](https://github.com/Grinv/steam-games-mcp/commit/548f35c))
+- Keep `tags` filters working through a Steam outage in a long-running session, from the cached tag list. ([548f35c](https://github.com/Grinv/steam-games-mcp/commit/548f35c))
 
 ### Changed
 
