@@ -6,6 +6,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix `get_game` and `get_prices` reporting an upgrade SKU's price when Steam's best purchase option is a bundle (Yakuza Kiwami: $1.99 instead of $19.99). ([e3baf80](https://github.com/Grinv/steam-games-mcp/commit/e3baf80))
+- Fix `get_wishlist` listing unranked entries first, which pushed a large wishlist's top-ranked games past the cap. ([7fac52b](https://github.com/Grinv/steam-games-mcp/commit/7fac52b))
+- Fix `discover_games` with `min_discount: 100` counting the whole catalog and checking only one popularity page. ([44bdd42](https://github.com/Grinv/steam-games-mcp/commit/44bdd42))
+- Name a nonexistent account, not only a private profile, as the cause of a player tool's `found:false`. ([2ef6245](https://github.com/Grinv/steam-games-mcp/commit/2ef6245))
+- Name a game removed from the store as a cause in `get_game`'s not-found error. ([4a75395](https://github.com/Grinv/steam-games-mcp/commit/4a75395))
+- Keep the tag dictionary's stale copy available during a Steam outage in a long-running session. ([548f35c](https://github.com/Grinv/steam-games-mcp/commit/548f35c))
+
+### Changed
+
+- Change `compare_players` to return a tool error on an upstream failure (429/5xx, bad key), instead of `found:false`. ([978e797](https://github.com/Grinv/steam-games-mcp/commit/978e797))
+- Document that `get_wishlist`'s detailed `total` counts games removed from the store, which never appear as cards. ([b35b245](https://github.com/Grinv/steam-games-mcp/commit/b35b245))
+
 ## [0.17.1] - 2026-11-04
 
 ### Fixed
