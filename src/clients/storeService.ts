@@ -125,6 +125,15 @@ function tagIdsFor(names: string[], tagMap: TagMap): number[] | null {
   return ids.every((id): id is number => id !== undefined) ? ids : null;
 }
 
+// Query's price_filters for a discount floor. Steam ignores min_discount_percent
+// at exactly 100 and answers with the whole catalog (verified live 2026-11-05:
+// 90 → 421 matches, 99 → 0, 100 → 198452), so 100 is sent as 99, a superset
+// that the client-side re-check narrows to 100. GetWishlistSortedFiltered's own
+// filter honors 100 and needs no such mapping.
+function queryDiscountFilter(minDiscount: number): Record<string, unknown> {
+  return { min_discount_percent: Math.min(minDiscount, 99) };
+}
+
 function catalogFilters(
   p: {
     minDiscount?: number;
@@ -135,8 +144,7 @@ function catalogFilters(
   tagIds: number[] | undefined,
 ): Record<string, unknown> {
   const filters: Record<string, unknown> = { type_filters: { include_games: true } };
-  if (typeof p.minDiscount === "number")
-    filters.price_filters = { min_discount_percent: p.minDiscount };
+  if (typeof p.minDiscount === "number") filters.price_filters = queryDiscountFilter(p.minDiscount);
   if (p.releasedOnly) filters.released_only = true;
   // release_date_type 1 = released on/after start_date.
   if (p.releasedAfter !== undefined)
@@ -611,7 +619,7 @@ export class StoreServiceClient {
       tagids_must_match: [{ tagids: ids(basedOnTags) }],
     };
     if (typeof opts.minDiscount === "number")
-      filters.price_filters = { min_discount_percent: opts.minDiscount };
+      filters.price_filters = queryDiscountFilter(opts.minDiscount);
     const excludeIds = ids(opts.excludeTags ?? []);
     if (excludeIds.length) filters.tagids_exclude = excludeIds;
     // The tool schema's own min(1).max(25) already bounds this — no need to
@@ -665,9 +673,8 @@ export class StoreServiceClient {
     const { tagMap: filterTagMap, tagIds } = await this.#resolveTagFilter(p.tags, l);
     const post = {
       // Passed through so summarizeDiscover's storeItemFilter re-checks the
-      // discount client-side: Steam's server-side min_discount_percent filter
-      // silently no-ops at exactly 100 (returns the full catalog), so without
-      // this backstop min_discount:100 would leak full-price games.
+      // discount client-side: the server filter is a superset (a bundle's
+      // discount, and 99 standing in for 100 — see queryDiscountFilter).
       minDiscount: p.minDiscount,
       minReview: p.minReview,
       minReviews: p.minReviews,

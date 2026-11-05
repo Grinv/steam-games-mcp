@@ -1107,6 +1107,17 @@ describe("discover_games", () => {
     assert.equal(f.released_only, true);
   });
 
+  test("discover_games sends min_discount 100 as 99, since Steam's Query ignores 100", async (t) => {
+    // Live 2026-11-05: min_discount_percent 99 → 0 matches, 100 → the whole
+    // catalog. 99 keeps the filter catalog-wide; the client re-check keeps 100.
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+    await client.callTool({ name: "discover_games", arguments: { min_discount: 100 } });
+    assert.deepEqual(queryFilters(mock).price_filters, { min_discount_percent: 99 });
+    mock.calls.length = 0;
+    await client.callTool({ name: "discover_games", arguments: { min_discount: 50 } });
+    assert.deepEqual(queryFilters(mock).price_filters, { min_discount_percent: 50 });
+  });
+
   test("discover_games: an unknown tag matches nothing without querying the catalog", async (t) => {
     const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
