@@ -176,7 +176,13 @@ export const discoverGamesOutput = z.strictObject({
 // between the two.
 export const wishlistDetailedFound = z.strictObject({
   found: z.literal(true),
-  total: z.number().describe("The player's full wishlist size, before any filter."),
+  total: z
+    .number()
+    .describe(
+      "The player's full wishlist size, before any filter. Includes games since removed from " +
+        "the Steam store, which never appear in this detailed list, so `matched` can be lower " +
+        "than `total` even with no filter set.",
+    ),
   enriched: z
     .number()
     .describe(
