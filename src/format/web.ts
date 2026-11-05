@@ -189,8 +189,8 @@ export function summarizeOwnedGames(
 }
 
 const COMPARE_PRIVATE_REASON =
-  "One or both profiles/game-details are private. Ask the owner(s) to set Steam → " +
-  "Privacy → Game details = Public.";
+  "One or both profiles/game-details are private, or a SteamID64 has no Steam account behind " +
+  "it. Check the ids, or ask the owner(s) to set Steam → Privacy → Game details = Public.";
 
 // Shared games between two players' FULL libraries (not capped like
 // summarizeOwnedGames — comparing needs the whole list, not just the top N by

@@ -15,10 +15,13 @@ export function notFound(reason: string): z.infer<typeof notFoundReason> {
 // Shared wording for "profile or game-details are private" — used by every
 // summarizer/client that hits this exact Steam condition (a private profile
 // answering with no game_count/games), so the agent sees one consistent
-// explanation regardless of which tool surfaced it.
+// explanation regardless of which tool surfaced it. Steam answers a SteamID64
+// with no account behind it the same way (verified live 2026-11-05 on
+// 76561199999999999 and accountid 0), so both causes are named.
 export const PRIVATE_PROFILE_REASON =
-  "Profile or game-details are private. Ask the owner to set Steam → Privacy → " +
-  "Game details = Public, or this data can't be read.";
+  "Profile or game-details are private, or there is no Steam account with that SteamID64. " +
+  "Check the id (resolve a vanity name with resolve_vanity_url), or ask the owner to set " +
+  "Steam → Privacy → Game details = Public.";
 
 // The two tools that read a profile regardless of its privacy setting
 // (get_player_summary, get_player_bans) can only fail one way, so they say which
