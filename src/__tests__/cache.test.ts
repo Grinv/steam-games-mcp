@@ -15,17 +15,17 @@ describe("bounded size (max)", () => {
     assert.equal(cache.get("c"), 3);
   });
 
-  test("refreshing an existing key at capacity never evicts anything", async () => {
+  test("refreshing an existing key at capacity evicts nothing and moves it to the back", () => {
     const cache = new TtlCache(60_000, 2);
-    await cache.wrap("a", async () => 1);
-    await cache.wrap("b", async () => 2);
-    // "a" already exists, so set()'s eviction check is skipped entirely for it —
-    // this is FIFO-by-insertion, not LRU: refreshing "a" does not protect it
-    // from a later eviction the way an LRU cache's touch would.
-    await cache.wrap("a", async () => 1);
-    await cache.wrap("c", async () => 3); // "a" is still the oldest insertion → evicted
-    assert.equal(cache.get("a"), undefined);
-    assert.equal(cache.get("b"), 2);
+    cache.set("a", 1);
+    cache.set("b", 2);
+    // A refresh (what wrap does once "a" expires) re-inserts it, so a key
+    // refreshed every TTL — the tag dictionary — is no longer the first evicted.
+    cache.set("a", 1);
+    assert.equal(cache.get("b"), 2); // the refresh itself evicted nothing
+    cache.set("c", 3); // "b" is now the oldest → evicted
+    assert.equal(cache.get("a"), 1);
+    assert.equal(cache.get("b"), undefined);
     assert.equal(cache.get("c"), 3);
   });
 });

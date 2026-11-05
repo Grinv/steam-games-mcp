@@ -46,6 +46,10 @@ export class TtlCache {
       const oldest = this.#map.keys().next().value;
       if (oldest !== undefined) this.#map.delete(oldest);
     }
+    // Re-inserted, not updated in place: a Map keeps a key's first insertion
+    // position, so a key refreshed every TTL (the tag dictionary) would
+    // otherwise be the first evicted and lose its stale fallback.
+    this.#map.delete(key);
     this.#map.set(key, { value, expires: Date.now() + this.#ttlMs });
   }
 
