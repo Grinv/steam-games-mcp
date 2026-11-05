@@ -69,8 +69,8 @@ payload distinguishes the two: both subs carry `percent_savings: 0` and the real
 discount survives only as HTML inside `option_text`.
 
 So `StorefrontClient` takes a `PurchasePriceSource` (satisfied by
-`StoreServiceClient`) and overlays `best_purchase_option`'s amounts onto the
-prices it reports. This is the one place the two clients are wired together, and
+`StoreServiceClient`) and overlays the amounts of the app's own package, taken
+from GetItems' purchase options, onto the prices it reports. This is the one place the two clients are wired together, and
 it's why `server.ts` builds the Web API client first. The `currency` code still
 comes from the Storefront row, since GetItems returns none.
 
@@ -81,9 +81,14 @@ priced: 5 report a bundle price (appid 2186680, Warhammer 40,000: Rogue Trader,
 is $49.99 as package 782856 but $48.36 as bundle 67187 "The Darkest Grimdark
 Bundle"), against 2 where the Storefront price is the wrong one. Trusting it
 blindly would therefore trade a rare wrong answer for a commoner one, so the
-overlay applies only when the option names a `packageid` and GetItems doesn't
-call the app free — see `isOwnPackage()` and `summarizePurchasePrices()`. Over
-that same sample the rule changes 2 prices out of 415 overlaid: appid 518790
+overlay uses the option that names this app's own `packageid`, picked by
+`ownPurchaseOption()` from every purchase option, and skips the app when it has
+none or GetItems calls it free — see `summarizePurchasePrices()`. The best
+option alone can't find that package: Yakuza Kiwami's best option is a two-game
+bundle ($19.98), while its own $19.99 package sits among the rest next to the
+$1.99 upgrade (verified live 2026-11-05). Over that same sample, measured
+2026-10 when the overlay still read only a non-bundle best option, the rule
+changed 2 prices out of 415 overlaid: appid 518790
 (theHunter: Call of the Wild) stops reading as **Free** when it costs $19.99,
 and appid 1675200 (Steam Deck) reports the 512 GB OLED model instead of the
 cheapest listed SKU — for hardware and multi-edition apps neither source names
@@ -107,9 +112,9 @@ the card tools (`get_items`, `discover_games`, the detailed wishlist,
 recommendations), which read the service directly. Every card request therefore
 asks for `include_all_purchase_options` and `ownPurchaseOption()` prefers the
 app's own package over whatever Steam called best. Asked up front rather than
-fetched in a follow-up for the ~~1% of apps that need it, because measured
+fetched in a follow-up for the ~1% of apps that need it, because measured
 interleaved, the follow-up round-trip costs about what the bigger payload does
-(~~+40 ms on a 50-app batch, inside run-to-run noise; ~+300 ms on a 200-entry
+(~+40 ms on a 50-app batch, inside run-to-run noise; ~+300 ms on a 200-entry
 catalog page) — so the cheaper design is the one without a second request to
 fail. An app with no own package keeps the bundle price: a null price there would
 read as "not sold in this country".

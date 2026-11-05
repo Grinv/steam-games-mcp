@@ -276,7 +276,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "library, with each result's own playtime_hours (null if not owned). For the last two weeks " +
         "of play instead of the all-time library, use get_recently_played. For checking a FRIEND's " +
         "ownership instead of the player's own, use find_friends_who_own. Requires STEAM_API_KEY and " +
-        "a public profile + game-details visibility. Get the SteamID64 from resolve_vanity_url.",
+        "a public profile + game-details visibility; a private profile, or a SteamID64 with no " +
+        "account behind it, returns found:false. Get the SteamID64 from resolve_vanity_url.",
       inputSchema: z.strictObject({
         steamid,
         check_appids: z
@@ -333,7 +334,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         `For the all-time library by playtime instead (capped at ${OWNED_GAMES_MAX} entries by default, either end ` +
         "of that ordering via `sort`), use get_owned_games. " +
         "Requires STEAM_API_KEY and a public profile with game-details visibility (same requirement " +
-        "as get_owned_games) — otherwise it returns found:false.",
+        "as get_owned_games) — otherwise, or for a SteamID64 with no account behind it, it returns " +
+        "found:false.",
       inputSchema: z.strictObject({ steamid }),
       outputSchema: getRecentlyPlayedOutput,
       annotations: READ_ONLY,
@@ -364,7 +366,8 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         `${RECOMMENDATION_POOL_SIZE}-entry catalog scan, so a heavy exclude_tags/min_discount ` +
         "combination can return fewer than `limit` — there's no larger scan to fall back to. " +
         "Requires STEAM_API_KEY and a public profile with game-details visible (same requirement as " +
-        "get_owned_games) — found:false is also returned if the player owns no games at all, or if too " +
+        "get_owned_games) — found:false is also returned for a SteamID64 with no account behind it, if " +
+        "the player owns no games at all, or if too " +
         "few of their played games have resolvable tags to build a taste profile.",
       inputSchema: z.strictObject({
         steamid,
@@ -418,8 +421,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         "(names, descriptions, global rarity) independent of any player, use get_game_achievements " +
         "instead; for just the rarity without a key, use get_global_achievements. Requires " +
         "STEAM_API_KEY and a public profile with game-details visibility — otherwise it returns " +
-        "found:false — which is also what an appid with no achievements, or no such appid at " +
-        "all, returns; the three are not reported separately, so confirm the appid with get_game. ",
+        "found:false — which is also what a SteamID64 with no account behind it, an appid with no " +
+        "achievements, or no such appid at all returns; these are not always told apart, so " +
+        "confirm the appid with get_game. ",
       inputSchema: z.strictObject({
         steamid,
         appid,
