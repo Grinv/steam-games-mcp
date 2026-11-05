@@ -113,12 +113,15 @@ export class StorefrontClient {
           // sold in this country", so naming only the first sends the agent off to
           // re-search a perfectly good appid. Confirmed live: appid 1174180 (Red
           // Dead Redemption 2) is a full record under cc=US and success:false
-          // under cc=RU.
+          // under cc=RU. A game removed from the store answers the same in every
+          // region (2026-11-05: 219820, 264040, 303700, 453170, all still on a
+          // public wishlist), so that's named too.
           throw new ApiError({
             code: "not_found",
             message:
               `No Steam app with id ${appid} in region ${cc.toUpperCase()} — either the appid ` +
-              `doesn't exist, or it isn't available in that country (try another \`country\`).`,
+              `doesn't exist or was removed from the store, or it isn't available in that ` +
+              `country (try another \`country\`).`,
           });
         }
         return entry.data;
