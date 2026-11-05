@@ -461,9 +461,10 @@ export class StoreServiceClient {
   // The base-game purchase price of each appid, for correcting the Storefront
   // API's price_overview (see format/storefront.ts's overridePrice() for the
   // upstream bug this exists to work around). Deliberately different from
-  // getItems(): no tag dictionary (nothing displays tags here) and an EMPTY
-  // data_request, which already returns best_purchase_option and keeps the
-  // payload ~1 KB per item instead of ~4.5 KB.
+  // getItems(): no tag dictionary (nothing displays tags here), and the
+  // data_request asks only for every purchase option. best_purchase_option
+  // alone is often a bundle, so the app's own package has to be picked from
+  // the full list (format/store.ts's summarizePurchasePrices()).
   //
   // Best-effort by contract: this only ever improves numbers the caller already
   // has, so a chunk that fails just leaves its appids on the Storefront price
@@ -499,7 +500,7 @@ export class StoreServiceClient {
             input_json: JSON.stringify({
               ids: chunk.map((appid) => ({ appid })),
               context,
-              data_request: {},
+              data_request: { include_all_purchase_options: true },
             }),
           },
           { hasCredentials: false },

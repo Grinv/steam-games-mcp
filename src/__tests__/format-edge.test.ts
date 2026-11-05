@@ -348,6 +348,28 @@ describe("summarizePurchasePrices", () => {
     assert.deepEqual(s["1"], { final: "$9.99", initial: "$9.99", discount_percent: 0 });
   });
 
+  test("a bundle best option is passed over for the app's own package", () => {
+    // Yakuza Kiwami (3717330), live 2026-11-05: best option is a two-game
+    // bundle, the base package sits among purchase_options next to a $1.99
+    // upgrade SKU that the Storefront reports as the game's price.
+    const s = summarizePurchasePrices({
+      response: {
+        store_items: [
+          {
+            appid: 3717330,
+            best_purchase_option: { bundleid: 63576, formatted_final_price: "$19.98" },
+            purchase_options: [
+              { bundleid: 63576, formatted_final_price: "$19.98" },
+              { packageid: 1308688, formatted_final_price: "$19.99" },
+              { packageid: 1466003, formatted_final_price: "$1.99" },
+            ],
+          },
+        ],
+      },
+    });
+    assert.deepEqual(s["3717330"], { final: "$19.99", initial: "$19.99", discount_percent: 0 });
+  });
+
   test("items with no own-package option or no appid are skipped, not emitted as nulls", () => {
     // Skipping is what makes overridePrice() leave the Storefront answer standing
     // for a free/unreleased/region-locked app instead of blanking its price.

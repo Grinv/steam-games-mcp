@@ -207,11 +207,15 @@ export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
   const out: Record<string, z.infer<typeof purchasePricesSchema>[string]> = {};
   for (const it of r.response?.store_items ?? []) {
     if (typeof it.appid !== "number") continue;
-    // A bundle price prices a set of games, not this one — correcting a
-    // Storefront price with it would trade a rare wrong answer for a commoner
-    // one (see isOwnPackage()). Skipping leaves the Storefront price standing,
-    // which in every measured bundle case was the right base-game price.
-    if (!isOwnPackage(it.best_purchase_option)) continue;
+    // The app's OWN package, like every card (ownPurchaseOption): when Valve's
+    // best option is a bundle, the own package is still among purchase_options
+    // (verified live 2026-11-05: Yakuza Kiwami 3717330's best option became
+    // bundle 63576, which left its Storefront upgrade-SKU price of $1.99
+    // standing over the real $19.99). With no own package at all, a bundle
+    // price prices a set of games, not this one, so skip and keep the
+    // Storefront price.
+    const own = ownPurchaseOption(it);
+    if (!isOwnPackage(own)) continue;
     // GetItems' own is_free is the reliable one, and it's what separates a
     // genuinely free app from one appdetails only THINKS is free: Dokimon Quest
     // (appid 2019300) is free and priced $0.00 here, while theHunter: Call of
@@ -220,7 +224,7 @@ export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
     // paid package of its own", which is what lets it outrank appdetails'
     // is_free flag in format/storefront.ts's price().
     if (it.is_free) continue;
-    const { discount_pct, final, original } = priceFields(it.best_purchase_option);
+    const { discount_pct, final, original } = priceFields(own);
     if (!final) continue;
     out[String(it.appid)] = {
       final,

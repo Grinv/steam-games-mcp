@@ -82,8 +82,8 @@ type PriceOverride = PurchasePrices[string];
  *  correctly reports its Rp 579 000 base, which happens to sit first there.
  *  Nothing in the payload flags the case — both subs carry percent_savings 0 and
  *  the real discount survives only as HTML inside option_text — so the amounts
- *  come from IStoreBrowseService/GetItems' best_purchase_option, Valve's own
- *  answer to "which package is THE one" (clients/storeService.ts's
+ *  come from the app's own package in IStoreBrowseService/GetItems' purchase
+ *  options, the same one every store card prices (clients/storeService.ts's
  *  getPurchasePrices).
  *
  *  Only the three amount fields are replaced; `currency` stays from the
