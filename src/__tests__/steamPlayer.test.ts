@@ -1278,7 +1278,7 @@ describe("compare_players", () => {
     assert.equal(s.games[0]!.appid, 570);
   });
 
-  test("compare_players reports found:false naming which player failed on a genuine transient error, not a raw thrown error", async (t) => {
+  test("compare_players reports a transient upstream failure as a retryable tool error, not found:false", async (t) => {
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       if (!url.includes("GetOwnedGames")) return jsonResponse({});
       if (url.includes("steamid=76561197960287931")) return jsonResponse({}, { status: 500 });
@@ -1288,10 +1288,8 @@ describe("compare_players", () => {
       name: "compare_players",
       arguments: { steamid: "76561197960287930", other_steamid: "76561197960287931" },
     });
-    assert.equal(res.isError, undefined);
-    const s = res.structuredContent as { found: boolean; reason: string };
-    assert.equal(s.found, false);
-    assert.match(s.reason, /second player/i);
+    assert.equal(res.isError, true);
+    assert.match(textOf(res), /5xx\). Please retry/);
   });
 });
 

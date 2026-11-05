@@ -208,9 +208,9 @@ export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): 
         `shared game, unlike get_owned_games whose own list stops at ${OWNED_GAMES_MAX} by playtime by default — but ` +
         `the returned list here is itself capped at the top ${COMPARE_SHARED_MAX} shared games by combined playtime ` +
         "(check `returned` vs `shared_count`). Requires STEAM_API_KEY and both " +
-        "profiles' game-details to be public — otherwise it returns found:false, which ALSO " +
-        "covers one player's library lookup failing transiently; read `reason`, which says which " +
-        "case it is and whether retrying is worth it. Omit steamid to " +
+        "profiles' game-details to be public. A private profile, or a SteamID64 with no account " +
+        "behind it, returns found:false; an upstream failure returns a tool error worth " +
+        "retrying. Omit steamid to " +
         "compare against yourself (STEAM_ID).",
       inputSchema: z.strictObject({
         steamid,
