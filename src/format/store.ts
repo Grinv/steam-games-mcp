@@ -353,8 +353,9 @@ export function summarizeRecommendations(
         it.visible !== false &&
         typeof it.appid === "number" &&
         !ownedAppids.has(it.appid) &&
-        // Client-side discount backstop: like summarizeDiscover, Steam's
-        // server-side min_discount_percent no-ops at 100, so re-check here.
+        // Client-side discount backstop, like summarizeDiscover: the server
+        // filter is a superset (a bundle's discount, and 99 standing in for
+        // 100 — see clients/storeService.ts's queryDiscountFilter).
         (minDiscount === undefined || (ownPurchaseOption(it)?.discount_pct ?? 0) >= minDiscount),
     )
     .map((it) => {
