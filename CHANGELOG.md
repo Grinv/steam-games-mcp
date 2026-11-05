@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-11-05
+
 ### Fixed
 
 - Fix `get_game` and `get_prices` showing an upgrade SKU's price when the best purchase option is a bundle (Yakuza Kiwami: $1.99, not $19.99). ([e3baf80](https://github.com/Grinv/steam-games-mcp/commit/e3baf80))
