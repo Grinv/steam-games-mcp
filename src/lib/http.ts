@@ -6,14 +6,7 @@ import type { Logger } from "./logger.ts";
 import { USER_AGENT } from "../version.ts";
 
 interface RequestOptions {
-  method?: string;
-  headers?: Record<string, string>;
-  /** Already-serialized request body (e.g. URLSearchParams string or JSON). */
-  body?: string;
   query?: Record<string, string | number | boolean | undefined>;
-  timeoutMs?: number;
-  /** Max retry attempts for retryable failures (network/timeout/5xx/429). */
-  retries?: number;
   /** Per-request override of HttpClientOptions.hasCredentials — for a call that
    *  opportunistically attaches a credential without needing one (e.g. a
    *  keyless-by-design endpoint sent a key anyway because one happens to be
@@ -25,8 +18,8 @@ interface RequestOptions {
 interface HttpClientOptions {
   baseUrl: string;
   logger: Logger;
-  defaultHeaders?: Record<string, string>;
   timeoutMs?: number;
+  /** Max retry attempts for retryable failures (network/timeout/5xx/429). */
   retries?: number;
   /** Called before each request; lets callers throttle (rate limiting). */
   beforeRequest?: () => Promise<void> | void;
@@ -46,11 +39,7 @@ export class HttpClient {
   }
 
   async getJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    return this.requestJson<T>(path, { ...options, method: options.method ?? "GET" });
-  }
-
-  async requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    const text = await this.#request(path, options);
+    const text = await this.#request(path, options, "application/json");
     if (text === undefined || text.length === 0) return undefined as T;
     try {
       return JSON.parse(text) as T;
@@ -65,27 +54,25 @@ export class HttpClient {
 
   /** The raw response body, for the rare upstream that doesn't speak JSON —
    *  Steam's community profile view (`?xml=1`) is the only one here. Same
-   *  timeouts, retries and ApiError mapping as requestJson. */
+   *  timeouts, retries and ApiError mapping as getJson. */
   async getText(path: string, options: RequestOptions = {}): Promise<string> {
-    return (
-      (await this.#request(path, {
-        ...options,
-        method: options.method ?? "GET",
-        headers: { Accept: "*/*", ...options.headers },
-      })) ?? ""
-    );
+    return (await this.#request(path, options, "*/*")) ?? "";
   }
 
-  async #request(path: string, options: RequestOptions): Promise<string | undefined> {
+  async #request(
+    path: string,
+    options: RequestOptions,
+    accept: string,
+  ): Promise<string | undefined> {
     const url = this.#buildUrl(path, options.query);
-    const retries = options.retries ?? this.#opts.retries ?? 2;
-    const timeoutMs = options.timeoutMs ?? this.#opts.timeoutMs ?? 15000;
+    const retries = this.#opts.retries ?? 2;
+    const timeoutMs = this.#opts.timeoutMs ?? 15000;
 
     let attempt = 0;
     for (;;) {
       if (this.#opts.beforeRequest) await this.#opts.beforeRequest();
       try {
-        return await this.#once(url, options, timeoutMs);
+        return await this.#once(url, options, accept, timeoutMs);
       } catch (err) {
         const apiErr = err instanceof ApiError ? err : toNetworkError(err);
         if (!apiErr.retryable || attempt >= retries) throw apiErr;
@@ -105,6 +92,7 @@ export class HttpClient {
   async #once(
     url: string,
     options: RequestOptions,
+    accept: string,
     timeoutMs: number,
   ): Promise<string | undefined> {
     // Deliberately NOT AbortSignal.timeout(): its internal timer is unref'd
@@ -120,14 +108,7 @@ export class HttpClient {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetch(url, {
-        method: options.method ?? "GET",
-        headers: {
-          "User-Agent": USER_AGENT,
-          Accept: "application/json",
-          ...this.#opts.defaultHeaders,
-          ...options.headers,
-        },
-        ...(options.body === undefined ? {} : { body: options.body }),
+        headers: { "User-Agent": USER_AGENT, Accept: accept },
         signal: controller.signal,
       });
       if (!res.ok) {
