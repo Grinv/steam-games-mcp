@@ -205,6 +205,20 @@ describe("summarizeWishlistDetailed", () => {
     assert.equal(s.items[0]!.appid, 1); // priority 1 sorts before priority 5
   });
 
+  test("unranked entries (priority 0) come after ranked ones, in Steam's order", () => {
+    // Steam's sort_order 0 lists ranked items first, then unranked oldest-first.
+    const s = summarizeWishlistDetailed(
+      { response: { items: [mk(3, 0), mk(4, 0), mk(2, 2), mk(1, 1)] } },
+      undefined,
+      {},
+      { total: 4, exact: true },
+    ) as { items: { appid: number }[] };
+    assert.deepEqual(
+      s.items.map((i) => i.appid),
+      [1, 2, 3, 4],
+    );
+  });
+
   test("exact (all filters server-side): every listed entry counts as matched, carded or not", () => {
     // Only the displayed page needs cards then; the rest are listed bare.
     const s = summarizeWishlistDetailed(

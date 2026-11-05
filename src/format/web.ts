@@ -390,6 +390,9 @@ export interface WishlistResponse {
 
 // A wishlist can hold tens of thousands of items; sort by priority (1 = top of
 // the list) and cap. Names aren't included — use get_game per appid for details.
+// Priority 0 means unranked (recently added items): Steam's own wishlist order
+// puts those after every ranked item, oldest-added first (verified live
+// 2026-11-05 against GetWishlistSortedFiltered's sort_order 0).
 export const WISHLIST_LIGHT_MAX = 100;
 export function summarizeWishlist(
   r: WishlistResponse,
@@ -404,7 +407,10 @@ export function summarizeWishlist(
       items: [],
     });
   }
-  const sorted = items.toSorted((a, b) => (a.priority ?? 1e9) - (b.priority ?? 1e9));
+  const sorted = items.toSorted(
+    (a, b) =>
+      (a.priority || 1e9) - (b.priority || 1e9) || (a.date_added ?? 0) - (b.date_added ?? 0),
+  );
   const { included, returned } = capList(sorted, max);
   return wishlistLightFound.parse({
     found: true,

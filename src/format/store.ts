@@ -281,10 +281,12 @@ export function summarizeWishlistDetailed(
       priority: i.priority ?? null,
       added: isoDay(i.date_added),
     }));
-  // Rank by discount when a discount filter is active; else keep wishlist priority.
+  // Rank by discount when a discount filter is active; else keep wishlist
+  // priority, unranked (priority 0) last like format/web.ts's summarizeWishlist.
+  // The sort is stable, so ties keep Steam's own (oldest-added-first) order.
   const byDiscount = opts.onSaleOnly || typeof opts.minDiscount === "number";
   cards.sort((a, b) =>
-    byDiscount ? b.discount_pct - a.discount_pct : (a.priority ?? 1e9) - (b.priority ?? 1e9),
+    byDiscount ? b.discount_pct - a.discount_pct : (a.priority || 1e9) - (b.priority || 1e9),
   );
   const { included, returned } = capList(cards, WISHLIST_DETAIL_MAX);
   const unchecked = ctx.exact ? 0 : items.length - enriched.length;

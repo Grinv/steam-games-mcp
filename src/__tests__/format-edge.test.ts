@@ -13,6 +13,7 @@ import {
   summarizeFriendsWhoOwn,
   summarizeNews,
   summarizeRecentlyPlayed,
+  summarizeWishlist,
 } from "../format/web.ts";
 import {
   summarizeGlobalAchievements,
@@ -331,6 +332,26 @@ describe("summarizeSearchSuggestions", () => {
     assert.equal(s.total, 0);
     assert.deepEqual(s.results, []);
   });
+});
+
+test("summarizeWishlist puts unranked (priority 0) entries last, oldest-added first", () => {
+  // GetWishlist lists by appid; Steam's own order is ranked 1..N, then
+  // unranked by date_added. Before the fix, 100 unranked entries filled the
+  // whole capped page of a 370-item wishlist.
+  const s = summarizeWishlist({
+    response: {
+      items: [
+        { appid: 10, priority: 0, date_added: 300 },
+        { appid: 20, priority: 2, date_added: 100 },
+        { appid: 30, priority: 0, date_added: 200 },
+        { appid: 40, priority: 1, date_added: 400 },
+      ],
+    },
+  }) as { items: { appid: number }[] };
+  assert.deepEqual(
+    s.items.map((i) => i.appid),
+    [40, 20, 30, 10],
+  );
 });
 
 describe("summarizePurchasePrices", () => {
