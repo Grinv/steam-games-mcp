@@ -40,9 +40,31 @@ function need(cond: unknown, what: string): asserts cond {
  * optional/`unknown`, and each check asserts what it relies on itself.
  */
 const json = <T>(res: Response): Promise<T> => res.json() as Promise<T>;
+/** Names of checks a host kept rate-limiting, so they verified nothing. */
+const rateLimited: string[] = [];
+/** A check whose host still answered 429/420 after retries. */
+class RateLimited extends Error {}
+/**
+ * fetch that waits out a rate limit (Retry-After, else 5 s then 15 s) before
+ * giving up with RateLimited. A 429 says the host is busy, not that its API
+ * drifted, and steamcommunity.com answers it to GitHub's runners often enough
+ * that most releases needed a manual re-run of this gate.
+ */
+async function politeFetch(url: string, init?: RequestInit): Promise<Response> {
+  for (const fallbackMs of [5000, 15000]) {
+    const res = await fetch(url, init);
+    if (res.status !== 429 && res.status !== 420) return res;
+    const hinted = Number(res.headers.get("retry-after")) * 1000;
+    await delay(hinted > 0 ? Math.min(hinted, 30_000) : fallbackMs);
+  }
+  const res = await fetch(url, init);
+  if (res.status === 429 || res.status === 420)
+    throw new RateLimited(`still rate-limited (${res.status}) after two retries`);
+  return res;
+}
 /** GET + 200 + JSON, the common prologue of every check without its own status handling. */
 const getJson = async <T>(url: string): Promise<T> => {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const res = await politeFetch(url, { headers: { Accept: "application/json" } });
   if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
   return json<T>(res);
 };
@@ -202,7 +224,7 @@ const checks: Check[] = [
     name: "web GetFriendList (key)",
     skip: KEY ? undefined : "STEAM_API_KEY not set",
     run: async () => {
-      const res = await fetch(
+      const res = await politeFetch(
         `${API}/ISteamUser/GetFriendList/v1/?key=${KEY}&steamid=${PLAYER}&relationship=friend`,
         { headers: { Accept: "application/json" } },
       );
@@ -352,7 +374,7 @@ const checks: Check[] = [
       // STEAM_ID through <steamID64> here when no key is set, so get_wishlist and
       // get_followed_games keep working without one. Uses Valve's own well-known
       // vanity ("gabelogannewell") rather than a personal profile.
-      const res = await fetch(`${COMMUNITY}/id/gabelogannewell/?xml=1`, {
+      const res = await politeFetch(`${COMMUNITY}/id/gabelogannewell/?xml=1`, {
         headers: { Accept: "*/*" },
       });
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
@@ -425,7 +447,7 @@ const checks: Check[] = [
     name: "web GetPlayerAchievements (key)",
     skip: KEY ? undefined : "STEAM_API_KEY not set",
     run: async () => {
-      const res = await fetch(
+      const res = await politeFetch(
         `${API}/ISteamUserStats/GetPlayerAchievements/v1/?key=${KEY}&steamid=${PLAYER}&appid=${APPID}`,
         { headers: { Accept: "application/json" } },
       );
@@ -542,6 +564,12 @@ for (const check of checks) {
     await check.run();
     console.log(`  ok   ${check.name}`);
   } catch (err) {
+    if (err instanceof RateLimited) {
+      rateLimited.push(check.name);
+      ran -= 1;
+      console.log(`  skip ${check.name} (${err.message})`);
+      continue;
+    }
     failures.push(check.name);
     console.error(`  FAIL ${check.name}: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -552,10 +580,23 @@ if (failures.length) {
   console.error(`\n${failures.length}/${ran} API checks failed.`);
   process.exit(1);
 }
+if (ran === 0 || rateLimited.length > ran) {
+  // One busy host is noise; more rate-limited checks than verified ones means
+  // the gate checked too little to vouch for a release.
+  console.error(
+    `\nOnly ${ran} API check(s) ran to completion; ${rateLimited.length} stayed rate-limited.`,
+  );
+  process.exit(1);
+}
 console.log(`\nAll ${ran} API check(s) passed${ran < checks.length ? " (some skipped)" : ""}.`);
 if (privateOnly.length)
   console.log(
     `Note: ${privateOnly.join(", ")} only returned a private/empty shape for ${PLAYER}, so ` +
       "their fields went unverified. Set STEAM_ID to a SteamID64 with public game details " +
       "to check them.",
+  );
+if (rateLimited.length)
+  console.log(
+    `Note: ${rateLimited.join(", ")} stayed rate-limited after retries and went unverified; ` +
+      "re-run `npm run check:api` locally to check them.",
   );
