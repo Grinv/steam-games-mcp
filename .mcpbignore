@@ -22,7 +22,7 @@ glama.json
 
 # Tooling / config
 tsconfig.json
-tsup.config.ts
+tsdown.config.ts
 eslint.config.js
 .prettierrc.json
 .gitattributes

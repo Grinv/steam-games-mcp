@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// The .mcpb ships dist/index.js with NO node_modules, so the tsup build MUST
-// inline every runtime dependency (see tsup.config.ts `noExternal`). A dep left
+// The .mcpb ships dist/index.js with NO node_modules, so the tsdown build MUST
+// inline every runtime dependency (see tsdown.config.ts `deps.alwaysBundle`). A dep left
 // external makes the bundle crash at startup with ERR_MODULE_NOT_FOUND in any
 // client that doesn't install deps for us. This guards against that regression:
-// if a new dependency is added without `noExternal`, this fails.
+// if a new dependency is added without `deps.alwaysBundle`, this fails.
 //
-// Tests run from src/; the repo root is one level up, and the tsup bundle
+// Tests run from src/; the repo root is one level up, and the tsdown bundle
 // is at repo/dist/index.js (built by `npm run build`, which CI runs before tests).
 const root = join(process.cwd(), "..");
 
@@ -29,7 +29,7 @@ test("built bundle inlines all runtime dependencies (self-contained)", () => {
     const externalImport = new RegExp(`from\\s*["']${escaped}(/[^"']*)?["']`);
     assert.ok(
       !externalImport.test(bundle),
-      `dist/index.js still imports "${dep}" externally — add it to tsup.config.ts noExternal`,
+      `dist/index.js still imports "${dep}" externally — add it to tsdown.config.ts deps.alwaysBundle`,
     );
   }
 });

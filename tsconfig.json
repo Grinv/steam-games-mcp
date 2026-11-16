@@ -19,5 +19,5 @@
     "allowJs": true,
     "checkJs": true
   },
-  "include": ["src/**/*", "scripts/**/*", "eslint.config.js", "tsup.config.ts"]
+  "include": ["src/**/*", "scripts/**/*", "eslint.config.js", "tsdown.config.ts"]
 }

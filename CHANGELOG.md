@@ -6,6 +6,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Build the bundle with tsdown instead of tsup, shrinking `dist/index.js` from 890 kB to 527 kB.
+
 ## [0.17.2] - 2026-11-05
 
 ### Fixed

@@ -64,7 +64,7 @@ scripts/          # run-tests.ts, sync-version.ts (generic), check-api.ts
 ## Commands
 
 ```sh
-npm run build          # tsc --noEmit + tsup → dist/index.js (single ESM bundle)
+npm run build          # tsc --noEmit + tsdown → dist/index.js (single ESM bundle)
 npm test               # node:test straight on src/**/*.test.ts (native type stripping, no build)
 npm run test:coverage  # same, with coverage (gate: ~80%)
 npm run lint           # eslint
@@ -81,10 +81,10 @@ npm run inspector      # run under the MCP Inspector
   what language the working conversation happens to be in.
 - Runtime floor is **Node ≥ 22.18** — the first 22.x where type stripping is
   on by default (and warning-free), which is what lets `npm test` and every
-  `scripts/*.ts` run as plain `.ts` with no build step; tsup 9 needs it too.
+  `scripts/*.ts` run as plain `.ts` with no build step; tsdown needs it too.
   The range stays open-ended (`>=22.18.0`) because it guards the _runtime_
   bundle, which needs nothing newer. For development use 22.18+, 24.11+ or
-  26+: Node 23.0–23.5 has no default type stripping, and tsup 9's own engines
+  26+: Node 23.0–23.5 has no default type stripping, and tsdown's own engines
   skip 23.x and 24.0–24.10.
   Declared in both `package.json` `engines` and `manifest.json`
   `compatibility.runtimes.node` — a test keeps them equal. Because Node only
@@ -92,9 +92,8 @@ npm run inspector      # run under the MCP Inspector
   namespaces or parameter properties) and `allowImportingTsExtensions`
   (relative imports use `.ts`, not `.js`). **No `using`/`await using`** —
   esbuild used to downlevel it for tests, but Node 22's V8 12.4 can't parse
-  it; register cleanup with `t.after()` instead. tsup targets `node22`
-  (esbuild's Node targets are major-version-only, so this doesn't need to
-  track the patch floor); `tsconfig.json` targets `ES2024` plus only the
+  it; register cleanup with `t.after()` instead. tsdown reads its target
+  from `engines.node` (`node22.18.0`); `tsconfig.json` targets `ES2024` plus only the
   ES2025 libs V8 12.4 ships (`ES2025.Collection` Set methods,
   `ES2025.Iterator` helpers) — not full `ES2025`, whose `Promise.try`,
   `RegExp.escape` and `Float16Array` need Node 24. `.nvmrc` pins the
@@ -105,7 +104,7 @@ npm run inspector      # run under the MCP Inspector
   will happily accept an API that only exists past 22.18; that CI job is the
   only thing that catches it.
 - `tsc` (`npm run typecheck`, part of `npm run build`) also covers
-  `scripts/`, `tsup.config.ts` and `eslint.config.js` — the latter via
+  `scripts/`, `tsdown.config.ts` and `eslint.config.js` — the latter via
   `allowJs`/`checkJs` plus ESLint's typed `defineConfig()` — so a config typo
   (unknown key, misspelled severity or preset) fails the build. Rule _options_
   stay untyped (`unknown[]`); `eslint` itself validates those at run time.

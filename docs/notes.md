@@ -27,7 +27,7 @@
     resolved"), on 24/26 they pass (see the comment there);
   - widen `tsconfig.json` `lib` from `ES2024` + `ES2025.Collection`/
     `ES2025.Iterator` to full `ES2025` (`Promise.try`, `RegExp.escape`,
-    `Float16Array`), and bump the tsup `target` to `node24`.
+    `Float16Array`); tsdown's target follows `engines.node` on its own.
 
 - Move `eslint.config.js` to `eslint.config.ts` once ESLint loads TS configs
   natively without `--flag unstable_native_nodejs_ts_config` (ESLint 10.13

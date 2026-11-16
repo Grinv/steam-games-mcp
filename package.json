@@ -37,7 +37,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "npm run typecheck && tsup",
+    "build": "npm run typecheck && tsdown",
     "test": "node scripts/run-tests.ts",
     "test:coverage": "node scripts/run-tests.ts --coverage",
     "preversion": "node scripts/preversion-check.ts",
@@ -58,11 +58,11 @@
     "@eslint/js": "10.0.1",
     "@modelcontextprotocol/client": "2.4.0",
     "@types/node": "26.6.6",
-    "eslint": "10.14.0",
+    "eslint": "10.15.0",
     "eslint-config-prettier": "10.1.8",
-    "prettier": "3.9.10",
-    "tsup": "9.0.0",
+    "prettier": "3.10.1",
+    "tsdown": "0.23.7",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.72.1"
+    "typescript-eslint": "8.72.2"
   }
 }
