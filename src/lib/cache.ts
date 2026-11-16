@@ -30,9 +30,11 @@ export class TtlCache {
   // the second now shares the first's promise instead.
   readonly #pending = new Map<string, Promise<string>>();
 
-  /** `maxSize` bounds the total cached text, in characters (≈ bytes for
-   *  Steam's JSON); the oldest entries are evicted past it. */
-  constructor(ttlMs: number, maxSize = 32 * 1024 * 1024) {
+  /** `maxSize` bounds the total cached text in characters; the oldest
+   *  entries are evicted past it. V8 keeps a string with any non-Latin-1
+   *  character (a Russian or Chinese store page) at 2 bytes per character, so
+   *  the default 16M characters is at most ~32 MB of memory per client. */
+  constructor(ttlMs: number, maxSize = 16 * 1024 * 1024) {
     this.#ttlMs = ttlMs;
     this.#maxSize = maxSize;
   }

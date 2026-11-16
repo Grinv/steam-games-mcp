@@ -108,6 +108,25 @@ test("an unusable body that may be a hiccup is retried like a 5xx; a definitive 
   assert.equal(calls - before, 1);
 });
 
+test("a bug inside validate propagates as itself: not a network failure, not retried, no stale copy", async (t) => {
+  const mock = mockFetch(() => jsonResponse({ v: 1 }));
+  installFetch(t, mock);
+  const c = client({ retries: 2, cacheTtlMs: 1 });
+  await c.getJson("thing", { cache: true }); // a good copy to fall back on
+  await new Promise((r) => setTimeout(r, 5));
+  const buggy = () => {
+    throw new TypeError("summarizer bug");
+  };
+  for (const cache of [false, true]) {
+    const before = mock.calls.length;
+    await assert.rejects(
+      () => c.getJson("thing", { cache, validate: buggy }),
+      (err: unknown) => err instanceof TypeError,
+    );
+    assert.equal(mock.calls.length - before, 1, `cache=${cache}: no retry`);
+  }
+});
+
 test("Retry-After lands on the typed retryAfterMs field, not in cause", async (t) => {
   installFetch(
     t,

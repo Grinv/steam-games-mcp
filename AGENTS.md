@@ -32,7 +32,8 @@ src/
                   #   builds its return value via `schema.parse({...})`, see Conventions);
                   #   storeCard.ts shares store.schemas.ts with store.ts
   lib/            # GENERIC carcass: http, rateLimit, cache, concurrency, errors,
-                  #   logger, result
+                  #   logger, result, call (the tool call's scope: cancellation,
+                  #   optional()/optionalParts(), CallCancelled)
   clients/        # storefront.ts (keyless store; takes storeService as a
                   #   PurchasePriceSource, because Storefront prices are wrong —
                   #   see docs/architecture.md), web.ts (official Web API; key
@@ -128,6 +129,12 @@ npm run inspector      # run under the MCP Inspector
     and "is this transient" is only ever `err.retryable` — never a code list
     re-derived at a call site. A client method maps only its own endpoint's
     quirks (e.g. GetFriendList's 401 = private), and only by `code`.
+  - **Exactly one place turns a non-`ApiError` into an `ApiError`**:
+    `HttpClient#once`, for `fetch`'s own rejection (network/timeout).
+    Everywhere else — a retry loop, a `validate`/`check` hook, a cache
+    fallback — a non-`ApiError` is a bug and propagates unchanged; widening a
+    `try` around new code must not route that code's bugs into a catch that
+    retries, degrades or answers from cache.
   - **Translate** in one place, `toProblem()` in `lib/result.ts`: an RFC 9457
     problem built from `code`/`status`/`detail` via a `Record` table (a new
     code without an entry doesn't compile). Anything that isn't an `ApiError`
@@ -184,7 +191,10 @@ npm run inspector      # run under the MCP Inspector
   co-located schema's `schema.parse({...})` (schema-first: the schema is the
   single source of truth, so the shaper and its `outputSchema` can't drift
   apart) — `.parse()` calls and schema imports belong only in `format/`, never
-  in `clients/`. Trim responses for token efficiency (cap big lists like a
+  in `clients/`. One deliberate exception: `summarizePurchasePrices` shapes a
+  Steam payload that only feeds a price correction, so it `safeParse`s and
+  throws a `bad_response` ApiError on a mismatch (Steam's unusable answer,
+  costing the correction) instead of `parse` (our bug, failing the call). Trim responses for token efficiency (cap big lists like a
   player's library, a game's achievements, or a friend list).
 - **Never use `z.date()`/`z.bigint()`/`z.nan()`/`.transform()`/`z.map()`/`z.set()`
   in a tool's `inputSchema`/`outputSchema`.** The SDK converts every registered

@@ -12,6 +12,7 @@ import {
   jsonResult,
   ownProblem,
   problemResult,
+  problemSummary,
   toProblem,
   type ToolResult,
 } from "../lib/result.ts";
@@ -67,9 +68,12 @@ export function toolOutput(logger: Logger): ToolOutput {
     }
     for (const { err, storedAt } of state.stale) {
       logger.warn("served stale cache data after:", err);
+      // problemSummary, not the full detail: answering with a stale copy
+      // means the failure was taken as passing, so its definitive reading
+      // (e.g. "your language is invalid") would mislead.
       notes.add(
         `Part of this answer is a cached copy from ${new Date(storedAt).toISOString()}, ` +
-          `because Steam failed: ${toProblem(err, logger).detail}`,
+          `because Steam's latest answer failed: ${problemSummary(err)}.`,
       );
     }
     return [...notes];
@@ -84,10 +88,10 @@ export function toolOutput(logger: Logger): ToolOutput {
       result = await callScope.run(state, fn);
     } catch (err) {
       // The client's own decision, not a failure: nothing to log. (The SDK
-      // doesn't send a cancelled call's result anyway.)
-      if (err instanceof CallCancelled || state.signal?.aborted) {
-        return problemResult(ownProblem("cancelled"));
-      }
+      // doesn't send a cancelled call's result anyway.) Only CallCancelled
+      // itself — every abort path raises it — so a bug that happens to land
+      // alongside a cancel is still logged.
+      if (err instanceof CallCancelled) return problemResult(ownProblem("cancelled"));
       return problemResult(toProblem(err, logger));
     }
     const notes = notesOf(state);

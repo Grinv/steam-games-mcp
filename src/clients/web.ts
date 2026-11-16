@@ -78,9 +78,11 @@ const PRIVATE_FRIENDS_REASON =
 
 // The codes Steam answers for an appid that simply has no achievement data.
 const APPID_SPECIFIC_CODES: readonly ApiErrorCode[] = ["forbidden", "bad_request", "not_found"];
-function isAppidSpecific(err: unknown): boolean {
+function isAppidSpecific(err: unknown): err is ApiError {
   return err instanceof ApiError && APPID_SPECIFIC_CODES.includes(err.code);
 }
+const hasAchievements = (schema: GameSchemaResponse) =>
+  (schema.game?.availableGameStats?.achievements?.length ?? 0) > 0;
 // Of those, only the 403 is also what Steam's edge answers under load
 // (live-audit), so it alone is ambiguous: a cached list is preferred to it.
 // A 400/404 is Steam's current answer about the appid, and wins.
@@ -418,13 +420,14 @@ export class SteamWebClient {
       return notFound(PRIVATE_PROFILE_REASON);
     }
     try {
-      const schema = await this.#get<GameSchemaResponse>("ISteamUserStats/GetSchemaForGame/v2/", {
-        appid,
-        l,
-      });
-      const has = (schema.game?.availableGameStats?.achievements?.length ?? 0) > 0;
+      // The same cached request get_game_achievements makes.
+      const schema = await this.#get<GameSchemaResponse>(
+        "ISteamUserStats/GetSchemaForGame/v2/",
+        { appid, l },
+        { cache: true, staleOn: ACHIEVEMENTS_STALE_ON },
+      );
       return notFound(
-        has
+        hasAchievements(schema)
           ? "This game has achievements, but the player's data is hidden (private game-details, or they don't own it)."
           : "This game has no achievements.",
       );
@@ -694,8 +697,23 @@ export class SteamWebClient {
       // problem even though a key happens to be attached when configured —
       // verified live: Steam answers this way for an appid with no
       // achievement schema (e.g. a DLC/soundtrack), not for an invalid key.
-      if (isAppidSpecific(e)) return summarizeGlobalAchievements({});
-      throw e;
+      if (!isAppidSpecific(e)) throw e;
+      // A 403 is also the edge's passing block (ACHIEVEMENTS_STALE_ON). With a
+      // key, the (cached) schema tells the two apart: a game that lists
+      // achievements has rarity data, so the 403 is a failure, not "none".
+      // Keyless, "no achievement data" is the verified common reading.
+      if (e.code === "forbidden" && this.configured) {
+        const schema = await optional(
+          "Achievement schema (to tell 'no data' from a passing 403)",
+          this.#get<GameSchemaResponse>(
+            "ISteamUserStats/GetSchemaForGame/v2/",
+            { appid, l: this.#l },
+            { cache: true, staleOn: ACHIEVEMENTS_STALE_ON },
+          ),
+        );
+        if (schema && hasAchievements(schema)) throw e;
+      }
+      return summarizeGlobalAchievements({});
     }
   }
 
@@ -851,8 +869,12 @@ export class SteamWebClient {
       }
       const reason: unknown = globalResult.reason;
       if (!(reason instanceof ApiError)) throw reason;
-      // An appid-specific answer is Steam saying it has no rarity data.
-      if (!isAppidSpecific(reason)) noteDegraded("Achievement rarity (global unlock %)", reason);
+      // An appid-specific answer is Steam saying it has no rarity data —
+      // unless the schema we just got lists achievements: then that 403 is
+      // the edge's passing block (ACHIEVEMENTS_STALE_ON), and the gap is noted.
+      if (!isAppidSpecific(reason) || hasAchievements(schemaResult.value)) {
+        noteDegraded("Achievement rarity (global unlock %)", reason);
+      }
       return summarizeGameSchema(schemaResult.value, {});
     }
     const err: unknown = schemaResult.reason;

@@ -347,6 +347,12 @@ there) for:
 price_overview`), so the suite agrees with the bug instead of catching it.
   Same family as 0.13.0's `get_featured` "0.00 USD" fix — which is exactly why
   it needs the whole-codebase sweep §6 asks for, not a one-site patch.
+- **A bug relabelled as an upstream failure.** Only `HttpClient#once` may turn
+  a non-`ApiError` into an `ApiError` (fetch's own rejection). Grep for
+  `toNetworkError(` and any `instanceof ApiError ? … : <wrap>` — a second
+  site, or a `try` widened around new code (a `validate` hook once ran
+  inside the retry loop's catch and turned summarizer bugs into retried,
+  stale-masked "network errors"), is this bug.
 - **A gap the model can't see.** An optional part of an answer (enrichment,
   one chunk of a batch) that Steam failed to provide must go through
   `optional()`/`noteDegraded()` (`lib/call.ts`) so it lands in the result's

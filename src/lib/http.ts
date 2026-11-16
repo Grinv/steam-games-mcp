@@ -70,9 +70,11 @@ export class HttpClient {
     const url = this.#buildUrl(path, options.query);
     const signal = callScope.getStore()?.signal;
     if (!options.cache) {
-      const check = (text: string) => void checked(text, options);
-      const text = (await this.#request(url, options, "application/json", signal, check)) ?? "";
-      return parseJson(text) as T;
+      // The check parses the body; keep that, rather than parsing it again.
+      let body: object | undefined;
+      const check = (text: string) => void (body = checked(text, options));
+      await this.#request(url, options, "application/json", signal, check);
+      return body as T;
     }
     // Checked before it was cached, so it parses to an object.
     return parseJson(await this.#cached(url, options, signal)) as T;
@@ -142,7 +144,11 @@ export class HttpClient {
         return text;
       } catch (err) {
         if (signal?.aborted) throw cancelled(signal);
-        const apiErr = err instanceof ApiError ? err : toNetworkError(err);
+        // #once already turns every fetch failure into an ApiError, so
+        // anything else here — a bug in `check`/`validate` — is a bug, never
+        // a "network" failure to retry or answer with a stale copy.
+        if (!(err instanceof ApiError)) throw err;
+        const apiErr = err;
         if (!apiErr.retryable || attempt >= retries) throw apiErr;
         const backoff = backoffMs(attempt, apiErr);
         // Log the path only, never the query string — it can carry player

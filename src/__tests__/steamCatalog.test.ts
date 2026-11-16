@@ -170,11 +170,13 @@ test("get_global_achievements degrades to a clean empty result for a schema-less
   // an appid with no achievement schema — verified live. This endpoint is
   // keyless by design (docs/architecture.md), so that 403 can never genuinely
   // be a credentials problem even though a key happens to be attached.
-  const { client } = await setupServer(t, ENV, (url) =>
-    url.includes("GetGlobalAchievementPercentagesForApp")
-      ? jsonResponse({}, { status: 403 })
-      : router(url),
-  );
+  const { client } = await setupServer(t, ENV, (url) => {
+    if (url.includes("GetGlobalAchievementPercentagesForApp"))
+      return jsonResponse({}, { status: 403 });
+    // A schema-less appid: the key-gated schema lists no achievements either.
+    if (url.includes("GetSchemaForGame")) return jsonResponse({ game: {} });
+    return router(url);
+  });
   const res = await client.callTool({
     name: "get_global_achievements",
     arguments: { appid: 1206340 },
@@ -186,6 +188,28 @@ test("get_global_achievements degrades to a clean empty result for a schema-less
   assert.deepEqual(s.achievements, []);
 });
 
+test("get_global_achievements: a 403 for a game whose schema lists achievements is a failure, not 'none'", async (t) => {
+  // The edge also answers 403 under load; with a key, the schema settles it.
+  const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+    url.includes("GetGlobalAchievementPercentagesForApp")
+      ? jsonResponse({}, { status: 403 })
+      : router(url),
+  );
+  const res = await client.callTool({ name: "get_global_achievements", arguments: { appid: 620 } });
+  assertToolError(res, /denied access \(403\)/);
+});
+
+test("get_game_achievements: rarity's 403 for a game that has achievements is a noted gap", async (t) => {
+  const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+    url.includes("GetGlobalAchievementPercentagesForApp")
+      ? jsonResponse({}, { status: 403 })
+      : router(url),
+  );
+  const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
+  assert.equal(res.isError, undefined);
+  assert.match((res.structuredContent as { notes: string[] }).notes[0]!, /^Achievement rarity/);
+});
+
 test("get_global_achievements never caches that degraded empty result", async (t) => {
   // Regression: the degrade-to-empty result used to be cached (the old
   // result-level cache stored whatever the callback returned) — a single 403
@@ -195,6 +219,7 @@ test("get_global_achievements never caches that degraded empty result", async (t
   // A real list on the retry is what proves the empty one was never cached.
   let calls = 0;
   const { client } = await setupServer(t, ENV, (url) => {
+    if (url.includes("GetSchemaForGame")) return jsonResponse({ game: {} }); // schema-less appid
     if (!url.includes("GetGlobalAchievementPercentagesForApp")) return router(url);
     calls++;
     if (calls === 1) return jsonResponse({}, { status: 403 });
@@ -779,6 +804,23 @@ describe("get_items", () => {
     const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
     const s = res.structuredContent as { items: { appid: number; tags: string[] }[] };
     assert.equal(s.items[0]!.tags.length, 0);
+  });
+
+  test("a passing empty tag dictionary answered from cache doesn't tell the model its language is wrong", async (t) => {
+    let empty = false;
+    const { client } = await setupServer(
+      t,
+      { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0", CACHE_TTL_MS: "1" },
+      (url) => (empty && url.includes("GetTagList") ? jsonResponse({ response: {} }) : router(url)),
+    );
+    await client.callTool({ name: "get_items", arguments: { appids: [620] } });
+    await new Promise((r) => setTimeout(r, 5)); // let the 1 ms dictionary go stale
+    empty = true;
+    const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
+    const notes = (res.structuredContent as { notes: string[] }).notes;
+    assert.equal(notes.length, 1);
+    assert.match(notes[0]!, /cached copy from/);
+    assert.doesNotMatch(notes[0]!, /language/);
   });
 
   test("get_items: an empty tag dictionary's note tells the model to fix its language", async (t) => {
