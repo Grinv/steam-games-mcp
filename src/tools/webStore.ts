@@ -97,8 +97,8 @@ export function registerStoreWebTools(
       outputSchema: searchGamesOutput,
       annotations: READ_ONLY,
     },
-    ({ term, limit, games_only: gamesOnly, country: cc, language: l }) =>
-      reply(() => store.searchGames(term, { country: cc, language: l, limit, gamesOnly })),
+    ({ term, limit, games_only: gamesOnly, country: cc, language: l }, ctx) =>
+      reply(() => store.searchGames(term, { country: cc, language: l, limit, gamesOnly }), ctx),
   );
 
   server.registerTool(
@@ -134,7 +134,7 @@ export function registerStoreWebTools(
       outputSchema: getGameNewsOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id, limit, kind }) => reply(() => web.getNews(id, limit, kind)),
+    ({ appid: id, limit, kind }, ctx) => reply(() => web.getNews(id, limit, kind), ctx),
   );
 
   server.registerTool(
@@ -205,8 +205,8 @@ export function registerStoreWebTools(
       outputSchema: getGameReviewsOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id, limit, review_language, type, order, within_days }) =>
-      reply(() => web.getReviews(id, limit, review_language, type, order, within_days)),
+    ({ appid: id, limit, review_language, type, order, within_days }, ctx) =>
+      reply(() => web.getReviews(id, limit, review_language, type, order, within_days), ctx),
   );
 
   server.registerTool(
@@ -226,7 +226,7 @@ export function registerStoreWebTools(
       outputSchema: getGlobalAchievementsOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id }) => reply(() => web.getGlobalAchievements(id)),
+    ({ appid: id }, ctx) => reply(() => web.getGlobalAchievements(id), ctx),
   );
 
   server.registerTool(
@@ -262,7 +262,8 @@ export function registerStoreWebTools(
       outputSchema: getItemsOutput,
       annotations: READ_ONLY,
     },
-    ({ appids, country, language }) => reply(() => store.getItems(appids, country, language)),
+    ({ appids, country, language }, ctx) =>
+      reply(() => store.getItems(appids, country, language), ctx),
   );
 
   server.registerTool(
@@ -394,7 +395,7 @@ export function registerStoreWebTools(
       outputSchema: discoverGamesOutput,
       annotations: READ_ONLY,
     },
-    (input) => {
+    (input, ctx) => {
       const {
         released_after,
         released_within_days,
@@ -414,19 +415,21 @@ export function registerStoreWebTools(
       if (released_after) releasedAfter = storeDayStart(released_after);
       else if (released_within_days)
         releasedAfter = Math.floor(Date.now() / 1000) - released_within_days * 86400;
-      return reply(() =>
-        store.discoverGames({
-          ...toCompatFilters(input),
-          releasedAfter,
-          tags,
-          minReview: min_review,
-          minReviews: min_reviews,
-          minDiscount: min_discount,
-          count,
-          start,
-          country,
-          language,
-        }),
+      return reply(
+        () =>
+          store.discoverGames({
+            ...toCompatFilters(input),
+            releasedAfter,
+            tags,
+            minReview: min_review,
+            minReviews: min_reviews,
+            minDiscount: min_discount,
+            count,
+            start,
+            country,
+            language,
+          }),
+        ctx,
       );
     },
   );
@@ -443,7 +446,7 @@ export function registerStoreWebTools(
       outputSchema: getCurrentPlayersOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id }) => reply(() => web.getCurrentPlayers(id)),
+    ({ appid: id }, ctx) => reply(() => web.getCurrentPlayers(id), ctx),
   );
 
   server.registerTool(
@@ -503,13 +506,15 @@ export function registerStoreWebTools(
       outputSchema: getChartsOutput,
       annotations: READ_ONLY,
     },
-    ({ chart, limit, country: cc, week }) =>
-      reply(() =>
-        store.getCharts(chart, {
-          limit,
-          country: cc?.toUpperCase(),
-          weekOf: week ? Date.parse(week) / 1000 : undefined,
-        }),
+    ({ chart, limit, country: cc, week }, ctx) =>
+      reply(
+        () =>
+          store.getCharts(chart, {
+            limit,
+            country: cc?.toUpperCase(),
+            weekOf: week ? Date.parse(week) / 1000 : undefined,
+          }),
+        ctx,
       ),
   );
 

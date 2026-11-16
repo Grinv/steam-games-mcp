@@ -2,17 +2,25 @@
 // with exponential backoff (honoring Retry-After), a default User-Agent,
 // uniform mapping of failures to ApiError, and the response cache.
 import { AsyncLocalStorage } from "node:async_hooks";
+// A namespace import, not a destructured one: node:test's mocked timers only
+// replace what's looked up on the module at call time.
+import * as timers from "node:timers/promises";
 import { ApiError, classifyStatus, type ApiErrorCode } from "./errors.ts";
 import { TtlCache } from "./cache.ts";
 import type { Logger } from "./logger.ts";
 import { USER_AGENT } from "../version.ts";
 
-/** Upstream failures a tool call was answered around with stale cache data.
- *  tools/guard.ts runs each call inside one scope, then logs these and flags
- *  the result's _meta; outside a scope (e.g. prompt completions) it's a no-op.
- *  Async context rather than a flag threaded through every client method:
- *  a cached request can sit many calls deep. */
-export const staleScope = new AsyncLocalStorage<{ errors: unknown[] }>();
+/** One tool call, as the requests made on its behalf see it: the call's
+ *  cancellation `signal`, and the upstream failures it was answered around
+ *  with stale cache data (`staleErrors`, logged and flagged in the result's
+ *  _meta by tools/guard.ts, which runs each call inside one scope). Outside a
+ *  scope (e.g. prompt completions) both are no-ops. Async context rather than
+ *  parameters threaded through every client method: a request can sit many
+ *  calls deep. */
+export const callScope = new AsyncLocalStorage<{
+  signal?: AbortSignal;
+  staleErrors: unknown[];
+}>();
 
 interface RequestOptions {
   query?: Record<string, string | number | boolean | undefined>;
@@ -39,8 +47,9 @@ interface HttpClientOptions {
   timeoutMs?: number;
   /** Max retry attempts for retryable failures (network/timeout/5xx/429). */
   retries?: number;
-  /** Called before each request; lets callers throttle (rate limiting). */
-  beforeRequest?: () => Promise<void> | void;
+  /** Called before each request; lets callers throttle (rate limiting). It
+   *  gets the call's cancellation signal, to stop waiting once it fires. */
+  beforeRequest?: (signal?: AbortSignal) => Promise<void> | void;
   /** Whether this client ever sends a credential (API key/token) — fixed per
    *  client instance, not per request. Attached to any resulting ApiError so
    *  a 401/403 message can be precise instead of guessing. */
@@ -62,9 +71,10 @@ export class HttpClient {
 
   async getJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const url = this.#buildUrl(path, options.query);
+    const signal = callScope.getStore()?.signal;
     const text = options.cache
-      ? await this.#cached(url, options)
-      : ((await this.#request(url, options, "application/json")) ?? "");
+      ? await this.#cached(url, options, signal)
+      : ((await this.#request(url, options, "application/json", signal)) ?? "");
     return text.length === 0 ? (undefined as T) : (parseJson(text) as T);
   }
 
@@ -72,7 +82,8 @@ export class HttpClient {
    *  Steam's community profile view (`?xml=1`) is the only one here. Same
    *  timeouts, retries and ApiError mapping as getJson. */
   async getText(path: string, options: RequestOptions = {}): Promise<string> {
-    return (await this.#request(this.#buildUrl(path, options.query), options, "*/*")) ?? "";
+    const url = this.#buildUrl(path, options.query);
+    return (await this.#request(url, options, "*/*", callScope.getStore()?.signal)) ?? "";
   }
 
   // A fresh cached body, else a request — shared with concurrent callers of
@@ -80,30 +91,38 @@ export class HttpClient {
   // and is never cached. Steam failing transiently (`retryable`, or a code the
   // call site declared ambiguous via `staleOn`) is answered with the stale
   // copy if there is one; a definitive answer (4xx) or a bug propagates.
-  async #cached(url: string, options: RequestOptions): Promise<string> {
+  //
+  // The request is shared, so a cancelled call only stops waiting for it: the
+  // other waiters still get its answer, and so does the cache.
+  async #cached(url: string, options: RequestOptions, signal?: AbortSignal): Promise<string> {
     const stale = this.#cache.getStale(url);
     try {
-      return await this.#cache.wrap(url, async () => {
+      const shared = this.#cache.wrap(url, async () => {
         // With a stale copy to fall back on, a retry would only delay the
         // answer it ends in (up to ~45 s of timeouts with the defaults).
         const retries = stale === undefined ? undefined : 0;
-        const text = (await this.#request(url, options, "application/json", retries)) ?? "";
+        const text =
+          (await this.#request(url, options, "application/json", undefined, retries)) ?? "";
         if (text.length > 0) parseJson(text);
         return text;
       });
+      return await untilCancelled(shared, signal);
     } catch (err) {
       const staleWins =
         err instanceof ApiError && (err.retryable || options.staleOn?.includes(err.code));
       if (stale === undefined || !staleWins) throw err;
-      staleScope.getStore()?.errors.push(err);
+      callScope.getStore()?.staleErrors.push(err);
       return stale;
     }
   }
 
+  // `signal` (the call's cancellation) aborts the rate-limit wait, the fetch
+  // and the backoff between retries alike; any of them ends in `cancelled`.
   async #request(
     url: string,
     options: RequestOptions,
     accept: string,
+    signal?: AbortSignal,
     retriesOverride?: number,
   ): Promise<string | undefined> {
     const retries = retriesOverride ?? this.#opts.retries ?? 2;
@@ -111,10 +130,11 @@ export class HttpClient {
 
     let attempt = 0;
     for (;;) {
-      if (this.#opts.beforeRequest) await this.#opts.beforeRequest();
       try {
-        return await this.#once(url, options, accept, timeoutMs);
+        if (this.#opts.beforeRequest) await this.#opts.beforeRequest(signal);
+        return await this.#once(url, options, accept, timeoutMs, signal);
       } catch (err) {
+        if (signal?.aborted) throw cancelled(signal);
         const apiErr = err instanceof ApiError ? err : toNetworkError(err);
         if (!apiErr.retryable || attempt >= retries) throw apiErr;
         const backoff = backoffMs(attempt, apiErr);
@@ -124,7 +144,11 @@ export class HttpClient {
         this.#opts.logger.debug(
           `retrying ${url.split("?")[0]} after ${backoff}ms (attempt ${attempt + 1}/${retries}, ${apiErr.code})`,
         );
-        await delay(backoff);
+        try {
+          await timers.setTimeout(backoff, undefined, { signal });
+        } catch {
+          throw cancelled(signal!); // only an abort rejects it
+        }
         attempt += 1;
       }
     }
@@ -135,6 +159,7 @@ export class HttpClient {
     options: RequestOptions,
     accept: string,
     timeoutMs: number,
+    signal?: AbortSignal,
   ): Promise<string | undefined> {
     // Deliberately NOT AbortSignal.timeout(): its internal timer is unref'd
     // by design (won't keep the event loop alive on its own). On Node 22 a
@@ -150,7 +175,7 @@ export class HttpClient {
     try {
       const res = await fetch(url, {
         headers: { "User-Agent": USER_AGENT, Accept: accept },
-        signal: controller.signal,
+        signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
       });
       if (!res.ok) {
         throw await toHttpError(res, options.hasCredentials ?? this.#opts.hasCredentials);
@@ -159,6 +184,7 @@ export class HttpClient {
       return await res.text();
     } catch (err) {
       if (err instanceof ApiError) throw err;
+      if (signal?.aborted) throw cancelled(signal);
       if (controller.signal.aborted) {
         throw new ApiError({
           code: "timeout",
@@ -249,6 +275,22 @@ function ensureTrailingSlash(s: string): string {
   return s.endsWith("/") ? s : s + "/";
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function cancelled(signal: AbortSignal): ApiError {
+  return new ApiError({
+    code: "cancelled",
+    message: "Request cancelled by the caller",
+    cause: signal.reason,
+  });
+}
+
+// Settle with `promise`, or reject as cancelled as soon as `signal` fires —
+// without touching `promise` itself, which other callers may share.
+function untilCancelled<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(cancelled(signal));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(cancelled(signal));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
 }

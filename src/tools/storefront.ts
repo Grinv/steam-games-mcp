@@ -65,7 +65,7 @@ export function registerStorefrontTools(
       outputSchema: getGameOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id, name, country: cc, language: l }) =>
+    ({ appid: id, name, country: cc, language: l }, ctx) =>
       guard(async () => {
         let resolved = id;
         if (!resolved) {
@@ -81,7 +81,7 @@ export function registerStorefrontTools(
           resolved = found;
         }
         return jsonResult(await store.getGame(resolved, cc, l));
-      }),
+      }, ctx),
   );
 
   server.registerTool(
@@ -103,7 +103,7 @@ export function registerStorefrontTools(
       outputSchema: getReviewHistogramOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id }) => reply(() => store.getReviewHistogram(id)),
+    ({ appid: id }, ctx) => reply(() => store.getReviewHistogram(id), ctx),
   );
 
   server.registerTool(
@@ -134,7 +134,7 @@ export function registerStorefrontTools(
       outputSchema: getPricesOutput,
       annotations: READ_ONLY,
     },
-    ({ appids, country: cc }) => reply(() => store.getPrices(appids, cc)),
+    ({ appids, country: cc }, ctx) => reply(() => store.getPrices(appids, cc), ctx),
   );
 
   server.registerTool(
@@ -149,7 +149,7 @@ export function registerStorefrontTools(
       outputSchema: getSpecialsOutput,
       annotations: READ_ONLY,
     },
-    ({ country: cc, language: l }) => reply(() => store.getSpecials(cc, l)),
+    ({ country: cc, language: l }, ctx) => reply(() => store.getSpecials(cc, l), ctx),
   );
 
   server.registerTool(
@@ -165,6 +165,6 @@ export function registerStorefrontTools(
       outputSchema: getFeaturedOutput,
       annotations: READ_ONLY,
     },
-    ({ country: cc, language: l }) => reply(() => store.getFeatured(cc, l)),
+    ({ country: cc, language: l }, ctx) => reply(() => store.getFeatured(cc, l), ctx),
   );
 }

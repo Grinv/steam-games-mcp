@@ -122,7 +122,7 @@ export class SteamWebClient {
       logger,
       timeoutMs: config.httpTimeoutMs,
       retries: config.httpRetries,
-      beforeRequest: () => limiter.acquire(),
+      beforeRequest: (signal) => limiter.acquire(signal),
       hasCredentials: this.configured,
       cacheTtlMs: config.cacheTtlMs,
     });

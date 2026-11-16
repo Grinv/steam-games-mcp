@@ -111,7 +111,7 @@ export function registerPlayerWebTools(
       outputSchema: getGameAchievementsOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id, language }) => requireKey(() => web.getGameAchievements(id, language)),
+    ({ appid: id, language }, ctx) => requireKey(() => web.getGameAchievements(id, language), ctx),
   );
 
   server.registerTool(
@@ -136,7 +136,7 @@ export function registerPlayerWebTools(
       outputSchema: resolveVanityUrlOutput,
       annotations: READ_ONLY,
     },
-    ({ vanity }) => requireKey(() => web.resolveVanityUrl(vanity)),
+    ({ vanity }, ctx) => requireKey(() => web.resolveVanityUrl(vanity), ctx),
   );
 
   server.registerTool(

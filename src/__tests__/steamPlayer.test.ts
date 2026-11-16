@@ -1745,3 +1745,25 @@ test("get_player_bans: days_since_last_ban is null for a never-banned player", a
   assert.equal(s.vac_banned, false);
   assert.equal(s.days_since_last_ban, null);
 });
+
+test("a tool call the client cancels aborts its outstanding Steam request", async (t) => {
+  let aborted = false;
+  const { client } = await setupServer(t, ENV, (url, init) => {
+    if (!url.includes("GetNumberOfCurrentPlayers")) return jsonResponse({});
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        aborted = true;
+        reject(new DOMException("aborted", "AbortError"));
+      });
+    });
+  });
+  const ac = new AbortController();
+  const call = client.callTool(
+    { name: "get_current_players", arguments: { appid: 620 } },
+    { signal: ac.signal },
+  );
+  setTimeout(() => ac.abort(), 20);
+  await assert.rejects(call);
+  for (let i = 0; i < 50 && !aborted; i += 1) await new Promise((r) => setTimeout(r, 5));
+  assert.equal(aborted, true, "the server stopped its fetch instead of letting it run on");
+});

@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { ownProblem, problemResult, type ToolResult } from "../lib/result.ts";
 import { STEAMID64_RE } from "../format/shared.ts";
-import type { ToolOutput } from "./guard.ts";
+import type { CallContext, ToolOutput } from "./guard.ts";
 
 // Appended to the key-gate message, but only for the tools that ALSO need the
 // target profile's privacy opened up. Four key-gated tools don't:
@@ -29,7 +29,7 @@ export const PUBLIC_PROFILE_NOTE =
 // returned wrapper still matches steamIdTool's `wrap` signature exactly.
 export const requireKey =
   (web: { configured: boolean }, reply: ToolOutput["reply"], note = "") =>
-  (fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> => {
+  (fn: () => Promise<Record<string, unknown>>, ctx: CallContext): Promise<ToolResult> => {
     if (!web.configured) {
       return Promise.resolve(
         problemResult(
@@ -42,7 +42,7 @@ export const requireKey =
         ),
       );
     }
-    return reply(fn);
+    return reply(fn, ctx);
   };
 
 // A SteamID64 for an individual profile is always exactly 17 digits and never
@@ -98,8 +98,8 @@ export const otherSteamid = steamId64Base.describe(
 export const steamIdTool =
   <TIn extends { steamid?: string }>(
     web: { requireSteamId: (explicit?: string) => Promise<string> },
-    wrap: (fn: () => Promise<Record<string, unknown>>) => Promise<ToolResult>,
+    wrap: (fn: () => Promise<Record<string, unknown>>, ctx: CallContext) => Promise<ToolResult>,
     fn: (sid: string, input: TIn) => Promise<Record<string, unknown>>,
   ) =>
-  (input: TIn) =>
-    wrap(async () => fn(await web.requireSteamId(input.steamid), input));
+  (input: TIn, ctx: CallContext) =>
+    wrap(async () => fn(await web.requireSteamId(input.steamid), input), ctx);

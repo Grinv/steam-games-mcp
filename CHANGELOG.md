@@ -13,6 +13,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Stop Steam requests for a tool call the client cancels, instead of letting them run on (including the retry backoff and the store rate-limit wait).
 - Build the bundle with tsdown instead of tsup, shrinking `dist/index.js` from 890 kB to 527 kB.
 - Report a server bug as "Internal error in steam-games-mcp" and log its stack, instead of showing the agent the raw exception text.
 - Keep a Steam failure's own cause in a tool error: a rate-limited or failed tag dictionary now says so and whether to retry, and an unrecognized `language` is named as the cause instead of advising a retry.

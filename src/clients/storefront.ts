@@ -82,7 +82,7 @@ export class StorefrontClient {
       logger,
       timeoutMs: config.httpTimeoutMs,
       retries: config.httpRetries,
-      beforeRequest: () => limiter.acquire(),
+      beforeRequest: (signal) => limiter.acquire(signal),
       hasCredentials: false,
       cacheTtlMs: config.cacheTtlMs,
     });

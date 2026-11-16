@@ -71,6 +71,12 @@ Steam could not be reached. Check connectivity.
 
 Steam did not answer within `HTTP_TIMEOUT_MS` (headers and body).
 
+## cancelled
+
+The client cancelled the call (MCP `notifications/cancelled`). The server
+stops its outstanding Steam requests for it; a request another call is also
+waiting for finishes for that call (and the cache) instead.
+
 ## bad_request
 
 The request can't be served as given: Steam rejected it (HTTP 400/405/422),

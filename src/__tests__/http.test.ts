@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { HttpClient, staleScope } from "../lib/http.ts";
+import { HttpClient, callScope } from "../lib/http.ts";
 import { ApiError } from "../lib/errors.ts";
 import { silentLogger, jsonResponse, htmlResponse, mockFetch, installFetch } from "./helpers.ts";
 import { USER_AGENT } from "../version.ts";
@@ -188,13 +188,13 @@ describe("response cache (cache: true)", () => {
     const c = client({ cacheTtlMs: 1, retries: 2 });
     await warmThenExpire(c);
     fail = true;
-    const scope = { errors: [] as unknown[] };
-    const v = await staleScope.run(scope, () => c.getJson("thing", { cache: true }));
+    const scope = { staleErrors: [] as unknown[] };
+    const v = await callScope.run(scope, () => c.getJson("thing", { cache: true }));
     assert.deepEqual(v, { v: 1 });
     // One request, not three: with a stale copy to fall back on, retrying
     // would only have delayed the same answer.
     assert.equal(mock.calls.length, 2);
-    assert.equal(scope.errors.length, 1);
+    assert.equal(scope.staleErrors.length, 1);
   });
 
   test("a definitive answer (4xx) is never papered over with a stale copy", async (t) => {
@@ -253,16 +253,86 @@ describe("response cache (cache: true)", () => {
     const c = client({ cacheTtlMs: 1 });
     await warmThenExpire(c);
     fail = true;
-    const scopes = [{ errors: [] as unknown[] }, { errors: [] as unknown[] }];
+    const scopes = [{ staleErrors: [] as unknown[] }, { staleErrors: [] as unknown[] }];
     const [a, b] = await Promise.all(
-      scopes.map((s) => staleScope.run(s, () => c.getJson("thing", { cache: true }))),
+      scopes.map((s) => callScope.run(s, () => c.getJson("thing", { cache: true }))),
     );
     assert.deepEqual([a, b], [{ v: 1 }, { v: 1 }]);
     assert.equal(mock.calls.length, 2); // warm-up + one shared failing request
     // Each caller's own tool call is flagged, not just the first one's.
     assert.deepEqual(
-      scopes.map((s) => s.errors.length),
+      scopes.map((s) => s.staleErrors.length),
       [1, 1],
     );
+  });
+});
+
+describe("cancellation (the call's signal, via callScope)", () => {
+  // A fetch that never answers on its own, only fails when its signal aborts.
+  function hangingFetch() {
+    const seen = { aborted: false, calls: 0 };
+    const mock = mockFetch(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          seen.calls += 1;
+          init?.signal?.addEventListener("abort", () => {
+            seen.aborted = true;
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        }),
+    );
+    return { mock, seen };
+  }
+  const inCall = <T>(signal: AbortSignal, fn: () => Promise<T>) =>
+    callScope.run({ signal, staleErrors: [] }, fn);
+
+  test("aborts the fetch itself and fails as cancelled, not a timeout or network error", async (t) => {
+    const { mock, seen } = hangingFetch();
+    installFetch(t, mock);
+    const ac = new AbortController();
+    const pending = inCall(ac.signal, () => client({ timeoutMs: 10_000 }).getJson("thing"));
+    setTimeout(() => ac.abort(), 10);
+    await assert.rejects(
+      pending,
+      (err: unknown) => err instanceof ApiError && err.code === "cancelled" && !err.retryable,
+    );
+    assert.equal(seen.aborted, true);
+    assert.equal(seen.calls, 1); // never retried
+  });
+
+  test("stops waiting out a retry backoff", async (t) => {
+    const mock = mockFetch(() => jsonResponse({}, { status: 503 }));
+    installFetch(t, mock);
+    const ac = new AbortController();
+    const start = performance.now();
+    const pending = inCall(ac.signal, () => client({ retries: 2 }).getJson("thing"));
+    setTimeout(() => ac.abort(), 20); // during the first ~500 ms backoff
+    await assert.rejects(
+      pending,
+      (err: unknown) => err instanceof ApiError && err.code === "cancelled",
+    );
+    assert.ok(performance.now() - start < 300, "returned as soon as the call was cancelled");
+    assert.equal(mock.calls.length, 1);
+  });
+
+  test("a cancelled caller of a shared cached request only stops waiting; the others get it", async (t) => {
+    let answer!: (r: Response) => void;
+    const mock = mockFetch(() => new Promise<Response>((resolve) => (answer = resolve)));
+    installFetch(t, mock);
+    const c = client({ cacheTtlMs: 60_000 });
+    const ac = new AbortController();
+    const cancelledCall = inCall(ac.signal, () => c.getJson("thing", { cache: true }));
+    const otherCall = inCall(new AbortController().signal, () =>
+      c.getJson("thing", { cache: true }),
+    );
+    ac.abort();
+    await assert.rejects(
+      cancelledCall,
+      (err: unknown) => err instanceof ApiError && err.code === "cancelled",
+    );
+    answer(jsonResponse({ v: 1 }));
+    assert.deepEqual(await otherCall, { v: 1 });
+    assert.deepEqual(await c.getJson("thing", { cache: true }), { v: 1 }); // and it was cached
+    assert.equal(mock.calls.length, 1);
   });
 });

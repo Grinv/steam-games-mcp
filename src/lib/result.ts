@@ -111,6 +111,7 @@ const PROBLEMS: Record<
     advice: "Check connectivity and retry.",
   },
   timeout: { title: "The upstream request timed out", advice: "Please retry." },
+  cancelled: { title: "The request was cancelled" },
   bad_request: { title: "The request is invalid" },
   bad_response: {
     title: "The upstream service returned an unusable response",

@@ -46,4 +46,18 @@ describe("acquire()", () => {
     const elapsed = performance.now() - start;
     assert.ok(elapsed < 200, `expected ~40ms, waited ${elapsed}ms`);
   });
+
+  test("a cancelled waiter stops waiting, never takes the slot, and lets the next one in", async () => {
+    const limiter = new RateLimiter(60);
+    await limiter.acquire(); // the next acquisition must wait ~60 ms
+    const ac = new AbortController();
+    const cancelled = limiter.acquire(ac.signal);
+    const next = limiter.acquire();
+    ac.abort();
+    await assert.rejects(cancelled, { name: "AbortError" });
+    const start = performance.now();
+    await next;
+    // Still spaced from the last real start, not from the cancelled waiter.
+    assert.ok(performance.now() - start < 100, "the next waiter wasn't held up");
+  });
 });

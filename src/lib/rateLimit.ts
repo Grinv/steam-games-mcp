@@ -10,6 +10,10 @@
 // wait as long as the step — stalling every request behind it, before any
 // request timeout applies.
 
+// A namespace import, not a destructured one: node:test's mocked timers only
+// replace what's looked up on the module at call time.
+import * as timers from "node:timers/promises";
+
 export class RateLimiter {
   readonly #minIntervalMs: number;
   #tail: Promise<void> = Promise.resolve();
@@ -22,18 +26,25 @@ export class RateLimiter {
     this.#minIntervalMs = Math.max(0, minIntervalMs);
   }
 
-  /** Resolves when the caller is allowed to proceed. */
-  acquire(): Promise<void> {
+  /** Resolves when the caller is allowed to proceed; rejects (with the
+   *  timers' AbortError) if `signal` fires while it waits for its slot's
+   *  spacing. A cancelled waiter never takes the slot, and always lets the
+   *  next one in. */
+  acquire(signal?: AbortSignal): Promise<void> {
     const prev = this.#tail;
     const { promise, resolve: release } = Promise.withResolvers<void>();
     this.#tail = promise;
 
     return prev.then(async () => {
-      const wait = this.#delayUntilAllowed();
-      if (wait > 0) await delay(wait);
-      this.#lastStart = performance.now();
-      // Release the next waiter's gate; the spacing above keeps them in line.
-      release();
+      try {
+        const wait = this.#delayUntilAllowed();
+        if (wait > 0) await timers.setTimeout(wait, undefined, { signal });
+        signal?.throwIfAborted();
+        this.#lastStart = performance.now();
+      } finally {
+        // Release the next waiter's gate; the spacing above keeps them in line.
+        release();
+      }
     });
   }
 
@@ -42,8 +53,4 @@ export class RateLimiter {
     if (this.#lastStart === null) return 0;
     return Math.max(0, this.#lastStart + this.#minIntervalMs - performance.now());
   }
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
