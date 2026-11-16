@@ -5,6 +5,7 @@
 // `message` is diagnostics for logs (it may hold a raw response body).
 
 export type ApiErrorCode =
+  | "invalid_key" // Steam rejected the configured API key (its 403 "verify your key=" page)
   | "unauthorized" // 401 — token missing/expired/invalid
   | "forbidden" // 403 — insufficient permissions/scope
   | "not_found" // 404 — no such resource

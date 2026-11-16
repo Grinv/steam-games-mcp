@@ -17,11 +17,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Report a server bug as "Internal error in steam-games-mcp" and log its stack, instead of showing the agent the raw exception text.
 - Keep a Steam failure's own cause in a tool error: a rate-limited or failed tag dictionary now says so and whether to retry, and an unrecognized `language` is named as the cause instead of advising a retry.
 - Drop the made-up "(404)" from not-found errors that had no HTTP 404 behind them.
+- Report a rejected `STEAM_API_KEY` as its own error ("Steam rejected the configured STEAM_API_KEY … retrying won't help") on every key-gated tool.
 - Word `resolve_vanity_url`'s and `get_player_achievements`' `found: false` reasons ourselves instead of passing on Steam's own text (e.g. a bare "No match").
 
 ### Fixed
 
 - Stop swallowing server bugs as "upstream unavailable" in the Steam level, followed-games count, tag dictionary and vanity `STEAM_ID` lookups.
+- Report an unreadable achievement-schema answer from Steam as a retryable error, not as "this game has no achievements".
+- Log a bug in the game-title prompt completions instead of silently showing no suggestions.
 - Log upstream failures the server answers around (missing player names, price corrections, achievement rarity, stale cache), which used to leave no trace.
 
 ## [0.17.2] - 2026-11-05

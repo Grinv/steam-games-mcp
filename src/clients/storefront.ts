@@ -168,8 +168,8 @@ export class StorefrontClient {
     // rather than answering with a full list of available:false rows. Guarded on
     // chunks.length, not fulfilled.length alone: an empty appids list produces
     // no chunks, so `settled[0]` would be undefined and reading `.reason` off it
-    // threw a TypeError that guard() rendered as "Unexpected error: Cannot read
-    // properties of undefined". The tool's schema is .nonempty() so this is
+    // threw a TypeError that reached the agent as a raw "Cannot read properties
+    // of undefined" (now an internal error). The tool's schema is .nonempty() so this is
     // unreachable through get_prices today — but summarizePrices already answers
     // an empty list correctly, and a client method shouldn't depend on one
     // caller's validation to avoid crashing.

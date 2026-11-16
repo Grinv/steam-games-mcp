@@ -31,6 +31,12 @@ error's internal message; those go to the server log on stderr.
 A successful result served from a stale cache entry, because Steam failed and
 an earlier answer was on hand, carries `_meta["io.github.Grinv/stale"]: true`.
 
+## invalid_key
+
+Steam rejected the configured `STEAM_API_KEY` (its 403 page asking to verify
+the `key=` parameter): the key is mistyped or revoked. Retrying won't help;
+fix the key. Keyless tools are unaffected — Steam ignores a bad key there.
+
 ## unauthorized
 
 Steam rejected the request (HTTP 401). With `STEAM_API_KEY` set it's usually the

@@ -66,16 +66,6 @@ type Query = Record<string, string | number | boolean | undefined>;
 // this server otherwise talks to, and there's nothing to point elsewhere.
 const STEAM_COMMUNITY_BASE_URL = "https://steamcommunity.com";
 
-// Failures that say nothing about the resource itself — retrying may well
-// succeed. A catch that flattens these into a definitive "not found"/"no data"
-// answer tells the agent to stop asking about something that does exist.
-const TRANSIENT_CODES: readonly ApiErrorCode[] = [
-  "server_error",
-  "network",
-  "timeout",
-  "rate_limited",
-];
-
 // GetFriendList answers the same way for a private list and for a SteamID64
 // with no account behind it at all (#FRIENDLIST_NOT_FOUND_CODES below folds
 // not_found in deliberately). Naming only the privacy case told the caller to
@@ -106,22 +96,11 @@ class SchemaWithoutRarity extends Error {
   }
 }
 
-// A bad/revoked key gets a 403 on every key-gated endpoint with this HTML page
-// ("Access is denied. Retrying will not help. Please verify your <pre>key=</pre>
-// parameter.", verified live) — the same status a private profile gets, but
-// never its JSON body. Every site that reads a 403 as "private" or "no data for
-// this appid" must exclude it, or a key problem reads as a privacy setting.
-// (Keyless endpoints ignore a bad key and answer 200, also verified live.)
-function isBadKey(err: ApiError): boolean {
-  return err.code === "forbidden" && /verify your <pre>key=/i.test(err.message);
-}
-
 // The codes Steam answers for an appid that simply has no achievement data,
 // as opposed to a transient failure worth not caching.
 function isAppidSpecific(err: unknown): boolean {
   return (
     err instanceof ApiError &&
-    !isBadKey(err) &&
     (err.code === "forbidden" || err.code === "bad_request" || err.code === "not_found")
   );
 }
@@ -191,11 +170,36 @@ export class SteamWebClient {
   // client-wide credential flag, so a 401/403 there is never misattributed to
   // "the configured credentials are likely invalid" — see the callers under
   // "keyless-capable (key sent when present)" below.
-  #get<T>(path: string, query: Query, opts?: { hasCredentials?: boolean }): Promise<T> {
-    return this.#http.getJson<T>(path, {
-      query: { key: this.#key, ...query },
-      hasCredentials: opts?.hasCredentials,
-    });
+  //
+  // A bad/revoked key gets a 403 on every key-gated endpoint with this HTML page
+  // ("Access is denied. Retrying will not help. Please verify your <pre>key=</pre>
+  // parameter.", verified live) — the same status a private profile gets, but
+  // never its JSON body. Classified here, once, as its own code, so no caller
+  // reading a 403 as "private" or "no data for this appid" can mistake a key
+  // problem for a privacy setting. (Keyless endpoints ignore a bad key and
+  // answer 200, also verified live.)
+  async #get<T>(path: string, query: Query, opts?: { hasCredentials?: boolean }): Promise<T> {
+    try {
+      return await this.#http.getJson<T>(path, {
+        query: { key: this.#key, ...query },
+        hasCredentials: opts?.hasCredentials,
+      });
+    } catch (e) {
+      if (
+        e instanceof ApiError &&
+        e.code === "forbidden" &&
+        /verify your <pre>key=/i.test(e.message)
+      ) {
+        throw new ApiError({
+          code: "invalid_key",
+          status: e.status,
+          hadCredentials: true,
+          message: e.message,
+          cause: e,
+        });
+      }
+      throw e;
+    }
   }
 
   // Resolve the SteamID64 a player tool should act on: the explicit argument
@@ -230,7 +234,7 @@ export class SteamWebClient {
         // Only an upstream failure means "try the next lookup"; a bug isn't one.
         if (!(e instanceof ApiError)) throw e;
         this.#logger.debug("STEAM_ID vanity lookup failed:", e);
-        if (TRANSIENT_CODES.includes(e.code)) transient = e;
+        if (e.retryable) transient = e;
         return undefined;
       });
     let steamid = this.configured ? await attempt(this.#vanityViaApi(raw)) : undefined;
@@ -424,13 +428,9 @@ export class SteamWebClient {
       return this.#explainNoPlayerAchievements(appid, l, res.playerstats?.error);
     } catch (e) {
       // Steam answers 403 for a private profile, 400 for an app with no stats /
-      // not owned. Turn both into a clear, actionable reason — except a bad
-      // key's 403 (see isBadKey), which keeps its credentials message.
-      if (
-        e instanceof ApiError &&
-        (e.code === "forbidden" || e.code === "unauthorized") &&
-        !isBadKey(e)
-      ) {
+      // not owned. Turn both into a clear, actionable reason (a bad key is its
+      // own invalid_key code — see #get — so it never lands here).
+      if (e instanceof ApiError && (e.code === "forbidden" || e.code === "unauthorized")) {
         return notFound(PRIVATE_PROFILE_REASON);
       }
       if (e instanceof ApiError && (e.code === "bad_request" || e.code === "not_found")) {
@@ -467,7 +467,7 @@ export class SteamWebClient {
       // a definitive "no achievements here" — that's a retryable upstream
       // problem, and the agent can only tell if we say so. Only a genuine
       // appid-level rejection falls through to the not-found wording.
-      if (e instanceof ApiError && TRANSIENT_CODES.includes(e.code)) throw e;
+      if (e instanceof ApiError && e.retryable) throw e;
       // Steam's own error text only classifies (above), never reaches the agent.
       return notFound(
         "No achievement data for this appid: the game has no achievements or stats, or the " +
@@ -516,7 +516,7 @@ export class SteamWebClient {
 
   // Codes GetFriendList answers with instead of its usual private-friends-list
   // shape: forbidden/unauthorized for a private list (401 + empty JSON verified
-  // live; a bad key's 403 is excluded via isBadKey), bad_request for some
+  // live; a bad key is its own invalid_key code), bad_request for some
   // malformed/out-of-range steamids (e.g. accountid 0), and not_found for a
   // syntactically valid but nonexistent account (confirmed live: this was
   // leaking as a raw tool error instead of found:false, unlike every sibling
@@ -538,11 +538,7 @@ export class SteamWebClient {
         relationship: "friend",
       });
     } catch (e) {
-      if (
-        e instanceof ApiError &&
-        !isBadKey(e) &&
-        SteamWebClient.#FRIENDLIST_NOT_FOUND_CODES.includes(e.code)
-      )
+      if (e instanceof ApiError && SteamWebClient.#FRIENDLIST_NOT_FOUND_CODES.includes(e.code))
         return null;
       throw e;
     }

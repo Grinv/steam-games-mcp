@@ -2,7 +2,13 @@
 // template, so these check registration + that args are woven into the text.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
+import { McpServer } from "@modelcontextprotocol/server";
 import { connectServer, setupServer } from "./helpers.ts";
+import { createLogger } from "../lib/logger.ts";
+import { ApiError } from "../lib/errors.ts";
+import { registerPrompts } from "../tools/prompts.ts";
+import type { StoreServiceClient } from "../clients/storeService.ts";
 import { ENV, router } from "./steamFixtures.ts";
 
 describe("prompts", () => {
@@ -335,5 +341,52 @@ describe("prompts", () => {
       argument: { name: "game", value: "portal" },
     });
     assert.ok(res.completion.values.length > 0);
+  });
+});
+
+// Completions are the one output path outside tools/guard.ts: a failure must
+// degrade to no suggestions, but a bug must still reach the log.
+describe("title completions on failure", () => {
+  async function complete(t: import("node:test").TestContext, failure: unknown) {
+    const lines: { level: string; text: string }[] = [];
+    const original = console.error;
+    console.error = () => {};
+    t.after(() => (console.error = original));
+    const server = new McpServer({ name: "t", version: "0" });
+    const store = {
+      searchGames: () => Promise.reject(failure),
+    } as unknown as StoreServiceClient;
+    registerPrompts(
+      server,
+      store,
+      createLogger("debug", (level, text) => lines.push({ level, text })),
+    );
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "t", version: "0" });
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    t.after(async () => {
+      await client.close();
+      await server.close();
+    });
+    const res = await client.complete({
+      ref: { type: "ref/prompt", name: "is_it_worth_buying" },
+      argument: { name: "game", value: "portal" },
+    });
+    return { values: res.completion.values, lines };
+  }
+
+  test("an upstream failure gives no suggestions, quietly", async (t) => {
+    const { values, lines } = await complete(
+      t,
+      new ApiError({ code: "server_error", status: 503, message: "HTTP 503" }),
+    );
+    assert.deepEqual(values, []);
+    assert.ok(lines.every((l) => l.level === "debug"));
+  });
+
+  test("a bug gives no suggestions but is logged as an error", async (t) => {
+    const { values, lines } = await complete(t, new TypeError("boom"));
+    assert.deepEqual(values, []);
+    assert.ok(lines.some((l) => l.level === "error" && /TypeError: boom/.test(l.text)));
   });
 });

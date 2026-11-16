@@ -407,9 +407,11 @@ price_overview`), so the suite agrees with the bug instead of catching it.
 - **A bad key read as "private".** Steam answers a bad/revoked key with the
   same 403 a private profile gets, on every key-gated endpoint — told apart
   only by the body (an HTML "verify your `<pre>key=</pre>`" page vs. JSON like
-  `"Profile is not public"`; a private friends list is a 401 with `{}`). Every
-  `catch` mapping `forbidden`/`unauthorized` to a privacy or "no data" verdict
-  must exclude it via `isBadKey()` (`clients/web.ts`): `get_player_achievements`
+  `"Profile is not public"`; a private friends list is a 401 with `{}`). It is
+  classified once, in `SteamWebClient.#get`, as its own `invalid_key` code, so
+  no `catch` mapping `forbidden`/`unauthorized` to a privacy or "no data"
+  verdict can see it — check that a new key-gated call goes through `#get`
+  (a direct `#http` call would bypass it). History: `get_player_achievements`
   and `get_friend_list` shipped telling the agent to change privacy settings
   when the key was the problem, while `get_player_summary` correctly blamed the
   key. Re-check by running the key-gated tools with a fake 32-hex key against a

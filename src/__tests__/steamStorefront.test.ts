@@ -260,7 +260,7 @@ describe("get_game", () => {
   test("get_game errors when neither appid nor name is given", async (t) => {
     const { client } = await setupServer(t, ENV, router);
     const res = await client.callTool({ name: "get_game", arguments: {} });
-    // Enforced by the inputSchema's .refine(), not a handler-level errorResult()
+    // Enforced by the inputSchema's .refine(), not a handler-level check
     // — the SDK wraps the message in its own "Input validation error: ..."
     // prefix, so this intentionally matches loosely rather than the exact string.
     assertToolError(res, /appid or name/i);
@@ -588,7 +588,7 @@ test("get_game (by name) skips a non-numeric top search result and resolves the 
   assert.equal(s.appid, 620);
 });
 
-// The pieces of upstream-failure handling (classifyStatus, messageFor,
+// The pieces of upstream-failure handling (classifyStatus, toProblem,
 // HttpClient's retry/backoff) each have unit tests of their own, but nothing
 // exercised them wired together end-to-end through a real tool call. These
 // confirm a genuine transport-level failure — not an application-level

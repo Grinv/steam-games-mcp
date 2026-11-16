@@ -61,6 +61,12 @@ const PROBLEMS: Record<
   ProblemCode,
   { title: string; advice?: string | ((err: ApiError) => string) }
 > = {
+  invalid_key: {
+    title: "Steam rejected the configured STEAM_API_KEY",
+    advice:
+      "Check the key, or get a new free one at https://steamcommunity.com/dev/apikey. " +
+      "Retrying won't help.",
+  },
   unauthorized: {
     title: "The upstream service rejected the request",
     advice: (err) =>

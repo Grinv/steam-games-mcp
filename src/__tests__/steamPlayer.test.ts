@@ -587,7 +587,8 @@ describe("get_player_achievements", () => {
 
   // A bad/revoked key also gets a 403 on every key-gated endpoint, but with
   // this HTML page (captured live), not the private profile's JSON — it must
-  // surface as a credentials problem, not as "profile is private".
+  // surface as invalid_key, never as "profile is private" or "no data". It's
+  // classified once in SteamWebClient.#get, so every key-gated path is covered.
   const BAD_KEY_403 =
     "<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>Access is denied. " +
     "Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>";
@@ -595,8 +596,11 @@ describe("get_player_achievements", () => {
   for (const [tool, endpoint, args] of [
     ["get_player_achievements", "GetPlayerAchievements", { appid: 620 }],
     ["get_friend_list", "GetFriendList", {}],
+    ["get_owned_games", "GetOwnedGames", {}],
+    ["get_player_summary", "GetPlayerSummaries", {}],
+    ["find_friends_who_own", "GetFriendList", { appids: [620] }],
   ] as const) {
-    test(`${tool}: a bad key's 403 reports invalid credentials, not a private profile`, async (t) => {
+    test(`${tool}: a bad key's 403 reports invalid_key, not a private profile`, async (t) => {
       const { client } = await setupServer(t, ENV, (url) =>
         url.includes(endpoint) ? htmlResponse(BAD_KEY_403, { status: 403 }) : jsonResponse({}),
       );
@@ -606,10 +610,22 @@ describe("get_player_achievements", () => {
       });
       assert.equal(res.isError, true);
       const text = (res.content as { text: string }[])[0]!.text;
-      assert.match(text, /credentials/i);
+      assert.match(text, /^Steam rejected the configured STEAM_API_KEY/);
       assert.doesNotMatch(text, /private/i);
     });
   }
+
+  test("get_game_achievements: a bad key on the schema call isn't read as 'no achievements'", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetSchemaForGame")) return htmlResponse(BAD_KEY_403, { status: 403 });
+      // The keyless rarity call fails appid-specifically too, which used to
+      // make the pair read as "this game has no achievement schema".
+      if (url.includes("GetGlobalAchievementPercentages")) return jsonResponse({}, { status: 403 });
+      return jsonResponse({});
+    });
+    const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
+    assertToolError(res, /^Steam rejected the configured STEAM_API_KEY/);
+  });
 
   test("get_player_achievements: 200 + success:false with a 'not public' error → private reason (no schema lookup needed)", async (t) => {
     // Distinct from the 403 case above: here the HTTP call itself succeeds
@@ -683,6 +699,24 @@ describe("get_player_achievements", () => {
   // #explainNoPlayerAchievements' own fallback: the disambiguating
   // GetSchemaForGame lookup can itself fail. That must still degrade to a
   // reason string, never throw/crash the tool.
+  test("get_player_achievements: an unusable schema answer is retryable, not a 'no achievements' verdict", async (t) => {
+    // Transience is read from the error's own `retryable` (set where it's
+    // classified), not a separate code list — bad_response was missing from
+    // that list, so a garbled schema answer read as a definitive verdict.
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetPlayerAchievements"))
+        return jsonResponse({ playerstats: { success: false } });
+      if (url.includes("GetSchemaForGame"))
+        return htmlResponse("<html>garbled</html>", { status: 200 });
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 620 },
+    });
+    assertToolError(res, /unusable response.*retry/i);
+  });
+
   test("get_player_achievements: Steam's own error text classifies but never reaches the agent", async (t) => {
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       if (url.includes("GetPlayerAchievements"))

@@ -60,7 +60,7 @@ export function buildServer(config: Config, logger: Logger): McpServer {
   registerStorefrontTools(server, store, web.store, out);
   registerStoreWebTools(server, web, web.store, out);
   registerPlayerWebTools(server, web, out);
-  registerPrompts(server, web.store);
+  registerPrompts(server, web.store, logger);
   return server;
 }
 

@@ -5,6 +5,8 @@
 import { z } from "zod";
 import { completable, type McpServer } from "@modelcontextprotocol/server";
 import type { StoreServiceClient } from "../clients/storeService.ts";
+import { ApiError } from "../lib/errors.ts";
+import type { Logger } from "../lib/logger.ts";
 import { steamId64Base } from "./webShared.ts";
 import { CHECK_APPIDS_MAX } from "./webPlayer.ts";
 import { OWNED_GAMES_MAX } from "../format/web.ts";
@@ -65,7 +67,11 @@ const percentArg = (min: number, max: number, message: string, description: stri
     .describe(description)
     .optional();
 
-export function registerPrompts(server: McpServer, store: StoreServiceClient): void {
+export function registerPrompts(
+  server: McpServer,
+  store: StoreServiceClient,
+  logger: Logger,
+): void {
   server.registerPrompt(
     "what_should_i_play",
     {
@@ -150,9 +156,10 @@ export function registerPrompts(server: McpServer, store: StoreServiceClient): v
               "Game title or Steam appid. Start typing for live title suggestions. Omit to be asked which game you mean.",
             ),
           async (value) => {
-            // Best-effort: a completion list is a nice-to-have, so a transient
-            // upstream failure degrades to no suggestions instead of an error
-            // surfacing in the client's live-typing UI.
+            // Best-effort: a completion list is a nice-to-have, so a failure
+            // degrades to no suggestions instead of an error surfacing in the
+            // client's live-typing UI — but a bug still reaches the log. This is
+            // the one output path that doesn't go through tools/guard.ts.
             try {
               const r = await store.searchGames(value, { namesOnly: true });
               const results = r.results as { name?: string }[] | undefined;
@@ -160,7 +167,9 @@ export function registerPrompts(server: McpServer, store: StoreServiceClient): v
                 .map((g) => g.name)
                 .filter((n): n is string => Boolean(n))
                 .slice(0, COMPLETION_LIMIT);
-            } catch {
+            } catch (e) {
+              if (e instanceof ApiError) logger.debug("title completions unavailable:", e);
+              else logger.error("internal error in title completions:", e);
               return [];
             }
           },

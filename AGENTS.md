@@ -123,13 +123,19 @@ npm run inspector      # run under the MCP Inspector
     for the log (it may hold Steam's raw HTML body); agent-facing specifics go
     in `detail` and are always our own text. A domain error explaining an
     upstream failure keeps that failure's `code`/`status`/`retryable` and
-    wraps it as `cause`.
+    wraps it as `cause`. Facts true of every Steam endpoint are classified
+    once, at the source: a bad key is `invalid_key` (in `SteamWebClient.#get`),
+    and "is this transient" is only ever `err.retryable` — never a code list
+    re-derived at a call site. A client method maps only its own endpoint's
+    quirks (e.g. GetFriendList's 401 = private), and only by `code`.
   - **Translate** in one place, `toProblem()` in `lib/result.ts`: an RFC 9457
     problem built from `code`/`status`/`detail` via a `Record` table (a new
     code without an entry doesn't compile). Anything that isn't an `ApiError`
     is a bug — logged with stack and cause chain, shown to the agent as a
     stable "internal error".
-  - **Output** only through `toolOutput(logger)`'s `guard`/`reply`
+  - **Output** only through `toolOutput(logger)`'s `guard`/`reply` (prompt
+    completions, the one path outside it, follow the same rule: an upstream
+    failure degrades quietly, a bug is logged)
     (`tools/guard.ts`): the model reads `detail` as the result text, the
     Problem rides in `_meta["io.github.Grinv/problem"]`. A partial failure
     inside a successful result (e.g. `find_friends_who_own`'s per-friend
