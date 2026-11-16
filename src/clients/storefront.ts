@@ -168,14 +168,13 @@ export class StorefrontClient {
     // unreachable through get_prices today — but summarizePrices already answers
     // an empty list correctly, and a client method shouldn't depend on one
     // caller's validation to avoid crashing.
-    const fulfilled = settled.filter((r) => r.status === "fulfilled");
-    if (chunks.length > 0 && fulfilled.length === 0) {
+    // optionalParts first: it rethrows a bug in any chunk, which chunk 0's
+    // upstream failure must not hide.
+    const parts = optionalParts(settled, (i) => `Prices of ${chunks[i]!.length} appids`);
+    if (chunks.length > 0 && parts.length === 0) {
       throw (settled[0] as PromiseRejectedResult).reason;
     }
-    const merged: PriceDetailsResponse = Object.assign(
-      {},
-      ...optionalParts(settled, (i) => `Prices of ${chunks[i]!.length} appids`),
-    );
+    const merged: PriceDetailsResponse = Object.assign({}, ...parts);
     return summarizePrices(merged, appids, overrides);
   }
 

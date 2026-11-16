@@ -163,7 +163,9 @@ npm run inspector      # run under the MCP Inspector
   `catch` reading Steam in a client. Each stated fact has `probes`: live calls
   that show it, run by `npm run check:api`. Add a fact only with a probe that
   passes against live Steam today — a fact from memory is how the bad-key 401
-  went unclassified while every test passed on a 403 fixture.
+  went unclassified while every test passed on a 403 fixture. The one
+  exception is `ambiguous`: a passing edge failure can't be triggered on cue,
+  so its probes show only the plain answer and a comment says what was seen.
 - **A tool's answer is a required core plus optional parts** (a price
   correction, rarity, a Steam level, names, tags). A required part is a plain
   `await`: its failure is the tool's error. An optional one goes through
@@ -275,7 +277,9 @@ need the code read, not called.
 An internal error is logged with its stack (stderr), from a minified bundle
 whose frames read `dist/index.js:<line>:<col>`. The build is reproducible and
 `--sourcemap` doesn't move the code, so map it back: check out the release
-tag, `npm ci && npx tsdown --sourcemap`, then resolve each frame with
+tag, `npm ci`, then its own bundler with `--sourcemap` (`npx tsdown
+--sourcemap` from 0.18; `npx tsup --sourcemap` for the tsup-built tags up to
+0.17.x, run from the tag's `node_modules`), then resolve each frame with
 `node:module`'s `SourceMap` (`new SourceMap(JSON.parse(readFileSync(
 "dist/index.js.map"))).findEntry(line - 1, col - 1)` → `originalSource`,
 `originalLine + 1`). No sourcemap ships: the `.mcpb` excludes it anyway.

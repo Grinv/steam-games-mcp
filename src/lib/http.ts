@@ -25,7 +25,8 @@ export interface RequestOptions {
   cache?: boolean;
   /** Codes that, for this endpoint, are as likely a passing hiccup as a real
    *  answer, so a stale copy is preferred to them too (besides any `retryable`
-   *  failure). An endpoint quirk, declared at its call site. */
+   *  failure). Filled from the endpoint's `ambiguous` (clients/endpoints.ts),
+   *  where the quirk is stated — not set at a call site. */
   staleOn?: readonly ApiErrorCode[];
   /** Throws (an ApiError) when Steam answered with a body this call can't use
    *  — e.g. an empty tag dictionary. Runs before caching, so such a body is

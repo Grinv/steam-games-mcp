@@ -63,8 +63,8 @@ import type { Config } from "../config.ts";
 const STEAM_COMMUNITY_BASE_URL = "https://steamcommunity.com";
 
 // GetFriendList answers the same way for a private list and for a SteamID64
-// with no account behind it at all (#FRIENDLIST_NOT_FOUND_CODES below folds
-// not_found in deliberately). Naming only the privacy case told the caller to
+// with no account behind it at all (Steam.GetFriendList's answers in
+// clients/endpoints.ts fold them into one deliberately). Naming only the privacy case told the caller to
 // go change a setting on an account that doesn't exist — confirmed live on
 // 76561197960265728, which get_player_summary correctly reports as no such
 // account. Both causes, like every sibling that can fail two ways.

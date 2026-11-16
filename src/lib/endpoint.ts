@@ -108,6 +108,8 @@ function fillPath(template: string, query: Query): { path: string; rest: Query }
   const rest = { ...query };
   const path = template.replace(/\{(\w+)\}/g, (_m, name: string) => {
     const value = rest[name];
+    // Our bug, not a request for Steam to answer: never send ".../undefined".
+    if (value === undefined) throw new Error(`no value for path parameter {${name}}`);
     delete rest[name];
     return encodeURIComponent(String(value));
   });

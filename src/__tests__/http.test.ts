@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { HttpClient } from "../lib/http.ts";
 import { CallCancelled, callScope, type CallState } from "../lib/call.ts";
 import { ApiError } from "../lib/errors.ts";
+import { call, endpoint } from "../lib/endpoint.ts";
 import { silentLogger, jsonResponse, htmlResponse, mockFetch, installFetch } from "./helpers.ts";
 import { USER_AGENT } from "../version.ts";
 
@@ -485,4 +486,15 @@ describe("cancellation (the call's signal, via callScope)", () => {
     assert.deepEqual(await c.getJson("thing", { cache: true }), { v: 1 }); // and it was cached
     assert.equal(mock.calls.length, 1);
   });
+});
+
+test("a path parameter missing from the query is our bug, never sent to Steam", async (t) => {
+  const mock = mockFetch(() => jsonResponse({}));
+  installFetch(t, mock);
+  const ep = endpoint<object>({ path: "thing/{appid}", host: "store", keyless: true, probes: [] });
+  await assert.rejects(
+    call(client(), ep, {}),
+    (err: unknown) => !(err instanceof ApiError) && /\{appid\}/.test(String(err)),
+  );
+  assert.equal(mock.calls.length, 0);
 });

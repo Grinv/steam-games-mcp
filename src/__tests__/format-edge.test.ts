@@ -362,7 +362,7 @@ describe("summarizePurchasePrices", () => {
         summarizePurchasePrices({
           response: { store_items: {} as unknown as [] },
         }),
-      (err: unknown) => err instanceof ApiError && err.code === "bad_response" && err.retryable,
+      (err: unknown) => err instanceof ApiError && err.code === "bad_response" && !err.retryable,
     );
   });
 
