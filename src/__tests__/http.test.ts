@@ -161,11 +161,11 @@ describe("retry/backoff behavior", () => {
 });
 
 describe("response cache (cache: true)", () => {
-  // A 1 ms TTL with a mocked Date makes "expired" deterministic, no real wait.
-  async function warmThenExpire(t: import("node:test").TestContext, c: HttpClient) {
-    t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  // A 1 ms TTL and a short real wait: ages are monotonic (performance.now),
+  // which mocked timers don't control.
+  async function warmThenExpire(c: HttpClient) {
     assert.deepEqual(await c.getJson("thing", { cache: true }), { v: 1 });
-    t.mock.timers.tick(5);
+    await new Promise((r) => setTimeout(r, 5));
   }
 
   test("a fresh entry is served without a request, keyed by the full URL", async (t) => {
@@ -186,7 +186,7 @@ describe("response cache (cache: true)", () => {
     );
     installFetch(t, mock);
     const c = client({ cacheTtlMs: 1, retries: 2 });
-    await warmThenExpire(t, c);
+    await warmThenExpire(c);
     fail = true;
     const scope = { errors: [] as unknown[] };
     const v = await staleScope.run(scope, () => c.getJson("thing", { cache: true }));
@@ -204,7 +204,7 @@ describe("response cache (cache: true)", () => {
       mockFetch(() => (fail ? jsonResponse({}, { status: 404 }) : jsonResponse({ v: 1 }))),
     );
     const c = client({ cacheTtlMs: 1 });
-    await warmThenExpire(t, c);
+    await warmThenExpire(c);
     fail = true;
     await assert.rejects(
       () => c.getJson("thing", { cache: true }),
@@ -219,7 +219,7 @@ describe("response cache (cache: true)", () => {
       mockFetch(() => (fail ? jsonResponse({}, { status: 403 }) : jsonResponse({ v: 1 }))),
     );
     const c = client({ cacheTtlMs: 1 });
-    await warmThenExpire(t, c);
+    await warmThenExpire(c);
     fail = true;
     assert.deepEqual(await c.getJson("thing", { cache: true, staleOn: ["forbidden"] }), { v: 1 });
     await assert.rejects(() => c.getJson("thing", { cache: true })); // not declared: propagates
@@ -251,7 +251,7 @@ describe("response cache (cache: true)", () => {
     );
     installFetch(t, mock);
     const c = client({ cacheTtlMs: 1 });
-    await warmThenExpire(t, c);
+    await warmThenExpire(c);
     fail = true;
     const scopes = [{ errors: [] as unknown[] }, { errors: [] as unknown[] }];
     const [a, b] = await Promise.all(

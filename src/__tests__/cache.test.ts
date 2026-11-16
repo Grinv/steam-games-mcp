@@ -38,14 +38,14 @@ describe("bounded size", () => {
   });
 });
 
-test("get(): a value exactly at its expiry instant is already treated as expired", (t) => {
-  // get() uses a strict `expires > now` check, so the boundary instant itself
-  // does not count as fresh — pin the clock to prove this is stable, not
-  // timing-flaky.
-  const cache = new TtlCache(1000);
-  t.mock.timers.enable({ apis: ["Date"], now: 0 });
+test("ages entries on a monotonic clock: a wall clock stepped back keeps nothing fresh", async (t) => {
+  // Mock only Date (setTimeout stays real): if expiry read Date.now(), stepping
+  // it back an hour would keep the entry fresh for that hour.
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  const cache = new TtlCache(20);
   cache.set("k", "v");
-  t.mock.timers.tick(1000); // now === expires exactly
+  t.mock.timers.setTime(Date.now() - 3_600_000);
+  await tick(30);
   assert.equal(cache.get("k"), undefined);
   assert.equal(cache.getStale("k"), "v"); // stale fallback still sees it
 });

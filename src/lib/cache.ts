@@ -7,7 +7,9 @@
 // HttpClient can serve one as a stale fallback while Steam is down.
 //
 // Bodies are kept as text and parsed per read: a cached value can't be
-// mutated by whoever shapes it, and its size is known for the bound.
+// mutated by whoever shapes it, and its size is known for the bound. Ages are
+// measured on the monotonic performance.now(): a wall clock stepped back would
+// otherwise keep entries "fresh" for as long as the step.
 
 interface Entry {
   value: string;
@@ -36,7 +38,7 @@ export class TtlCache {
   get(key: string): string | undefined {
     const hit = this.#map.get(key);
     if (!hit) return undefined;
-    return hit.expires > Date.now() ? hit.value : undefined;
+    return hit.expires > performance.now() ? hit.value : undefined;
   }
 
   /** Any cached value regardless of freshness — used for stale fallback. */
@@ -50,7 +52,7 @@ export class TtlCache {
     // position, so a key refreshed every TTL (the tag dictionary) would
     // otherwise be the first evicted and lose its stale fallback.
     this.#delete(key);
-    this.#map.set(key, { value, expires: Date.now() + this.#ttlMs });
+    this.#map.set(key, { value, expires: performance.now() + this.#ttlMs });
     this.#size += value.length;
     for (const oldest of this.#map.keys()) {
       if (this.#size <= this.#maxSize) break;
