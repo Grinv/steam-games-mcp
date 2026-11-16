@@ -16,7 +16,7 @@ import {
   type Endpoint,
   type Query,
 } from "../lib/endpoint.ts";
-import { Steam } from "./endpoints.ts";
+import { Steam, classifySteamApiError } from "./endpoints.ts";
 import { noteDegraded, optional, optionalParts } from "../lib/call.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
 import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.ts";
@@ -87,26 +87,6 @@ function rarityBlocked(appid: number): ApiError {
     message: `GetGlobalAchievementPercentagesForApp 403 for appid ${appid}, whose schema lists achievements`,
     detail:
       "Steam refused the rarity data of a game that has achievements — most likely a passing block.",
-  });
-}
-
-// A bad/revoked key gets this HTML page on every key-gated endpoint ("Access
-// is denied. Retrying will not help. Please verify your <pre>key=</pre>
-// parameter.") — as a 403 on most, a 401 on IPlayerService (verified live
-// 2026-11-17; the 401 was missed while only 403 was checked). The same
-// statuses a private profile gets, never its JSON body. Classified as its own
-// code where the response is read (HttpClient's `classify`), before retries,
-// the cache and any endpoint answer act on it. (Keyless endpoints ignore a
-// bad key and answer 200, also verified live.)
-function classifySteamApiError(err: ApiError): ApiError {
-  if (err.code !== "forbidden" && err.code !== "unauthorized") return err;
-  if (!/verify your <pre>key=/i.test(err.message)) return err;
-  return new ApiError({
-    code: "invalid_key",
-    status: err.status,
-    hadCredentials: true,
-    message: err.message,
-    cause: err,
   });
 }
 

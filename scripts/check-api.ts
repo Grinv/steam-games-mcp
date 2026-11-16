@@ -8,7 +8,19 @@
 // always skips there — they only run when a maintainer exports their own key
 // and runs `npm run check:api` locally before a release.
 //
+// The second half checks the facts clients/endpoints.ts states about each
+// endpoint (which errors are plain answers, which codes are ambiguous, what a
+// usable body is): every `probe` there is called through the server's own
+// HttpClient + call(), so it checks both that Steam still answers that way
+// and that the server reads it as stated.
+//
 // Run: `npm run check:api`.
+
+import { HttpClient } from "../src/lib/http.ts";
+import { call, type Endpoint, type Probe } from "../src/lib/endpoint.ts";
+import { ApiError } from "../src/lib/errors.ts";
+import { createLogger } from "../src/lib/logger.ts";
+import { Steam, classifySteamApiError } from "../src/clients/endpoints.ts";
 
 const STORE = process.env.STEAM_STORE_BASE_URL ?? "https://store.steampowered.com";
 const API = process.env.STEAM_API_BASE_URL ?? "https://api.steampowered.com";
@@ -551,6 +563,38 @@ const checks: Check[] = [
     },
   },
 ];
+
+// ---- probes: the facts clients/endpoints.ts states, against live Steam ----
+const BAD_KEY = "0123456789ABCDEF0123456789ABCDEF";
+const probeLogger = createLogger("silent");
+const hosts = {
+  api: new HttpClient({ baseUrl: API, logger: probeLogger, classify: classifySteamApiError }),
+  store: new HttpClient({ baseUrl: STORE, logger: probeLogger }),
+};
+async function outcomeOf(ep: Endpoint<unknown, string>, probe: Probe): Promise<string> {
+  const key = probe.badKey ? BAD_KEY : ep.host === "api" ? KEY : undefined;
+  try {
+    const res = await call(hosts[ep.host], ep, probe.query, {}, key ? { key } : {});
+    return ep.answers ? ((res as { answer?: string }).answer ?? "data") : "data";
+  } catch (err) {
+    if (!(err instanceof ApiError)) throw err;
+    if (err.code === "rate_limited") throw new RateLimited(`rate-limited (${err.status})`);
+    return err.code;
+  }
+}
+for (const [name, ep] of Object.entries(Steam) as [string, Endpoint<unknown, string>][]) {
+  for (const probe of ep.probes) {
+    checks.push({
+      name: `probe ${name}: ${probe.shows}`,
+      // A bad-key probe brings its own key; a keyed fact needs a real one.
+      skip: !ep.keyless && !probe.badKey && !KEY ? "needs STEAM_API_KEY" : undefined,
+      run: async () => {
+        const got = await outcomeOf(ep, probe);
+        need(got === probe.expect, `Steam now answers ${got}, not ${probe.expect}`);
+      },
+    });
+  }
+}
 
 const failures: string[] = [];
 let ran = 0;

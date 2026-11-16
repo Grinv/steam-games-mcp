@@ -25,6 +25,8 @@ export interface Probe {
   expect: string;
   /** What this shows, for the report. */
   shows: string;
+  /** Send a deliberately invalid key, to show how Steam answers one. */
+  badKey?: boolean;
 }
 
 export interface Endpoint<T, A extends string = never> {

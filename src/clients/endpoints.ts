@@ -64,6 +64,26 @@ const invalidSteamidProbe = (query: Record<string, string | number>) => ({
   shows: "accountid 0 is a 400, not an empty answer",
 });
 
+// A bad/revoked key gets this HTML page on every key-gated endpoint ("Access
+// is denied. Retrying will not help. Please verify your <pre>key=</pre>
+// parameter.") — as a 403 on most, a 401 on IPlayerService (verified live
+// 2026-11-17; the 401 was missed while only 403 was checked). The same
+// statuses a private profile gets, never its JSON body. Classified as its own
+// code where the response is read (HttpClient's `classify`), before retries,
+// the cache and any endpoint answer act on it. (Keyless endpoints ignore a
+// bad key and answer 200, also verified live.)
+export function classifySteamApiError(err: ApiError): ApiError {
+  if (err.code !== "forbidden" && err.code !== "unauthorized") return err;
+  if (!/verify your <pre>key=/i.test(err.message)) return err;
+  return new ApiError({
+    code: "invalid_key",
+    status: err.status,
+    hadCredentials: true,
+    message: err.message,
+    cause: err,
+  });
+}
+
 /** appdetails, keyed by appid; `data` is `[]` for some delisted apps. */
 export type AppDetailsResponse = Record<string, { success?: boolean; data?: StoreApp | [] }>;
 
@@ -81,6 +101,12 @@ export const Steam = {
     keyless: false,
     probes: [
       { query: { steamids: PUBLIC }, expect: "data", shows: "a public profile" },
+      {
+        query: { steamids: PUBLIC },
+        badKey: true,
+        expect: "invalid_key",
+        shows: "a bad key's page, as a 403 (elsewhere)",
+      },
       // Unlike the per-player endpoints, no account is a 200 with no players.
       { query: { steamids: ACCOUNT_0 }, expect: "data", shows: "accountid 0 is an empty 200" },
     ],
@@ -108,6 +134,12 @@ export const Steam = {
     probes: [
       { query: { steamid: PUBLIC }, expect: "data", shows: "a public library" },
       invalidSteamidProbe({ steamid: ACCOUNT_0 }),
+      {
+        query: { steamid: PUBLIC },
+        badKey: true,
+        expect: "invalid_key",
+        shows: "a bad key's page, as a 401 (IPlayerService)",
+      },
     ],
   }),
   GetRecentlyPlayedGames: endpoint<RecentlyPlayedResponse, "invalid_steamid">({
