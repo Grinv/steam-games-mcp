@@ -12,6 +12,7 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
+import { ApiError } from "../lib/errors.ts";
 import { capList, isoDay, storeUrl } from "./shared.ts";
 import { wishlistNotFound } from "./shared.schemas.ts";
 import {
@@ -233,7 +234,19 @@ export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
       discount_percent: discount_pct,
     };
   }
-  return purchasePricesSchema.parse(out);
+  // Unlike the other summarizers' parse, a mismatch here is Steam's payload
+  // (it only feeds a price correction), not our tool output: classified as
+  // an unusable answer, so it costs the correction instead of the call.
+  const parsed = purchasePricesSchema.safeParse(out);
+  if (!parsed.success) {
+    throw new ApiError({
+      code: "bad_response",
+      message: `GetItems purchase options don't fit the price shape: ${parsed.error.message}`,
+      retryable: true,
+      cause: parsed.error,
+    });
+  }
+  return parsed.data;
 }
 
 // ---- IWishlistService/GetWishlistSortedFiltered (enriched wishlist) ----------

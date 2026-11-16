@@ -13,7 +13,6 @@ export type ApiErrorCode =
   | "server_error" // 5xx — upstream broke
   | "network" // connection failed
   | "timeout" // request aborted by our timeout
-  | "cancelled" // request aborted by the caller (MCP notifications/cancelled)
   | "bad_request" // 400/405/422, or a request we can't serve as given
   | "bad_response" // a success status with a body we can't use (invalid JSON, empty dictionary)
   | "unknown"; // any other upstream status

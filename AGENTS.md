@@ -168,11 +168,13 @@ npm run inspector      # run under the MCP Inspector
   (`src/version.ts`), the reverse-DNS namespace of `mcpName`.
 - **Cancellation** reaches Steam without being threaded through clients: a
   tool handler passes the SDK's `ctx` to `reply`/`guard`, which run the call
-  inside `callScope` (`lib/http.ts`, an `AsyncLocalStorage`) with
-  `ctx.mcpReq.signal`. `HttpClient` aborts the rate-limit wait, the fetch
-  (`AbortSignal.any` with its own timeout) and the retry backoff on it, as a
-  `cancelled` ApiError. A shared cached request is never aborted for one
-  caller: that caller only stops waiting.
+  inside `callScope` (`lib/call.ts`, an `AsyncLocalStorage`) with
+  `ctx.mcpReq.signal`. `HttpClient` aborts the rate-limit wait (queued or
+  spacing), the fetch (`AbortSignal.any` with its own timeout) and the retry
+  backoff on it, as `CallCancelled` — deliberately not an `ApiError`, so no
+  code that answers around a Steam failure can mistake the client's decision
+  for one. A shared cached request is never aborted for one caller: that
+  caller only stops waiting (`untilCancelled`).
 - Keep clients fetch only (caching is the request's `cache: true` option); all raw→agent-facing shaping lives in
   `src/format/` (`storefront.ts` / `web.ts` / `webAchievements.ts` / `store.ts`
   over the `storeCard.ts` toolkit, generic helpers in

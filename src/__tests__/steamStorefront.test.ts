@@ -205,18 +205,20 @@ describe("get_game", () => {
     assertToolError(res, /no matching resource|404/i);
   });
 
-  test("get_game returns a not-found error when the appid key is absent from the response entirely", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) =>
+  test("get_game: a body without the appid's entry is an unusable answer, not 'no such app'", async (t) => {
+    // appdetails answers every appid, a nonexistent one with {success:false}
+    // (verified live), so a missing entry says nothing about the game — and
+    // must not crash the lookup or get cached (answersEvery).
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
       url.includes("/api/appdetails") ? jsonResponse({}) : jsonResponse({}),
     );
     const res = await client.callTool({ name: "get_game", arguments: { appid: 999 } });
-    assertToolError(res, /no matching resource|404/i);
+    assertToolError(res, /unusable response.*retry/i);
   });
 
   test("get_game caches: a second call for the same appid never re-hits the upstream", async (t) => {
-    // Wiring check for clients/storefront.ts#getGame's wrapStaleOnError cache
-    // (the stale-on-error fallback mechanism itself is unit-tested directly in
-    // cache.test.ts). If the upstream were called again here, it would 503 and
+    // Wiring check for getGame's `cache: true` requests (the cache and its
+    // stale fallback are unit-tested in cache.test.ts / http.test.ts). If the upstream were called again here, it would 503 and
     // this test would fail — proving the second call was served from cache.
     let calls = 0;
     const { client } = await setupServer(t, ENV, (url) => {
@@ -505,17 +507,32 @@ describe("get_prices", () => {
     assert.equal(res.isError, true);
   });
 
-  test("get_prices reports unknown (null), not unavailable, when an appid's key is absent", async (t) => {
+  test("get_prices: a chunk answered without an entry for every appid fails like a request", async (t) => {
     // Distinct from an explicit {success:false} entry. appdetails answers every
     // appid it's asked about, a nonexistent one too (verified live 2026-11-16:
     // 99 of 100 mixed ids, the omitted one appid 0, which the schema rejects),
-    // so an absent key means we don't know — never "not sold".
-    const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("/api/appdetails") ? jsonResponse({}) : jsonResponse({}),
-    );
-    const res = await client.callTool({ name: "get_prices", arguments: { appids: [999] } });
-    const s = res.structuredContent as { prices: { appid: number; available: boolean | null }[] };
-    assert.equal(s.prices[0]!.available, null);
+    // so a partial answer is unusable — never "not sold", and never a null row
+    // without a note explaining it.
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      const ids = new URL(url).searchParams.get("appids")?.split(",") ?? [];
+      // The second chunk answers for all but one of its appids.
+      if (url.includes("/api/appdetails") && ids.includes("150")) {
+        const body: Record<string, unknown> = {};
+        for (const id of ids.filter((i) => i !== "150")) body[id] = { success: true, data: [] };
+        return jsonResponse(body);
+      }
+      const body: Record<string, unknown> = {};
+      for (const id of ids) body[id] = { success: true, data: [] };
+      return jsonResponse(body);
+    });
+    const appids = Array.from({ length: 150 }, (_, i) => i + 1);
+    const res = await client.callTool({ name: "get_prices", arguments: { appids } });
+    const s = res.structuredContent as {
+      prices: { appid: number; available: boolean | null }[];
+      notes: string[];
+    };
+    assert.ok(s.prices.slice(100).every((p) => p.available === null));
+    assert.match(s.notes[0]!, /^Prices of 50 appids unavailable: .*unusable response/);
   });
 
   test(`get_prices rejects appids outside the 1-${PRICES_MAX} bound before calling the upstream`, async (t) => {

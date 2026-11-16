@@ -429,11 +429,11 @@ export class SteamWebClient {
           : "This game has no achievements.",
       );
     } catch (e) {
-      // A transient failure of this second (schema) call must not be reported as
-      // a definitive "no achievements here" — that's a retryable upstream
-      // problem, and the agent can only tell if we say so. Only a genuine
-      // appid-level rejection falls through to the not-found wording.
-      if (e instanceof ApiError && e.retryable) throw e;
+      // Only Steam's appid-level answer ("no schema for this appid") reads as
+      // a definitive "no achievements here". Anything else — a transient
+      // failure, a bad key, a bug, a cancel — is not an answer about the game,
+      // and propagates for the agent (or the log) to see.
+      if (!isAppidSpecific(e)) throw e;
       // Steam's own error text only classifies (above), never reaches the agent.
       return notFound(
         "No achievement data for this appid: the game has no achievements or stats, or the " +
@@ -567,21 +567,21 @@ export class SteamWebClient {
         this.#ownedPlaytimes(id, appids),
       ),
     ]);
-    const failed: ApiError[] = [];
+    // One note per distinct cause, so a mix (a timeout here, a 429 there)
+    // isn't reported as whichever came first.
+    const failedByCause = new Map<string, ApiError[]>();
     const ownership = settled.map((r) => {
       if (r.status === "fulfilled") return r.value;
       // One friend's upstream failure is theirs alone; a bug fails the call.
       if (!(r.reason instanceof ApiError)) throw r.reason;
-      failed.push(r.reason);
       // The same translation as a failed tool call, never the raw rejection
       // message (diagnostics, possibly an upstream HTML body).
-      return { error: toProblem(r.reason, this.#logger).detail };
+      const error = toProblem(r.reason, this.#logger).detail;
+      failedByCause.set(error, [...(failedByCause.get(error) ?? []), r.reason]);
+      return { error };
     });
-    if (failed.length > 0) {
-      noteDegraded(
-        `Game ownership of ${failed.length} friends (see unavailable_friends)`,
-        failed[0]!,
-      );
+    for (const errs of failedByCause.values()) {
+      noteDegraded(`Game ownership of ${errs.length} friends (see unavailable_friends)`, errs[0]!);
     }
     return summarizeFriendsWhoOwn(appids, ids, ownership, players, {
       totalFriends: allIds.length,

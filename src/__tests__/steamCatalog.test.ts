@@ -187,8 +187,8 @@ test("get_global_achievements degrades to a clean empty result for a schema-less
 });
 
 test("get_global_achievements never caches that degraded empty result", async (t) => {
-  // Regression: the degrade-to-empty catch used to sit INSIDE wrapStaleOnError
-  // and RETURN the empty result, so TtlCache#dedupe set() it — a single 403
+  // Regression: the degrade-to-empty result used to be cached (the old
+  // result-level cache stored whatever the callback returned) — a single 403
   // (Steam's edge answers that under load, not only for a schema-less appid)
   // then served "this game has no achievements" for the whole TTL, and the
   // tool's own description tells the model to read it exactly that way.

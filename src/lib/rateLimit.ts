@@ -13,6 +13,7 @@
 // A namespace import, not a destructured one: node:test's mocked timers only
 // replace what's looked up on the module at call time.
 import * as timers from "node:timers/promises";
+import { untilCancelled } from "./call.ts";
 
 export class RateLimiter {
   readonly #minIntervalMs: number;
@@ -26,17 +27,18 @@ export class RateLimiter {
     this.#minIntervalMs = Math.max(0, minIntervalMs);
   }
 
-  /** Resolves when the caller is allowed to proceed; rejects (with the
-   *  timers' AbortError) if `signal` fires while it waits for its slot's
-   *  spacing. A cancelled waiter never takes the slot, and always lets the
-   *  next one in. */
+  /** Resolves when the caller is allowed to proceed; rejects with
+   *  CallCancelled as soon as `signal` fires — queued behind earlier waiters
+   *  or waiting out its own spacing alike. A cancelled waiter never takes the
+   *  slot, and its turn still passes on to the next one in order. */
   acquire(signal?: AbortSignal): Promise<void> {
     const prev = this.#tail;
     const { promise, resolve: release } = Promise.withResolvers<void>();
     this.#tail = promise;
 
-    return prev.then(async () => {
+    const turn = prev.then(async () => {
       try {
+        if (signal?.aborted) return; // cancelled while queued: pass the turn on
         const wait = this.#delayUntilAllowed();
         if (wait > 0) await timers.setTimeout(wait, undefined, { signal });
         signal?.throwIfAborted();
@@ -46,6 +48,7 @@ export class RateLimiter {
         release();
       }
     });
+    return untilCancelled(turn, signal);
   }
 
   /** Delay (ms) before another acquisition may start, honoring the min interval. */

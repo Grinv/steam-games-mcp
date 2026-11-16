@@ -50,7 +50,7 @@ export const STALE_META_KEY = `${META_PREFIX}stale`;
 // Each problem type's URI points at its section in docs/errors.md.
 const TYPE_BASE = "https://github.com/Grinv/steam-games-mcp/blob/main/docs/errors.md#";
 
-type OwnCode = "internal" | "not_configured";
+type OwnCode = "internal" | "not_configured" | "cancelled";
 type ProblemCode = ApiErrorCode | OwnCode;
 
 // One entry per problem type — a Record, so the compiler rejects a code

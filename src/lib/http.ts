@@ -6,7 +6,7 @@
 import * as timers from "node:timers/promises";
 import { ApiError, classifyStatus, type ApiErrorCode } from "./errors.ts";
 import { TtlCache } from "./cache.ts";
-import { callScope } from "./call.ts";
+import { CallCancelled, callScope, untilCancelled } from "./call.ts";
 import type { Logger } from "./logger.ts";
 import { USER_AGENT } from "../version.ts";
 
@@ -118,7 +118,7 @@ export class HttpClient {
   }
 
   // `signal` (the call's cancellation) aborts the rate-limit wait, the fetch
-  // and the backoff between retries alike; any of them ends in `cancelled`.
+  // and the backoff between retries alike; any of them ends in CallCancelled.
   async #request(
     url: string,
     options: RequestOptions,
@@ -284,22 +284,6 @@ function ensureTrailingSlash(s: string): string {
   return s.endsWith("/") ? s : s + "/";
 }
 
-function cancelled(signal: AbortSignal): ApiError {
-  return new ApiError({
-    code: "cancelled",
-    message: "Request cancelled by the caller",
-    cause: signal.reason,
-  });
-}
-
-// Settle with `promise`, or reject as cancelled as soon as `signal` fires —
-// without touching `promise` itself, which other callers may share.
-function untilCancelled<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) return promise;
-  if (signal.aborted) return Promise.reject(cancelled(signal));
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(cancelled(signal));
-    signal.addEventListener("abort", onAbort, { once: true });
-    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
-  });
+function cancelled(signal: AbortSignal): CallCancelled {
+  return new CallCancelled(signal.reason);
 }

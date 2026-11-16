@@ -721,6 +721,22 @@ describe("get_player_achievements", () => {
   // #explainNoPlayerAchievements' own fallback: the disambiguating
   // GetSchemaForGame lookup can itself fail. That must still degrade to a
   // reason string, never throw/crash the tool.
+  test("get_player_achievements: a bad key on the fallback schema lookup isn't 'no achievements'", async (t) => {
+    // Only Steam's appid-level answer may become that verdict; anything else
+    // (here invalid_key) is not an answer about the game.
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetPlayerAchievements"))
+        return jsonResponse({ playerstats: { success: false } });
+      if (url.includes("GetSchemaForGame")) return htmlResponse(BAD_KEY_403, { status: 403 });
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 620 },
+    });
+    assertToolError(res, /^Steam rejected the configured STEAM_API_KEY/);
+  });
+
   test("get_player_achievements: an unusable schema answer is retryable, not a 'no achievements' verdict", async (t) => {
     // Transience is read from the error's own `retryable` (set where it's
     // classified), not a separate code list — bad_response was missing from
@@ -989,6 +1005,24 @@ describe("find_friends_who_own", () => {
     // translated the same way a top-level tool failure is (toProblem()), not
     // embedded as-is (which could otherwise leak raw HTML/error-page text).
     assert.doesNotMatch(s.unavailable_friends[0]!.reason, /server exploded/);
+  });
+
+  test("friends failing for different reasons get one note per reason, not the first one's", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetOwnedGames")) {
+        if (url.includes("steamid=76561197960287930")) return jsonResponse({}, { status: 503 });
+        if (url.includes("steamid=76561197960287931")) return jsonResponse({}, { status: 429 });
+      }
+      return router(url);
+    });
+    const res = await client.callTool({
+      name: "find_friends_who_own",
+      arguments: { appids: [620], steamid: "76561197960287930" },
+    });
+    const notes = (res.structuredContent as { notes: string[] }).notes;
+    assert.equal(notes.length, 2);
+    assert.ok(notes.some((n) => /^Game ownership of 1 friends .*\(503\)/.test(n)));
+    assert.ok(notes.some((n) => /^Game ownership of 1 friends .*\(429\)/.test(n)));
   });
 
   test("a GetPlayerSummaries chunk failure (150-friend list, 2 chunks) doesn't sink the whole call", async (t) => {
@@ -1464,9 +1498,8 @@ describe("get_game_achievements", () => {
   });
 
   test("never caches that degraded empty result", async (t) => {
-    // Same fix as get_global_achievements': the degrade decision moved OUTSIDE
-    // wrapStaleOnError, because returning the empty schema from inside made
-    // TtlCache#dedupe set() it. Both calls 403ing at once is usually an
+    // Same guard as get_global_achievements': the cache holds Steam's responses,
+    // never a degraded result built from them (lib/cache.ts). Both calls 403ing at once is usually an
     // appid-specific signal, but under load it can just be transient — and a
     // cached "this game has no achievements" then outlives the blip by a full
     // TTL. The real list on the retry proves the empty one was never stored.

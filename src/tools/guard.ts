@@ -5,11 +5,12 @@
 // because what's unexpected or degraded is logged here.
 import type { ServerContext } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { callScope, type CallState } from "../lib/call.ts";
+import { CallCancelled, callScope, type CallState } from "../lib/call.ts";
 import type { Logger } from "../lib/logger.ts";
 import {
   STALE_META_KEY,
   jsonResult,
+  ownProblem,
   problemResult,
   toProblem,
   type ToolResult,
@@ -82,6 +83,11 @@ export function toolOutput(logger: Logger): ToolOutput {
     try {
       result = await callScope.run(state, fn);
     } catch (err) {
+      // The client's own decision, not a failure: nothing to log. (The SDK
+      // doesn't send a cancelled call's result anyway.)
+      if (err instanceof CallCancelled || state.signal?.aborted) {
+        return problemResult(ownProblem("cancelled"));
+      }
       return problemResult(toProblem(err, logger));
     }
     const notes = notesOf(state);

@@ -54,10 +54,26 @@ describe("acquire()", () => {
     const cancelled = limiter.acquire(ac.signal);
     const next = limiter.acquire();
     ac.abort();
-    await assert.rejects(cancelled, { name: "AbortError" });
+    await assert.rejects(cancelled, { name: "CallCancelled" });
     const start = performance.now();
     await next;
     // Still spaced from the last real start, not from the cancelled waiter.
     assert.ok(performance.now() - start < 100, "the next waiter wasn't held up");
+  });
+
+  test("a cancelled waiter queued behind others stops waiting at once, not at its turn", async () => {
+    const limiter = new RateLimiter(100);
+    await limiter.acquire(); // each next slot is ~100 ms after the previous
+    const ahead = limiter.acquire(); // ~100 ms
+    const ac = new AbortController();
+    const queued = limiter.acquire(ac.signal); // would be ~200 ms
+    const start = performance.now();
+    ac.abort();
+    await assert.rejects(queued, { name: "CallCancelled" });
+    assert.ok(performance.now() - start < 50, "rejected without waiting for its turn");
+    await ahead;
+    const after = performance.now();
+    await limiter.acquire(); // the cancelled waiter never took a slot
+    assert.ok(performance.now() - after < 150, "spacing counts from the last real start");
   });
 });

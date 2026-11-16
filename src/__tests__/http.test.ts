@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { HttpClient } from "../lib/http.ts";
-import { callScope, type CallState } from "../lib/call.ts";
+import { CallCancelled, callScope, type CallState } from "../lib/call.ts";
 import { ApiError } from "../lib/errors.ts";
 import { silentLogger, jsonResponse, htmlResponse, mockFetch, installFetch } from "./helpers.ts";
 import { USER_AGENT } from "../version.ts";
@@ -349,10 +349,7 @@ describe("cancellation (the call's signal, via callScope)", () => {
     const ac = new AbortController();
     const pending = inCall(ac.signal, () => client({ timeoutMs: 10_000 }).getJson("thing"));
     setTimeout(() => ac.abort(), 10);
-    await assert.rejects(
-      pending,
-      (err: unknown) => err instanceof ApiError && err.code === "cancelled" && !err.retryable,
-    );
+    await assert.rejects(pending, (err: unknown) => err instanceof CallCancelled);
     assert.equal(seen.aborted, true);
     assert.equal(seen.calls, 1); // never retried
   });
@@ -364,10 +361,7 @@ describe("cancellation (the call's signal, via callScope)", () => {
     const start = performance.now();
     const pending = inCall(ac.signal, () => client({ retries: 2 }).getJson("thing"));
     setTimeout(() => ac.abort(), 20); // during the first ~500 ms backoff
-    await assert.rejects(
-      pending,
-      (err: unknown) => err instanceof ApiError && err.code === "cancelled",
-    );
+    await assert.rejects(pending, (err: unknown) => err instanceof CallCancelled);
     assert.ok(performance.now() - start < 300, "returned as soon as the call was cancelled");
     assert.equal(mock.calls.length, 1);
   });
@@ -383,7 +377,7 @@ describe("cancellation (the call's signal, via callScope)", () => {
     t.after(() => process.off("unhandledRejection", onUnhandled));
     await assert.rejects(
       inCall(ac.signal, () => client({ cacheTtlMs: 60_000 }).getJson("thing", { cache: true })),
-      (err: unknown) => err instanceof ApiError && err.code === "cancelled",
+      (err: unknown) => err instanceof CallCancelled,
     );
     await new Promise((r) => setTimeout(r, 10));
     assert.equal(mock.calls.length, 0);
@@ -401,10 +395,7 @@ describe("cancellation (the call's signal, via callScope)", () => {
       c.getJson("thing", { cache: true }),
     );
     ac.abort();
-    await assert.rejects(
-      cancelledCall,
-      (err: unknown) => err instanceof ApiError && err.code === "cancelled",
-    );
+    await assert.rejects(cancelledCall, (err: unknown) => err instanceof CallCancelled);
     answer(jsonResponse({ v: 1 }));
     assert.deepEqual(await otherCall, { v: 1 });
     assert.deepEqual(await c.getJson("thing", { cache: true }), { v: 1 }); // and it was cached

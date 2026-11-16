@@ -62,6 +62,25 @@ export interface PurchasePriceSource {
   ): Promise<PurchasePrices>;
 }
 
+// appdetails answers every appid it's asked about, a nonexistent one too
+// ({success:false}; verified live 2026-11-16 on 100 mixed ids — the only
+// omission was appid 0, which no tool schema accepts). So a body without an
+// entry for each requested appid (empty, null, partial) is unusable: it fails
+// like the request did — never cached, a stale copy stands in, the gap is
+// noted — instead of reading as "not available" or crashing on a lookup.
+function answersEvery(appids: number[]): (body: unknown) => void {
+  return (body) => {
+    const answered = body !== null && typeof body === "object" ? body : {};
+    const missing = appids.filter((id) => !(String(id) in answered));
+    if (missing.length === 0) return;
+    throw new ApiError({
+      code: "bad_response",
+      message: `appdetails answered without an entry for ${missing.length} of ${appids.length} appids`,
+      retryable: true,
+    });
+  };
+}
+
 export class StorefrontClient {
   readonly #http: HttpClient;
   readonly #cc: string;
@@ -102,6 +121,7 @@ export class StorefrontClient {
       this.#http.getJson<AppDetailsResponse>("api/appdetails", {
         query: { appids: appid, cc, l, filters: APPDETAILS_FILTERS },
         cache: true,
+        validate: answersEvery([appid]),
       }),
       this.#pricing.getPurchasePrices([appid], cc, l, { cache: true }),
     ]);
@@ -151,6 +171,7 @@ export class StorefrontClient {
         chunks.map((chunk) =>
           this.#http.getJson<PriceDetailsResponse>("api/appdetails", {
             query: { appids: chunk.join(","), cc, filters: "price_overview" },
+            validate: answersEvery(chunk),
           }),
         ),
       ),

@@ -17,6 +17,29 @@ export interface CallState {
 
 export const callScope = new AsyncLocalStorage<CallState>();
 
+/** The client cancelled this call. Deliberately not an ApiError: it isn't
+ *  Steam failing, so no code that answers around an upstream failure (an
+ *  optional part, a stale copy, a lookup fallback) may treat it as one —
+ *  catching ApiError lets it through untouched, and guard reports it. */
+export class CallCancelled extends Error {
+  constructor(reason?: unknown) {
+    super("Call cancelled by the client", reason === undefined ? undefined : { cause: reason });
+    this.name = "CallCancelled";
+  }
+}
+
+/** Settle with `promise`, or reject with CallCancelled as soon as `signal`
+ *  fires — without touching `promise` itself, which others may share. */
+export function untilCancelled<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new CallCancelled(signal.reason));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new CallCancelled(signal.reason));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
+
 /** Record that `what` is missing from this call's answer because of `err`. */
 export function noteDegraded(what: string, err: ApiError): void {
   callScope.getStore()?.degraded.push({ what, err });
@@ -26,13 +49,14 @@ export function noteDegraded(what: string, err: ApiError): void {
  * Await an optional part of a tool's answer: what Steam fails to provide is
  * recorded (so the model is told, and the log has it) and becomes `undefined`
  * — the formatter's "unknown", never a negative fact. A bug, or the call's own
- * cancellation, still propagates. A required part is a plain `await`.
+ * cancellation (not an ApiError), still propagates. A required part is a
+ * plain `await`.
  */
 export async function optional<T>(what: string, work: Promise<T>): Promise<T | undefined> {
   try {
     return await work;
   } catch (err) {
-    if (!(err instanceof ApiError) || err.code === "cancelled") throw err;
+    if (!(err instanceof ApiError)) throw err;
     noteDegraded(what, err);
     return undefined;
   }

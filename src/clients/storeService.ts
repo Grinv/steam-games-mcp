@@ -10,7 +10,6 @@
 // Shares the parent's HttpClient (via the `get` passed in) rather than owning
 // its own — both clients hit the same api.steampowered.com host and must honor
 // one rate limiter and one cache, not one each.
-import { ZodError } from "zod";
 import { ApiError, withFallbackOn } from "../lib/errors.ts";
 import { noteDegraded } from "../lib/call.ts";
 import type { RequestOptions } from "../lib/http.ts";
@@ -518,21 +517,7 @@ export class StoreServiceClient {
     // only this chunk's corrections. With `cache`, the request is cached (and
     // served stale while Steam is down, so getGame's details keep their
     // correction during an outage); a failure never is.
-    const shape = (body: unknown) => {
-      try {
-        return summarizePurchasePrices(body as StoreItemsResponse);
-      } catch (e) {
-        // A payload the price shape rejects is Steam's unusable answer, not a
-        // bug here: classify it so it costs only the correction.
-        if (!(e instanceof ZodError)) throw e;
-        throw new ApiError({
-          code: "bad_response",
-          message: "GetItems purchase options don't fit the price shape",
-          retryable: true,
-          cause: e,
-        });
-      }
-    };
+    const shape = (body: unknown) => summarizePurchasePrices(body as StoreItemsResponse);
     const load = async (chunk: number[]) =>
       shape(
         await this.#get<StoreItemsResponse>(
