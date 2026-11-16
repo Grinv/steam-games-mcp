@@ -17,6 +17,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Report a server bug as "Internal error in steam-games-mcp" and log its stack, instead of showing the agent the raw exception text.
 - Keep a Steam failure's own cause in a tool error: a rate-limited or failed tag dictionary now says so and whether to retry, and an unrecognized `language` is named as the cause instead of advising a retry.
 - Drop the made-up "(404)" from not-found errors that had no HTTP 404 behind them.
+- Word `resolve_vanity_url`'s and `get_player_achievements`' `found: false` reasons ourselves instead of passing on Steam's own text (e.g. a bare "No match").
 
 ### Fixed
 

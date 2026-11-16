@@ -366,7 +366,12 @@ export function summarizeVanity(
   const v = r.response;
   if (v?.success === RESULT_OK && v.steamid)
     return vanityFound.parse({ found: true, steamid: v.steamid });
-  return notFound(v?.message ?? "No match for that vanity name");
+  // Our own wording, never Steam's `message` ("No match"): agent-facing text
+  // is always ours (AGENTS.md, error pipeline).
+  return notFound(
+    "No Steam profile has that vanity name. Check the spelling: it's the part after /id/ " +
+      "in the profile URL (steamcommunity.com/id/<name>).",
+  );
 }
 
 // ---- Web API: current players (keyless) -------------------------------------

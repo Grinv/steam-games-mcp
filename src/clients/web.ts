@@ -468,7 +468,11 @@ export class SteamWebClient {
       // problem, and the agent can only tell if we say so. Only a genuine
       // appid-level rejection falls through to the not-found wording.
       if (e instanceof ApiError && TRANSIENT_CODES.includes(e.code)) throw e;
-      return notFound(apiError || "Achievements unavailable.");
+      // Steam's own error text only classifies (above), never reaches the agent.
+      return notFound(
+        "No achievement data for this appid: the game has no achievements or stats, or the " +
+          "appid doesn't exist.",
+      );
     }
   }
 

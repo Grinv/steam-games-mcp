@@ -49,7 +49,8 @@ export function summarizePlayerAchievements(
 ): z.infer<typeof notFoundReason> | z.infer<typeof playerAchievementsFound> {
   const ps = r.playerstats;
   if (!ps?.success) {
-    return notFound(ps?.error ?? "No achievement stats");
+    // Our own wording, never Steam's `error` (the client classifies that).
+    return notFound("No achievement stats");
   }
   const all = ps.achievements ?? [];
   const unlocked = all.filter((a) => a.achieved === 1);

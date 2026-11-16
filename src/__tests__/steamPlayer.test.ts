@@ -683,6 +683,24 @@ describe("get_player_achievements", () => {
   // #explainNoPlayerAchievements' own fallback: the disambiguating
   // GetSchemaForGame lookup can itself fail. That must still degrade to a
   // reason string, never throw/crash the tool.
+  test("get_player_achievements: Steam's own error text classifies but never reaches the agent", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetPlayerAchievements"))
+        return jsonResponse({ playerstats: { success: false, error: "Steam's own words" } });
+      if (url.includes("GetSchemaForGame")) return jsonResponse({}, { status: 400 });
+      return jsonResponse({});
+    });
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 620 },
+    });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assert.match(s.reason, /no achievements or stats/);
+    assert.doesNotMatch(s.reason, /Steam's own words/);
+  });
+
   test("get_player_achievements: a transient schema-lookup failure is retryable, not a verdict", async (t) => {
     // The disambiguating GetSchemaForGame call used to be wrapped in a bare
     // catch, so a 5xx on it turned into a definitive "Achievements unavailable."
@@ -716,7 +734,7 @@ describe("get_player_achievements", () => {
     assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /achievements unavailable/i);
+    assert.match(s.reason, /no achievements or stats/);
   });
 });
 
@@ -1328,7 +1346,7 @@ describe("resolve_vanity_url", () => {
   test("reports found:false for a vanity name with no match", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("ResolveVanityURL")
-        ? jsonResponse({ response: { success: 42, message: "No match" } })
+        ? jsonResponse({ response: { success: 42, message: "Steam's own words" } })
         : jsonResponse({}),
     );
     const res = await client.callTool({
@@ -1338,7 +1356,8 @@ describe("resolve_vanity_url", () => {
     assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /no match/i);
+    assert.match(s.reason, /No Steam profile has that vanity name/);
+    assert.doesNotMatch(s.reason, /Steam's own words/); // agent text is ours only
   });
 });
 
