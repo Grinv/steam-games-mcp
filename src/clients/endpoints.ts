@@ -150,6 +150,8 @@ export const Steam = {
     probes: [invalidSteamidProbe({ steamid: ACCOUNT_0, count: 1 })],
   }),
   // A private list and a missing account answer alike, so one answer for both.
+  // Never a plain 403 (only the bad-key page): 36 of 36 non-public profiles
+  // sampled live 2026-11-17 answered 401.
   GetFriendList: endpoint<FriendListResponse, "private_or_missing">({
     path: "ISteamUser/GetFriendList/v1/",
     host: "api",
@@ -177,6 +179,8 @@ export const Steam = {
       },
     ],
   }),
+  // Hidden game details are always a 403 "Profile is not public" — never a 401
+  // or 404 (44 of 44 sampled live 2026-11-17); an unknown appid is a 400.
   GetPlayerAchievements: endpoint<PlayerAchievementsResponse, "private" | "no_stats">({
     path: "ISteamUserStats/GetPlayerAchievements/v1/",
     host: "api",
@@ -209,7 +213,8 @@ export const Steam = {
   }),
 
   // ---- keyless-capable (key sent when present) ------------------------------
-  // A 403 for a DLC with no achievement data and for a nonexistent appid —
+  // A 403 for a DLC with no achievement data and for a nonexistent appid
+  // (never a 400/404: five such appids sampled live 2026-11-17) —
   // and, observed under load, from Steam's edge for a game that has data:
   // so a cached copy wins over it, and with a key the schema tells them apart.
   GetGlobalAchievementPercentagesForApp: endpoint<GlobalAchievementsResponse, "no_data">({

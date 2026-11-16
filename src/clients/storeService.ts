@@ -445,8 +445,8 @@ export class StoreServiceClient {
   //
   // Best-effort by contract: this only ever improves numbers the caller already
   // has, so a chunk that fails just leaves its appids on the Storefront price
-  // rather than failing the whole tool call. HttpClient already logs the
-  // underlying failure.
+  // rather than failing the whole tool call — a gap noted for the model
+  // (optionalParts) and logged by tools/guard.ts.
   //
   // `cache` is for getGame only, whose appdetails entry is itself cached:
   // get_prices and search_games fetch their Storefront rows fresh, and a cached
@@ -522,9 +522,9 @@ export class StoreServiceClient {
     // None of the three requests depends on another's answer, so they run
     // concurrently. They're still awaited in the original order, so a missing
     // tag dictionary or an empty favorite-tag set wins over a failed sample or
-    // pool request exactly as before; the no-op catches only keep a request
-    // nobody awaits (after an early throw/return) from becoming an unhandled
-    // rejection.
+    // pool request exactly as before; the no-op catch below only keeps the
+    // sample request, if nobody awaits it (after an early throw/return), from
+    // becoming an unhandled rejection.
     const tagMapPromise = this.#tagNames(l);
     const sample = ownedGames
       .slice()

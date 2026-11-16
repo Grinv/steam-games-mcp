@@ -196,7 +196,10 @@ test("get_global_achievements: a 403 for a game whose schema lists achievements 
       : router(url),
   );
   const res = await client.callTool({ name: "get_global_achievements", arguments: { appid: 620 } });
-  assertToolError(res, /denied access \(403\)/);
+  assertToolError(res, /\(403\)\. Steam refused the rarity data.*retry/);
+  // Not the 403 advice for a keyless call, which would send the agent to
+  // change a valid appid.
+  assert.doesNotMatch((res.content as { text: string }[])[0]!.text, /different input|credentials/);
 });
 
 test("get_game_achievements: rarity's 403 for a game that has achievements is a noted gap", async (t) => {

@@ -77,16 +77,18 @@ const hasAchievements = (schema: GameSchemaResponse) =>
   (schema.game?.availableGameStats?.achievements?.length ?? 0) > 0;
 
 // GetGlobalAchievementPercentagesForApp's 403 ("no data") for a game whose
-// schema lists achievements: the edge's passing block, not an answer.
+// schema lists achievements: the edge's passing block, not an answer. `unknown`,
+// not `forbidden`: it is neither a credentials problem nor a bad request, and
+// the code picks the advice the agent reads — the detail says what happened.
 function rarityBlocked(appid: number): ApiError {
   return new ApiError({
-    code: "forbidden",
+    code: "unknown",
     status: 403,
-    hadCredentials: false,
     retryable: true,
     message: `GetGlobalAchievementPercentagesForApp 403 for appid ${appid}, whose schema lists achievements`,
     detail:
-      "Steam refused the rarity data of a game that has achievements — most likely a passing block.",
+      "Steam refused the rarity data of a game that has achievements — most likely a passing " +
+      "block under load; retry in a while.",
   });
 }
 
@@ -608,7 +610,7 @@ export class SteamWebClient {
   // The modern store-browse/query card services (get_items, discover_games) live
   // on StoreServiceClient (clients/storeService.ts); tools/webStore.ts calls it
   // directly via this getter rather than through pass-through methods here.
-  // Shares this.#get (one rate limiter, one cache), so it's built once in
+  // Shares this.#call (one rate limiter, one cache), so it's built once in
   // the constructor and exposed, not reconstructed by the caller.
   get store(): StoreServiceClient {
     return this.#store;

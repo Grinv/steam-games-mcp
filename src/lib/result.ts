@@ -152,9 +152,6 @@ export function toProblem(err: unknown, logger: Logger): Problem {
   return ownProblem("internal");
 }
 
-/** An upstream failure as the one sentence the agent reads — pure (no
- *  logging), so a formatter can use it for a per-item failure inside a
- *  successful result (find_friends_who_own's unavailable_friends). */
 /** Just what happened — the code's title and Steam's status — for when the
  *  error's own reading (its detail, the advice) doesn't apply: a stale copy
  *  answered it, so it was taken as a passing failure, not Steam's verdict. */
@@ -162,6 +159,9 @@ export function problemSummary(err: ApiError): string {
   return `${PROBLEMS[err.code].title}${err.status ? ` (${err.status})` : ""}`;
 }
 
+/** An upstream failure as the one sentence the agent reads — pure (no
+ *  logging), so a formatter can use it for a per-item failure inside a
+ *  successful result (find_friends_who_own's unavailable_friends). */
 export function problemDetail(err: ApiError): string {
   const { title, advice } = PROBLEMS[err.code];
   const status = err.status ? ` (${err.status})` : "";

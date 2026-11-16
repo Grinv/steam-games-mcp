@@ -12,6 +12,7 @@ import type {
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { CallCancelled, callScope, type CallState } from "../lib/call.ts";
+import type { ApiError } from "../lib/errors.ts";
 import type { Logger } from "../lib/logger.ts";
 import {
   STALE_META_KEY,
@@ -50,7 +51,7 @@ const notesSchema = z
 /** A tool's outputSchema plus the optional `notes` guard may add to any
  *  successful answer (every member of a union gets it). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- rebuilt per Zod kind below
-export function withNotes(schema: z.ZodType): any {
+function withNotes(schema: z.ZodType): any {
   const add = (s: z.ZodType) => (s as z.ZodObject).extend({ notes: notesSchema });
   if (schema instanceof z.ZodDiscriminatedUnion) {
     const options = schema.options as z.ZodType[];
@@ -69,12 +70,16 @@ export function toolOutput(logger: Logger): ToolOutput {
   // error's raw message.
   function notesOf(state: CallState): string[] {
     const notes = new Set<string>();
+    // One line each: an expected Steam failure, not a bug — stacks are for
+    // the internal-error path (toProblem), where they're the diagnostics.
+    const line = (err: ApiError) =>
+      `${err.code}${err.status ? ` ${err.status}` : ""}: ${err.message.split("\n")[0]}`;
     for (const { what, err } of state.degraded) {
-      logger.warn(`partial answer, ${what} unavailable:`, err);
+      logger.warn(`partial answer, ${what} unavailable: ${line(err)}`);
       notes.add(`${what} unavailable: ${toProblem(err, logger).detail}`);
     }
     for (const { err, storedAt } of state.stale) {
-      logger.warn("served stale cache data after:", err);
+      logger.warn(`served stale cache data after ${line(err)}`);
       // problemSummary, not the full detail: answering with a stale copy
       // means the failure was taken as passing, so its definitive reading
       // (e.g. "your language is invalid") would mislead.
@@ -110,10 +115,10 @@ export function toolOutput(logger: Logger): ToolOutput {
   return { guard, reply: (fn, ctx) => guard(async () => jsonResult(await fn()), ctx) };
 }
 
-/** A tool's registration, minus what `tool()` wires itself. */
 /** A tool's validated input, as the SDK infers it from the input schema. */
 type ToolInput<I extends StandardSchemaWithJSON> = Parameters<ToolCallback<I>>[0];
 
+/** A tool's registration, minus what `tool()` wires itself. */
 export interface ToolConfig<I extends z.ZodType & StandardSchemaWithJSON> {
   title: string;
   description: string;
@@ -149,5 +154,3 @@ export function toolRegistrar(server: McpServer, out: ToolOutput) {
     );
   };
 }
-
-export type ToolRegistrar = ReturnType<typeof toolRegistrar>;

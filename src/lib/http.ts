@@ -76,8 +76,7 @@ export class HttpClient {
       await this.#request(url, options, "application/json", signal, check);
       return body as T;
     }
-    // Checked before it was cached, so it parses to an object.
-    return parseJson(await this.#cached(url, options, signal)) as T;
+    return (await this.#cached(url, options, signal)) as T;
   }
 
   /** The raw response body, for the rare upstream that doesn't speak JSON —
@@ -96,27 +95,32 @@ export class HttpClient {
   //
   // The request is shared, so a cancelled call only stops waiting for it: the
   // other waiters still get its answer, and so does the cache.
-  async #cached(url: string, options: RequestOptions, signal?: AbortSignal): Promise<string> {
+  // Resolves to the parsed body (checked before it was cached, so an object).
+  async #cached(url: string, options: RequestOptions, signal?: AbortSignal): Promise<unknown> {
     // Before starting a request nobody would wait for (or handle the failure of).
     if (signal?.aborted) throw cancelled(signal);
     const stale = this.#cache.getStale(url);
+    // The caller whose request this is keeps the body its check parsed;
+    // anyone answered from cache (or sharing that request) parses the text.
+    let parsed: object | undefined;
     try {
       const shared = this.#cache.wrap(url, async () => {
         // With a stale copy to fall back on, a retry would only delay the
         // answer it ends in (up to ~45 s of timeouts with the defaults).
         const retries = stale === undefined ? undefined : 0;
-        const check = (text: string) => void checked(text, options);
+        const check = (text: string) => void (parsed = checked(text, options));
         return (
           (await this.#request(url, options, "application/json", undefined, check, retries)) ?? ""
         );
       });
-      return await untilCancelled(shared, signal);
+      const text = await untilCancelled(shared, signal);
+      return parsed ?? parseJson(text);
     } catch (err) {
       const staleWins =
         err instanceof ApiError && (err.retryable || options.staleOn?.includes(err.code));
       if (stale === undefined || !staleWins) throw err;
       callScope.getStore()?.stale.push({ err: err as ApiError, storedAt: stale.storedAt });
-      return stale.value;
+      return parseJson(stale.value);
     }
   }
 

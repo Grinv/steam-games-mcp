@@ -46,7 +46,7 @@ src/
                   #   query/wishlist-sorted card services)
   tools/          # storefront.ts, webStore.ts (keyless-capable Web API tools),
                   #   webPlayer.ts (key-gated player tools), webShared.ts (steamid
-                  #   schema, steamIdTool helper and requireKey, shared by the two),
+                  #   schema, steamIdTool helper and keyGate, shared by the two),
                   #   common.ts (shared param schemas, toCompatFilters across
                   #   storefront+web), guard.ts (toolOutput: the guard/reply
                   #   wrappers, built per server with its logger), prompts.ts

@@ -83,7 +83,11 @@ test("a stale-cache fallback is told to the model in notes, flagged in _meta, an
     assert.deepEqual(JSON.parse(r.content[0]!.text), sc); // the text mirror says the same
     assert.equal((r._meta as Record<string, unknown>)[STALE_META_KEY], true);
     assert.ok(
-      lines.some((l) => l.level === "warn" && /stale cache data after:.*HTTP 503/s.test(l.text)),
+      lines.some(
+        (l) =>
+          l.level === "warn" &&
+          /^served stale cache data after server_error 503: HTTP 503$/.test(l.text),
+      ),
     );
 
     // A complete, fresh answer carries neither.
