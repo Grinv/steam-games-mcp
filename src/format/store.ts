@@ -37,6 +37,7 @@ import {
   type StoreItemsResponse,
   type StoreItemWithAppid,
   type TagMap,
+  reviewPercent,
 } from "./storeCard.ts";
 
 // ---- IStoreQueryService/SearchSuggestions (keyless title search) ------------
@@ -384,8 +385,8 @@ export function summarizeRecommendations(
       // Discount by review quality so a tag match on a poorly-received game
       // doesn't outrank a better one; missing review data (too new/rare to
       // judge) stays neutral (×1) rather than being penalized as if bad.
-      const reviewPercent = it.reviews?.summary_filtered?.percent_positive;
-      const reviewMultiplier = typeof reviewPercent === "number" ? reviewPercent / 100 : 1;
+      const percent = reviewPercent(it);
+      const reviewMultiplier = typeof percent === "number" ? percent / 100 : 1;
       return { it, matchedTags, matchScore: tagScore * reviewMultiplier };
     })
     .filter((x) => x.matchScore > 0)

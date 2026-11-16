@@ -23,7 +23,11 @@ import {
   ACHIEVEMENTS_MAX,
   GAME_SCHEMA_ACHIEVEMENTS_MAX,
 } from "../format/webAchievements.ts";
-import { summarizePurchasePrices, summarizeSearchSuggestions } from "../format/store.ts";
+import {
+  summarizePurchasePrices,
+  summarizeRecommendations,
+  summarizeSearchSuggestions,
+} from "../format/store.ts";
 import { storeDayStart, storeReleaseDay, stripHtml } from "../format/shared.ts";
 
 // Steam frequently omits optional fields; these exercise the sparse-payload
@@ -727,5 +731,47 @@ describe("summarizePlayerAchievements", () => {
     assert.equal(s.unlocked, 50);
     assert.equal(s.returned, 130);
     assert.equal(s.achievements.length, 130);
+  });
+});
+
+describe("a game with no reviews", () => {
+  // Steam's own summary for one, sampled live 2026-11-17 (appid 1849290).
+  const unreviewed = {
+    appid: 1,
+    name: "New",
+    tags: [{ tagid: 1 }],
+    reviews: {
+      summary_filtered: {
+        review_count: 0,
+        percent_positive: 0,
+        review_score: 0,
+        review_score_label: "No user reviews",
+      },
+    },
+  };
+  const tagMap = { 1: "Puzzle" };
+
+  test("has an unknown review %, not 0%", () => {
+    const s = summarizeRecommendations(
+      [unreviewed],
+      new Map([["Puzzle", 5]]),
+      new Set(),
+      tagMap,
+      10,
+      ["Puzzle"],
+    );
+    assert.equal(s.recommendations[0]?.review_percent, null);
+  });
+
+  test("stays a recommendation, neither boosted nor dropped by its review %", () => {
+    const s = summarizeRecommendations(
+      [unreviewed],
+      new Map([["Puzzle", 5]]),
+      new Set(),
+      tagMap,
+      10,
+      ["Puzzle"],
+    );
+    assert.equal(s.recommendations[0]?.match_score, 5);
   });
 });

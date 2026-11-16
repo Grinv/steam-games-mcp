@@ -84,8 +84,10 @@ test("minReview / minReviews compare on the raw summary (missing = excluded)", (
   const rev = (percent_positive?: number, review_count?: number) =>
     item({ reviews: { summary_filtered: { percent_positive, review_count } } });
   const byPct = storeItemFilter({ minReview: 80 });
-  assert.ok(byPct(rev(80)));
-  assert.ok(!byPct(rev(79)));
+  // Steam always sends the count with the percentage; 0 reviews has no percentage.
+  assert.ok(byPct(rev(80, 10)));
+  assert.ok(!byPct(rev(79, 10)));
+  assert.ok(!byPct(rev(0, 0))); // Steam's "No user reviews" summary → unrated
   assert.ok(!byPct(item())); // no reviews → treated as below any threshold
   const byCount = storeItemFilter({ minReviews: 100 });
   assert.ok(byCount(rev(undefined, 100)));
@@ -98,7 +100,9 @@ test("minReview: 0 is a no-op — it must NOT drop games with no review summary"
   // fail `-1 < 0`, so a brand-new game with no reviews must still pass.
   const keep = storeItemFilter({ minReview: 0 });
   assert.ok(keep(item())); // no reviews at all → still kept
-  assert.ok(keep(item({ reviews: { summary_filtered: { percent_positive: 0 } } }))); // all-negative → kept
+  assert.ok(
+    keep(item({ reviews: { summary_filtered: { percent_positive: 0, review_count: 3 } } })),
+  ); // all-negative → kept
 });
 
 test("minDiscount / onSaleOnly filter on discount, and minDiscount overrides onSaleOnly", () => {
@@ -124,12 +128,14 @@ test("multiple filters combine with AND — flipping any one dimension excludes 
   });
   const good = item({
     best_purchase_option: { discount_pct: 75 },
-    reviews: { summary_filtered: { percent_positive: 90 } },
+    reviews: { summary_filtered: { percent_positive: 90, review_count: 500 } },
     platforms: { steamos_linux: true },
   });
   assert.ok(keep(good));
   assert.ok(!keep({ ...good, best_purchase_option: { discount_pct: 40 } })); // discount fails
-  assert.ok(!keep({ ...good, reviews: { summary_filtered: { percent_positive: 70 } } })); // review fails
+  assert.ok(
+    !keep({ ...good, reviews: { summary_filtered: { percent_positive: 70, review_count: 500 } } }),
+  ); // review fails
   assert.ok(!keep({ ...good, platforms: { windows: true } })); // native platform fails
 });
 

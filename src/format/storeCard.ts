@@ -224,13 +224,20 @@ export function priceFields(bp: StoreItem["best_purchase_option"]): {
 // return up to hundreds of cards per call, so re-validating each one twice on
 // top of that would be pure overhead). The `z.infer` return type still gets
 // this checked at the TS level.
+// Steam sends percent_positive: 0 for a game with no reviews at all (sampled
+// live 2026-11-17), so 0 there is "unknown", not "everyone disliked it".
+export function reviewPercent(it: StoreItem): number | undefined {
+  const rev = it.reviews?.summary_filtered;
+  return rev?.review_count ? rev.percent_positive : undefined;
+}
+
 export function baseCard(it: StoreItemWithAppid, tagMap?: TagMap): z.infer<typeof baseCardSchema> {
   const rev = it.reviews?.summary_filtered;
   return {
     appid: it.appid,
     name: it.name ?? null,
     store_url: storeUrl(it.appid),
-    review_percent: rev?.percent_positive ?? null,
+    review_percent: reviewPercent(it) ?? null,
     review_count: rev?.review_count ?? null,
     review_label: rev?.review_score_label ?? null,
     platforms: nativePlatforms(it.platforms),
@@ -321,7 +328,7 @@ export function storeItemFilter(f: StoreFilters): (it: StoreItem) => boolean {
     if (
       typeof f.minReview === "number" &&
       f.minReview > 0 &&
-      (rev?.percent_positive ?? -1) < f.minReview
+      (reviewPercent(it) ?? -1) < f.minReview
     )
       return false;
     if (typeof f.minReviews === "number" && (rev?.review_count ?? 0) < f.minReviews) return false;
