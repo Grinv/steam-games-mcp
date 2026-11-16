@@ -54,11 +54,14 @@ export class TtlCache {
   }
 
   set(key: string, value: string): void {
-    if (this.#ttlMs <= 0 || value.length > this.#maxSize) return;
+    if (this.#ttlMs <= 0) return;
     // Re-inserted, not updated in place: a Map keeps a key's first insertion
     // position, so a key refreshed every TTL (the tag dictionary) would
-    // otherwise be the first evicted and lose its stale fallback.
+    // otherwise be the first evicted and lose its stale fallback. Dropped
+    // even when the new value is too big to keep: an older copy would no
+    // longer be Steam's latest answer.
     this.#delete(key);
+    if (value.length > this.#maxSize) return;
     this.#map.set(key, { value, expires: performance.now() + this.#ttlMs, storedAt: Date.now() });
     this.#size += value.length;
     for (const oldest of this.#map.keys()) {

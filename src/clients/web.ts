@@ -77,18 +77,14 @@ const hasAchievements = (schema: GameSchemaResponse) =>
   (schema.game?.availableGameStats?.achievements?.length ?? 0) > 0;
 
 // GetGlobalAchievementPercentagesForApp's 403 ("no data") for a game whose
-// schema lists achievements: the edge's passing block, not an answer. `unknown`,
-// not `forbidden`: it is neither a credentials problem nor a bad request, and
-// the code picks the advice the agent reads — the detail says what happened.
+// schema lists achievements: the edge's passing block, not an answer.
 function rarityBlocked(appid: number): ApiError {
   return new ApiError({
-    code: "unknown",
+    code: "forbidden",
     status: 403,
     retryable: true,
     message: `GetGlobalAchievementPercentagesForApp 403 for appid ${appid}, whose schema lists achievements`,
-    detail:
-      "Steam refused the rarity data of a game that has achievements — most likely a passing " +
-      "block under load; retry in a while.",
+    detail: "Steam refused the rarity data of a game that has achievements (a passing block).",
   });
 }
 
@@ -577,15 +573,32 @@ export class SteamWebClient {
     if (!res.answer) return summarizeGlobalAchievements(res.data);
     // "No data" is also the edge's passing 403 (clients/endpoints.ts). With a
     // key, the (cached) schema tells them apart: a game that lists
-    // achievements has rarity data, so the answer was a failure. Keyless,
-    // "no data" is the verified common reading.
+    // achievements has rarity data, so the answer was a failure.
     if (this.configured) {
       const schema = await optional(
         "Achievement schema (to tell 'no data' from a passing 403)",
         this.#call(Steam.GetSchemaForGame, { appid, l: this.#l }, { cache: true }),
       );
-      if (schema?.data && hasAchievements(schema.data)) throw rarityBlocked(appid);
+      if (schema) {
+        if (schema.data && hasAchievements(schema.data)) throw rarityBlocked(appid);
+        return summarizeGlobalAchievements({});
+      }
     }
+    // Keyless, or the schema unknown: the empty answer may be a passing block,
+    // so it is reported as possibly incomplete, never as "no achievements".
+    noteDegraded(
+      "Achievement rarity",
+      new ApiError({
+        code: "forbidden",
+        status: 403,
+        retryable: true,
+        message: `GetGlobalAchievementPercentagesForApp 403 for appid ${appid}, schema unknown`,
+        detail:
+          "Steam answers 403 both for a game with no achievement data and, under load, for " +
+          "one that has it; without its achievement schema (needs STEAM_API_KEY) the two " +
+          "can't be told apart.",
+      }),
+    );
     return summarizeGlobalAchievements({});
   }
 

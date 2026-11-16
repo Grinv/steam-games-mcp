@@ -36,6 +36,13 @@ describe("bounded size", () => {
     assert.equal(cache.getStale("big"), undefined);
     assert.equal(cache.get("a"), "aaaa");
   });
+
+  test("a too-big new answer for a key drops its older copy: that's no longer Steam's latest", () => {
+    const cache = new TtlCache(60_000, 10);
+    cache.set("a", "aaaa");
+    cache.set("a", "x".repeat(11));
+    assert.equal(cache.getStale("a"), undefined);
+  });
 });
 
 test("ages entries on a monotonic clock: a wall clock stepped back keeps nothing fresh", async (t) => {

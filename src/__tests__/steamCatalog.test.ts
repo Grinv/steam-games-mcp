@@ -188,6 +188,23 @@ test("get_global_achievements degrades to a clean empty result for a schema-less
   assert.deepEqual(s.achievements, []);
 });
 
+test("get_global_achievements keyless: a 403 is reported as possibly incomplete, never as 'none'", async (t) => {
+  // Without the key there's no schema to tell "no data" from the edge's
+  // passing 403, so the empty answer carries a note instead of passing as fact.
+  const { STEAM_API_KEY: _key, ...keyless } = ENV;
+  const { client } = await setupServer(t, keyless, (url) =>
+    url.includes("GetGlobalAchievementPercentagesForApp")
+      ? jsonResponse({}, { status: 403 })
+      : router(url),
+  );
+  const res = await client.callTool({ name: "get_global_achievements", arguments: { appid: 620 } });
+  const s = res.structuredContent as { count: number; notes?: string[] };
+  assert.equal(s.count, 0);
+  assert.match(s.notes?.[0] ?? "", /^Achievement rarity unavailable: .*can't be told apart/);
+  // Unknown stays unknown: the advice after it doesn't claim a cause either.
+  assert.doesNotMatch(s.notes?.[0] ?? "", /refused it in passing|security block/);
+});
+
 test("get_global_achievements: a 403 for a game whose schema lists achievements is a failure, not 'none'", async (t) => {
   // The edge also answers 403 under load; with a key, the schema settles it.
   const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>

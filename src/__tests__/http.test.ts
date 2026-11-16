@@ -531,3 +531,26 @@ test("Steam's bad-key page is recognized from the body, past the log message's 5
     (err: unknown) => err instanceof ApiError && err.code === "invalid_key",
   );
 });
+
+test("an error body that can't be read is an I/O failure, not a 403 to read off its status", async (t) => {
+  // classify needs the body (e.g. Steam's bad-key page); without it the
+  // failure's meaning is unknown — never an answer like "private".
+  installFetch(
+    t,
+    mockFetch(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(c) {
+              c.error(new Error("connection reset"));
+            },
+          }),
+          { status: 403 },
+        ),
+    ),
+  );
+  await assert.rejects(
+    client({ retries: 0 }).getJson("thing"),
+    (err: unknown) => err instanceof ApiError && err.code === "network" && err.retryable,
+  );
+});

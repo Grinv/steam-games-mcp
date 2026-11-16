@@ -207,8 +207,10 @@ export class HttpClient {
         }),
       );
       if (res.ok) return res.status === 204 ? undefined : await io(res.text());
-      // The error body is log-only: a failure reading it leaves it out.
-      const raw = await res.text().catch(() => "");
+      // The body is what classify reads (e.g. Steam's bad-key page): when it
+      // can't be read, what this failure means is unknown — an I/O failure,
+      // not an answer to read off the status alone.
+      const raw = await io(res.text());
       const err = toHttpError(res, raw);
       throw this.#opts.classify ? this.#opts.classify(err, raw) : err;
     } finally {

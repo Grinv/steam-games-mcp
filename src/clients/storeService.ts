@@ -768,7 +768,7 @@ export class StoreServiceClient {
         message: "GetWishlistSortedFiltered answered 400 for a readable wishlist",
         detail:
           "Steam refused the filtered wishlist request, though the wishlist itself is readable. " +
-          "Retry, or try fewer filters.",
+          "Try fewer filters.",
       });
     return summarizeWishlistDetailed(filtered.res.data ?? {}, filtered.tagMap, filters(), {
       total,

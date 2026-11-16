@@ -78,10 +78,14 @@ const PROBLEMS: Record<
   },
   forbidden: {
     title: "The upstream service denied access",
-    advice:
+    // `retryable` is the classifier's reading of this 403 (e.g. the rarity
+    // endpoint's passing edge block); a plain 403 is Steam refusing the input.
+    advice: (err) =>
       NOT_THE_KEY +
-      "Most likely an upstream security block (e.g. a request that resembles an injection " +
-      "attempt): try different input, or retry later.",
+      (err.retryable
+        ? "If it was a passing block, a retry in a while gets the answer."
+        : "Most likely an upstream security block (e.g. a request that resembles an " +
+          "injection attempt): try different input."),
   },
   not_found: { title: "No matching resource was found" },
   rate_limited: {
