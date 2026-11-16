@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.ts";
 import type { StoreServiceClient } from "../clients/storeService.ts";
-import { withNotes, type ToolOutput } from "./guard.ts";
+import { toolRegistrar, type ToolOutput } from "./guard.ts";
 import {
   COUNTRY_UNKNOWN_WARNING,
   LANGUAGE_ISO_WARNING,
@@ -58,9 +58,10 @@ export function registerStoreWebTools(
   server: McpServer,
   web: SteamWebClient,
   store: StoreServiceClient,
-  { reply }: ToolOutput,
+  out: ToolOutput,
 ): void {
-  server.registerTool(
+  const tool = toolRegistrar(server, out);
+  tool(
     "search_games",
     {
       title: "Search games",
@@ -94,14 +95,14 @@ export function registerStoreWebTools(
         country,
         language,
       }),
-      outputSchema: withNotes(searchGamesOutput),
+      outputSchema: searchGamesOutput,
       annotations: READ_ONLY,
     },
-    ({ term, limit, games_only: gamesOnly, country: cc, language: l }, ctx) =>
-      reply(() => store.searchGames(term, { country: cc, language: l, limit, gamesOnly }), ctx),
+    ({ term, limit, games_only: gamesOnly, country: cc, language: l }) =>
+      store.searchGames(term, { country: cc, language: l, limit, gamesOnly }),
   );
 
-  server.registerTool(
+  tool(
     "get_game_news",
     {
       title: "Get game news",
@@ -131,13 +132,13 @@ export function registerStoreWebTools(
           )
           .default("all"),
       }),
-      outputSchema: withNotes(getGameNewsOutput),
+      outputSchema: getGameNewsOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id, limit, kind }, ctx) => reply(() => web.getNews(id, limit, kind), ctx),
+    ({ appid: id, limit, kind }) => web.getNews(id, limit, kind),
   );
 
-  server.registerTool(
+  tool(
     "get_game_reviews",
     {
       title: "Get game reviews",
@@ -202,14 +203,14 @@ export function registerStoreWebTools(
         .refine((a) => a.within_days === undefined || a.order === "helpful", {
           message: "within_days only applies to order='helpful'.",
         }),
-      outputSchema: withNotes(getGameReviewsOutput),
+      outputSchema: getGameReviewsOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id, limit, review_language, type, order, within_days }, ctx) =>
-      reply(() => web.getReviews(id, limit, review_language, type, order, within_days), ctx),
+    ({ appid: id, limit, review_language, type, order, within_days }) =>
+      web.getReviews(id, limit, review_language, type, order, within_days),
   );
 
-  server.registerTool(
+  tool(
     "get_global_achievements",
     {
       title: "Get global achievement rates",
@@ -223,13 +224,13 @@ export function registerStoreWebTools(
         "error, the same as get_game_news. " +
         "Get the appid from search_games. No API key required.",
       inputSchema: z.strictObject({ appid }),
-      outputSchema: withNotes(getGlobalAchievementsOutput),
+      outputSchema: getGlobalAchievementsOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id }, ctx) => reply(() => web.getGlobalAchievements(id), ctx),
+    ({ appid: id }) => web.getGlobalAchievements(id),
   );
 
-  server.registerTool(
+  tool(
     "get_items",
     {
       title: "Batch store card for many games",
@@ -259,14 +260,13 @@ export function registerStoreWebTools(
         country,
         language,
       }),
-      outputSchema: withNotes(getItemsOutput),
+      outputSchema: getItemsOutput,
       annotations: READ_ONLY,
     },
-    ({ appids, country, language }, ctx) =>
-      reply(() => store.getItems(appids, country, language), ctx),
+    ({ appids, country, language }) => store.getItems(appids, country, language),
   );
 
-  server.registerTool(
+  tool(
     "discover_games",
     {
       title: "Discover games",
@@ -392,10 +392,10 @@ export function registerStoreWebTools(
         country,
         language,
       }),
-      outputSchema: withNotes(discoverGamesOutput),
+      outputSchema: discoverGamesOutput,
       annotations: READ_ONLY,
     },
-    (input, ctx) => {
+    async (input) => {
       const {
         released_after,
         released_within_days,
@@ -415,26 +415,22 @@ export function registerStoreWebTools(
       if (released_after) releasedAfter = storeDayStart(released_after);
       else if (released_within_days)
         releasedAfter = Math.floor(Date.now() / 1000) - released_within_days * 86400;
-      return reply(
-        () =>
-          store.discoverGames({
-            ...toCompatFilters(input),
-            releasedAfter,
-            tags,
-            minReview: min_review,
-            minReviews: min_reviews,
-            minDiscount: min_discount,
-            count,
-            start,
-            country,
-            language,
-          }),
-        ctx,
-      );
+      return store.discoverGames({
+        ...toCompatFilters(input),
+        releasedAfter,
+        tags,
+        minReview: min_review,
+        minReviews: min_reviews,
+        minDiscount: min_discount,
+        count,
+        start,
+        country,
+        language,
+      });
     },
   );
 
-  server.registerTool(
+  tool(
     "get_current_players",
     {
       title: "Get current player count",
@@ -443,13 +439,13 @@ export function registerStoreWebTools(
         "Get the appid from search_games. No API key required. Errors clearly if the appid is " +
         "unknown/invalid rather than returning a null count.",
       inputSchema: z.strictObject({ appid }),
-      outputSchema: withNotes(getCurrentPlayersOutput),
+      outputSchema: getCurrentPlayersOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id }, ctx) => reply(() => web.getCurrentPlayers(id), ctx),
+    ({ appid: id }) => web.getCurrentPlayers(id),
   );
 
-  server.registerTool(
+  tool(
     "get_charts",
     {
       title: "Get Steam charts",
@@ -503,22 +499,18 @@ export function registerStoreWebTools(
           message:
             "country and week apply to top_sellers only; the other charts are global and current.",
         }),
-      outputSchema: withNotes(getChartsOutput),
+      outputSchema: getChartsOutput,
       annotations: READ_ONLY,
     },
-    ({ chart, limit, country: cc, week }, ctx) =>
-      reply(
-        () =>
-          store.getCharts(chart, {
-            limit,
-            country: cc?.toUpperCase(),
-            weekOf: week ? Date.parse(week) / 1000 : undefined,
-          }),
-        ctx,
-      ),
+    ({ chart, limit, country: cc, week }) =>
+      store.getCharts(chart, {
+        limit,
+        country: cc?.toUpperCase(),
+        weekOf: week ? Date.parse(week) / 1000 : undefined,
+      }),
   );
 
-  server.registerTool(
+  tool(
     "get_followed_games",
     {
       title: "Get a player's followed games",
@@ -534,13 +526,13 @@ export function registerStoreWebTools(
         "price, review % and compat. Convert a vanity name with resolve_vanity_url " +
         "first (that conversion itself needs STEAM_API_KEY, even though this tool doesn't).",
       inputSchema: z.strictObject({ steamid }),
-      outputSchema: withNotes(getFollowedGamesOutput),
+      outputSchema: getFollowedGamesOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, reply, (sid) => web.getFollowedGames(sid)),
+    steamIdTool(web, (sid) => web.getFollowedGames(sid)),
   );
 
-  server.registerTool(
+  tool(
     "get_wishlist",
     {
       title: "Get a player's wishlist",
@@ -617,10 +609,10 @@ export function registerStoreWebTools(
           `Store language; overrides STEAM_LANGUAGE. Implies include_details. ${LANGUAGE_ISO_WARNING}`,
         ),
       }),
-      outputSchema: withNotes(getWishlistOutput),
+      outputSchema: getWishlistOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, reply, (sid, input) =>
+    steamIdTool(web, (sid, input) =>
       web.getWishlist(sid, {
         ...toCompatFilters(input),
         includeDetails: input.include_details,

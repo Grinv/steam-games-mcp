@@ -142,13 +142,17 @@ npm run inspector      # run under the MCP Inspector
     code without an entry doesn't compile). Anything that isn't an `ApiError`
     is a bug — logged with stack and cause chain, shown to the agent as a
     stable "internal error".
-  - **Output** only through `toolOutput(logger)`'s `guard`/`reply` (prompt
-    completions, the one path outside it, follow the same rule: an upstream
-    failure degrades quietly, a bug is logged)
-    (`tools/guard.ts`): the model reads `detail` as the result text, the
-    Problem rides in `_meta["io.github.Grinv/problem"]`. A partial failure
-    inside a successful result (e.g. `find_friends_who_own`'s per-friend
-    reason) uses `toProblem(...).detail` too.
+  - **Output** only through the `tool(name, config, handler, { gate })`
+    registrar (`toolRegistrar` in `tools/guard.ts`): a handler just returns
+    its structured data; `reply` (errors, notes, the call's `ctx`), the
+    outputSchema's `notes` and an optional `gate` (e.g. `keyGate`: no key
+    configured) are wired there once, for every tool. The model reads
+    `detail` as the result text, the Problem rides in
+    `_meta["io.github.Grinv/problem"]`. Prompt completions, the one path
+    outside it, follow the same rule: an upstream failure degrades quietly,
+    a bug is logged. A partial failure inside a successful result (e.g.
+    `find_friends_who_own`'s per-friend reason) is worded by
+    `problemDetail()` in the formatter.
 - **What Steam means is stated once per endpoint**, in `clients/endpoints.ts`
   (`lib/endpoint.ts` defines the shape): path, host, keyless or not, the plain
   answers Steam sends as HTTP errors (`answers`: e.g. GetFriendList's 401 →
@@ -187,8 +191,8 @@ npm run inspector      # run under the MCP Inspector
   retries when one exists; it is collected per call via
   `callScope` and flags `_meta["io.github.Grinv/stale"]`. `_meta` keys use `META_PREFIX`
   (`src/version.ts`), the reverse-DNS namespace of `mcpName`.
-- **Cancellation** reaches Steam without being threaded through clients: a
-  tool handler passes the SDK's `ctx` to `reply`/`guard`, which run the call
+- **Cancellation** reaches Steam without being threaded through clients: the
+  `tool()` registrar passes the SDK's `ctx` to `reply`/`guard`, which run the call
   inside `callScope` (`lib/call.ts`, an `AsyncLocalStorage`) with
   `ctx.mcpReq.signal`. `HttpClient` aborts the rate-limit wait (queued or
   spacing), the fetch (`AbortSignal.any` with its own timeout) and the retry

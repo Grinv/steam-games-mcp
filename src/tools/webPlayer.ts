@@ -8,15 +8,9 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.ts";
-import { withNotes, type ToolOutput } from "./guard.ts";
+import { toolRegistrar, type ToolOutput } from "./guard.ts";
 import { LANGUAGE_ISO_WARNING, READ_ONLY, appid, language } from "./common.ts";
-import {
-  PUBLIC_PROFILE_NOTE,
-  requireKey as makeRequireKey,
-  otherSteamid,
-  steamid,
-  steamIdTool,
-} from "./webShared.ts";
+import { PUBLIC_PROFILE_NOTE, keyGate, otherSteamid, steamid, steamIdTool } from "./webShared.ts";
 import { notFoundReason, withNotFound } from "../format/shared.schemas.ts";
 import { recommendedGamesFound } from "../format/store.schemas.ts";
 import { FAVORITE_TAG_SAMPLE_SIZE, RECOMMENDATION_POOL_SIZE } from "../clients/storeService.ts";
@@ -78,15 +72,16 @@ export const OWNED_GAMES_LIMIT_MAX = 300;
 export function registerPlayerWebTools(
   server: McpServer,
   web: SteamWebClient,
-  { reply }: ToolOutput,
+  out: ToolOutput,
 ): void {
-  // Every tool below is gated on the key via requireKey (webShared.ts). Two
+  const tool = toolRegistrar(server, out);
+  // Every tool below is gated on the key via keyGate (webShared.ts). Two
   // variants: the tools whose target profile also has to be public get the extra
   // note, the four that read fine regardless (see PUBLIC_PROFILE_NOTE) don't.
-  const requireKey = makeRequireKey(web, reply);
-  const requireKeyAndPublicProfile = makeRequireKey(web, reply, PUBLIC_PROFILE_NOTE);
+  const keyRequired = keyGate(web);
+  const keyAndPublicProfileRequired = keyGate(web, PUBLIC_PROFILE_NOTE);
 
-  server.registerTool(
+  tool(
     "get_game_achievements",
     {
       title: "Get a game's full achievement list",
@@ -108,13 +103,14 @@ export function registerPlayerWebTools(
             LANGUAGE_ISO_WARNING,
         ),
       }),
-      outputSchema: withNotes(getGameAchievementsOutput),
+      outputSchema: getGameAchievementsOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id, language }, ctx) => requireKey(() => web.getGameAchievements(id, language), ctx),
+    ({ appid: id, language }) => web.getGameAchievements(id, language),
+    { gate: keyRequired },
   );
 
-  server.registerTool(
+  tool(
     "resolve_vanity_url",
     {
       title: "Resolve vanity URL to SteamID",
@@ -133,13 +129,14 @@ export function registerPlayerWebTools(
             "Vanity name, e.g. 'gabelogannewell' from steamcommunity.com/id/gabelogannewell.",
           ),
       }),
-      outputSchema: withNotes(resolveVanityUrlOutput),
+      outputSchema: resolveVanityUrlOutput,
       annotations: READ_ONLY,
     },
-    ({ vanity }, ctx) => requireKey(() => web.resolveVanityUrl(vanity), ctx),
+    ({ vanity }) => web.resolveVanityUrl(vanity),
+    { gate: keyRequired },
   );
 
-  server.registerTool(
+  tool(
     "get_friend_list",
     {
       title: "Get a player's friend list",
@@ -153,13 +150,14 @@ export function registerPlayerWebTools(
         "find_friends_who_own instead — it checks each friend's full library, not just this list. " +
         "Get the SteamID64 from resolve_vanity_url.",
       inputSchema: z.strictObject({ steamid }),
-      outputSchema: withNotes(getFriendListOutput),
+      outputSchema: getFriendListOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKeyAndPublicProfile, (sid) => web.getFriendList(sid)),
+    steamIdTool(web, (sid) => web.getFriendList(sid)),
+    { gate: keyAndPublicProfileRequired },
   );
 
-  server.registerTool(
+  tool(
     "find_friends_who_own",
     {
       title: "Find friends who own a game",
@@ -195,15 +193,14 @@ export function registerPlayerWebTools(
           ),
         steamid,
       }),
-      outputSchema: withNotes(findFriendsWhoOwnOutput),
+      outputSchema: findFriendsWhoOwnOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKeyAndPublicProfile, (sid, { appids }) =>
-      web.findFriendsWhoOwn(sid, appids),
-    ),
+    steamIdTool(web, (sid, { appids }) => web.findFriendsWhoOwn(sid, appids)),
+    { gate: keyAndPublicProfileRequired },
   );
 
-  server.registerTool(
+  tool(
     "compare_players",
     {
       title: "Compare two players' libraries",
@@ -221,15 +218,14 @@ export function registerPlayerWebTools(
         steamid,
         other_steamid: otherSteamid,
       }),
-      outputSchema: withNotes(comparePlayersOutput),
+      outputSchema: comparePlayersOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKeyAndPublicProfile, (sid, { other_steamid }) =>
-      web.comparePlayers(sid, other_steamid),
-    ),
+    steamIdTool(web, (sid, { other_steamid }) => web.comparePlayers(sid, other_steamid)),
+    { gate: keyAndPublicProfileRequired },
   );
 
-  server.registerTool(
+  tool(
     "get_player_summary",
     {
       title: "Get player profile",
@@ -243,13 +239,14 @@ export function registerPlayerWebTools(
         "game only populate when the profile is public. For VAC/game/trade ban status instead, use " +
         "get_player_bans.",
       inputSchema: z.strictObject({ steamid }),
-      outputSchema: withNotes(getPlayerSummaryOutput),
+      outputSchema: getPlayerSummaryOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid) => web.getPlayerSummary(sid)),
+    steamIdTool(web, (sid) => web.getPlayerSummary(sid)),
+    { gate: keyRequired },
   );
 
-  server.registerTool(
+  tool(
     "get_player_bans",
     {
       title: "Get a player's ban status",
@@ -260,13 +257,14 @@ export function registerPlayerWebTools(
         "player who has never been banned — Steam sends 0 there, which would otherwise read as " +
         "'banned today'. Requires STEAM_API_KEY.",
       inputSchema: z.strictObject({ steamid }),
-      outputSchema: withNotes(getPlayerBansOutput),
+      outputSchema: getPlayerBansOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKey, (sid) => web.getPlayerBans(sid)),
+    steamIdTool(web, (sid) => web.getPlayerBans(sid)),
+    { gate: keyRequired },
   );
 
-  server.registerTool(
+  tool(
     "get_owned_games",
     {
       title: "Get owned games",
@@ -320,15 +318,16 @@ export function registerPlayerWebTools(
           )
           .optional(),
       }),
-      outputSchema: withNotes(getOwnedGamesOutput),
+      outputSchema: getOwnedGamesOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKeyAndPublicProfile, (sid, { check_appids, limit, sort }) =>
+    steamIdTool(web, (sid, { check_appids, limit, sort }) =>
       web.getOwnedGames(sid, check_appids, { max: limit, sort }),
     ),
+    { gate: keyAndPublicProfileRequired },
   );
 
-  server.registerTool(
+  tool(
     "get_recently_played",
     {
       title: "Get recently played games",
@@ -342,13 +341,14 @@ export function registerPlayerWebTools(
         "as get_owned_games) — otherwise, or for a SteamID64 with no account behind it, it returns " +
         "found:false.",
       inputSchema: z.strictObject({ steamid }),
-      outputSchema: withNotes(getRecentlyPlayedOutput),
+      outputSchema: getRecentlyPlayedOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKeyAndPublicProfile, (sid) => web.getRecentlyPlayed(sid)),
+    steamIdTool(web, (sid) => web.getRecentlyPlayed(sid)),
+    { gate: keyAndPublicProfileRequired },
   );
 
-  server.registerTool(
+  tool(
     "get_recommended_games",
     {
       title: "Get personalized game recommendations",
@@ -401,19 +401,20 @@ export function registerPlayerWebTools(
           )
           .optional(),
       }),
-      outputSchema: withNotes(getRecommendedGamesOutput),
+      outputSchema: getRecommendedGamesOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKeyAndPublicProfile, (sid, { limit, exclude_tags, min_discount }) =>
+    steamIdTool(web, (sid, { limit, exclude_tags, min_discount }) =>
       web.getRecommendedGames(sid, {
         count: limit,
         excludeTags: exclude_tags,
         minDiscount: min_discount,
       }),
     ),
+    { gate: keyAndPublicProfileRequired },
   );
 
-  server.registerTool(
+  tool(
     "get_player_achievements",
     {
       title: "Get a player's achievements",
@@ -437,11 +438,12 @@ export function registerPlayerWebTools(
             LANGUAGE_ISO_WARNING,
         ),
       }),
-      outputSchema: withNotes(getPlayerAchievementsOutput),
+      outputSchema: getPlayerAchievementsOutput,
       annotations: READ_ONLY,
     },
-    steamIdTool(web, requireKeyAndPublicProfile, (sid, { appid: app, language }) =>
+    steamIdTool(web, (sid, { appid: app, language }) =>
       web.getPlayerAchievements(sid, app, language),
     ),
+    { gate: keyAndPublicProfileRequired },
   );
 }

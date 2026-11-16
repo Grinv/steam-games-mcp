@@ -4,9 +4,8 @@
 // tools/common.ts, which stays domain-agnostic (shared with tools/storefront.ts
 // too) — `steamid` and the steamid-resolving helper below are Web-API-specific.
 import { z } from "zod";
-import { ownProblem, problemResult, type ToolResult } from "../lib/result.ts";
+import { ownProblem, type Problem } from "../lib/result.ts";
 import { STEAMID64_RE } from "../format/shared.ts";
-import type { CallContext, ToolOutput } from "./guard.ts";
 
 // Appended to the key-gate message, but only for the tools that ALSO need the
 // target profile's privacy opened up. Four key-gated tools don't:
@@ -25,25 +24,18 @@ export const PUBLIC_PROFILE_NOTE =
 // inside webPlayer.ts) so "what happens when the key is missing" is
 // discoverable next to this file's other Web-API-specific building blocks —
 // `web` is duck-typed to just what's needed, so this stays client-agnostic.
-// `note` is kept a construction-time argument rather than a per-call one so the
-// returned wrapper still matches steamIdTool's `wrap` signature exactly.
-export const requireKey =
-  (web: { configured: boolean }, reply: ToolOutput["reply"], note = "") =>
-  (fn: () => Promise<Record<string, unknown>>, ctx: CallContext): Promise<ToolResult> => {
-    if (!web.configured) {
-      return Promise.resolve(
-        problemResult(
-          ownProblem(
-            "not_configured",
-            "This tool needs a Steam Web API key. Set STEAM_API_KEY to a free key from " +
-              "https://steamcommunity.com/dev/apikey." +
-              note,
-          ),
-        ),
-      );
-    }
-    return reply(fn, ctx);
-  };
+// A `gate` for tool() (tools/guard.ts): it answers before the handler runs.
+export const keyGate =
+  (web: { configured: boolean }, note = "") =>
+  (): Problem | undefined =>
+    web.configured
+      ? undefined
+      : ownProblem(
+          "not_configured",
+          "This tool needs a Steam Web API key. Set STEAM_API_KEY to a free key from " +
+            "https://steamcommunity.com/dev/apikey." +
+            note,
+        );
 
 // A SteamID64 for an individual profile is always exactly 17 digits and never
 // below the individual-account base (76561197960265728 = accountid 0); a bare
@@ -87,8 +79,8 @@ export const otherSteamid = steamId64Base.describe(
 );
 
 // Collapses the "resolve steamid (arg or STEAM_ID default), call one client
-// method" shape shared by every steamid tool — wrapped via requireKey above
-// (webPlayer.ts's tools), or keyless via reply (webStore.ts's get_wishlist and
+// method" shape shared by every steamid tool into a tool() handler — gated
+// on the key (webPlayer.ts's tools) or not (webStore.ts's get_wishlist and
 // get_followed_games, neither of which needs the key for a raw SteamID64).
 // Generic over the tool's full input type so tools that take extra params
 // besides steamid (get_owned_games's check_appids, compare_players's
@@ -98,8 +90,7 @@ export const otherSteamid = steamId64Base.describe(
 export const steamIdTool =
   <TIn extends { steamid?: string }>(
     web: { requireSteamId: (explicit?: string) => Promise<string> },
-    wrap: (fn: () => Promise<Record<string, unknown>>, ctx: CallContext) => Promise<ToolResult>,
     fn: (sid: string, input: TIn) => Promise<Record<string, unknown>>,
   ) =>
-  (input: TIn, ctx: CallContext) =>
-    wrap(async () => fn(await web.requireSteamId(input.steamid), input), ctx);
+  async (input: TIn) =>
+    fn(await web.requireSteamId(input.steamid), input);

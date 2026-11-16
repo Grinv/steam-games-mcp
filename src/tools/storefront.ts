@@ -7,8 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import type { StorefrontClient } from "../clients/storefront.ts";
 import type { StoreServiceClient } from "../clients/storeService.ts";
 import { ApiError } from "../lib/errors.ts";
-import { jsonResult } from "../lib/result.ts";
-import { withNotes, type ToolOutput } from "./guard.ts";
+import { toolRegistrar, type ToolOutput } from "./guard.ts";
 import { ITEMS_MAX, PRICES_MAX, READ_ONLY, appid, country, language } from "./common.ts";
 import {
   getFeaturedOutput,
@@ -24,9 +23,10 @@ export function registerStorefrontTools(
   store: StorefrontClient,
   // get_game's name lookup: the same search search_games uses.
   search: StoreServiceClient,
-  { guard, reply }: ToolOutput,
+  out: ToolOutput,
 ): void {
-  server.registerTool(
+  const tool = toolRegistrar(server, out);
+  tool(
     "get_game",
     {
       title: "Get game details",
@@ -62,29 +62,28 @@ export function registerStorefrontTools(
         .refine((input) => input.appid !== undefined || input.name !== undefined, {
           message: "Provide either appid or name.",
         }),
-      outputSchema: withNotes(getGameOutput),
+      outputSchema: getGameOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id, name, country: cc, language: l }, ctx) =>
-      guard(async () => {
-        let resolved = id;
-        if (!resolved) {
-          // The schema's .refine() above guarantees name is set whenever appid isn't.
-          const found = await search.resolveAppId(name!, cc, l);
-          if (!found) {
-            throw new ApiError({
-              code: "not_found",
-              message: `search found no game for name "${name}"`,
-              detail: `No Steam game found matching "${name}".`,
-            });
-          }
-          resolved = found;
+    async ({ appid: id, name, country: cc, language: l }) => {
+      let resolved = id;
+      if (!resolved) {
+        // The schema's .refine() above guarantees name is set whenever appid isn't.
+        const found = await search.resolveAppId(name!, cc, l);
+        if (!found) {
+          throw new ApiError({
+            code: "not_found",
+            message: `search found no game for name "${name}"`,
+            detail: `No Steam game found matching "${name}".`,
+          });
         }
-        return jsonResult(await store.getGame(resolved, cc, l));
-      }, ctx),
+        resolved = found;
+      }
+      return store.getGame(resolved, cc, l);
+    },
   );
 
-  server.registerTool(
+  tool(
     "get_review_histogram",
     {
       title: "Get review trend over time",
@@ -100,13 +99,13 @@ export function registerStorefrontTools(
         "example review text instead of a trend, use get_game_reviews. Get the appid from " +
         "search_games. No API key required.",
       inputSchema: z.strictObject({ appid }),
-      outputSchema: withNotes(getReviewHistogramOutput),
+      outputSchema: getReviewHistogramOutput,
       annotations: READ_ONLY,
     },
-    ({ appid: id }, ctx) => reply(() => store.getReviewHistogram(id), ctx),
+    ({ appid: id }) => store.getReviewHistogram(id),
   );
 
-  server.registerTool(
+  tool(
     "get_prices",
     {
       title: "Get prices for many games",
@@ -130,13 +129,13 @@ export function registerStorefrontTools(
           .describe(`Steam appids to price (1-${PRICES_MAX}). Split a longer list across calls.`),
         country,
       }),
-      outputSchema: withNotes(getPricesOutput),
+      outputSchema: getPricesOutput,
       annotations: READ_ONLY,
     },
-    ({ appids, country: cc }, ctx) => reply(() => store.getPrices(appids, cc), ctx),
+    ({ appids, country: cc }) => store.getPrices(appids, cc),
   );
 
-  server.registerTool(
+  tool(
     "get_specials",
     {
       title: "Get current discounts",
@@ -145,13 +144,13 @@ export function registerStorefrontTools(
         "discount % and original/final price. For ALL catalog discounts (not just the front page), " +
         "use discover_games with min_discount. No API key required.",
       inputSchema: z.strictObject({ country, language }),
-      outputSchema: withNotes(getSpecialsOutput),
+      outputSchema: getSpecialsOutput,
       annotations: READ_ONLY,
     },
-    ({ country: cc, language: l }, ctx) => reply(() => store.getSpecials(cc, l), ctx),
+    ({ country: cc, language: l }) => store.getSpecials(cc, l),
   );
 
-  server.registerTool(
+  tool(
     "get_featured",
     {
       title: "Get featured store sections",
@@ -161,9 +160,9 @@ export function registerStorefrontTools(
         "on the store front page' overview. For just current discounts use get_specials (lighter), " +
         "or discover_games for catalog-wide deals with filters. No API key required.",
       inputSchema: z.strictObject({ country, language }),
-      outputSchema: withNotes(getFeaturedOutput),
+      outputSchema: getFeaturedOutput,
       annotations: READ_ONLY,
     },
-    ({ country: cc, language: l }, ctx) => reply(() => store.getFeatured(cc, l), ctx),
+    ({ country: cc, language: l }) => store.getFeatured(cc, l),
   );
 }

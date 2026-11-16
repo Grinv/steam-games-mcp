@@ -3,7 +3,13 @@
 // message — and turn what a successful answer had to do without into `notes`
 // the model can read. Built once per server with its logger (see server.ts),
 // because what's unexpected or degraded is logged here.
-import type { ServerContext } from "@modelcontextprotocol/server";
+import type {
+  McpServer,
+  ServerContext,
+  StandardSchemaWithJSON,
+  ToolAnnotations,
+  ToolCallback,
+} from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { CallCancelled, callScope, type CallState } from "../lib/call.ts";
 import type { Logger } from "../lib/logger.ts";
@@ -12,6 +18,7 @@ import {
   jsonResult,
   ownProblem,
   problemResult,
+  type Problem,
   problemSummary,
   toProblem,
   type ToolResult,
@@ -102,3 +109,45 @@ export function toolOutput(logger: Logger): ToolOutput {
   }
   return { guard, reply: (fn, ctx) => guard(async () => jsonResult(await fn()), ctx) };
 }
+
+/** A tool's registration, minus what `tool()` wires itself. */
+/** A tool's validated input, as the SDK infers it from the input schema. */
+type ToolInput<I extends StandardSchemaWithJSON> = Parameters<ToolCallback<I>>[0];
+
+export interface ToolConfig<I extends z.ZodType & StandardSchemaWithJSON> {
+  title: string;
+  description: string;
+  inputSchema: I;
+  outputSchema: z.ZodType;
+  annotations: ToolAnnotations;
+}
+
+/** Registers tools on `server` so every one gets the same output end: the
+ *  handler just returns its structured result, and `reply` (errors, notes,
+ *  the call's cancellation via ctx) and the outputSchema's `notes` are wired
+ *  here, once — not repeated per tool, where one could be forgotten. `gate`
+ *  answers before the handler runs (e.g. no API key configured). */
+export function toolRegistrar(server: McpServer, out: ToolOutput) {
+  return function tool<I extends z.ZodType & StandardSchemaWithJSON>(
+    name: string,
+    config: ToolConfig<I>,
+    handler: (input: ToolInput<I>) => Promise<Record<string, unknown>>,
+    opts: { gate?: () => Problem | undefined } = {},
+  ): void {
+    // The SDK's callback type is conditional on the schema, which TypeScript
+    // can't resolve for a generic one; callers stay fully typed through
+    // ToolInput<I>, so the bridge is this one cast.
+    const callback = ((input: ToolInput<I>, ctx: ServerContext) => {
+      const blocked = opts.gate?.();
+      if (blocked) return Promise.resolve(problemResult(blocked));
+      return out.reply(() => handler(input), ctx);
+    }) as unknown as ToolCallback<I>;
+    server.registerTool(
+      name,
+      { ...config, outputSchema: withNotes(config.outputSchema) },
+      callback,
+    );
+  };
+}
+
+export type ToolRegistrar = ReturnType<typeof toolRegistrar>;
