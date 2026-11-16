@@ -144,8 +144,11 @@ npm run inspector      # run under the MCP Inspector
     `ApiError` — a bug must propagate — and logs it at `warn`.
 - **Caching is per request**, in `HttpClient` (`getJson(..., { cache: true })`,
   `lib/cache.ts`): one entry is one Steam response body, keyed by URL, so
-  shaping, validation and combining requests always run after the cache and a
-  partial answer is never stored as a whole one. A stale copy answers only a
+  shaping and combining requests always run after the cache and a partial
+  answer is never stored as a whole one. Two hooks run before it, so it acts
+  on what actually happened: the client's `classify` (Steam's bad-key page →
+  `invalid_key`) and the call's `validate` (a body this call can't use, e.g. an
+  empty tag dictionary, fails like a request and is never cached). A stale copy answers only a
   `retryable` failure (or a code the call site declares ambiguous with
   `staleOn`), without retries when one exists; it is collected per call via
   `callScope` and flags `_meta["io.github.Grinv/stale"]`. `_meta` keys use `META_PREFIX`

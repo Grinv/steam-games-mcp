@@ -615,6 +615,28 @@ describe("get_player_achievements", () => {
     });
   }
 
+  test("get_game_achievements: a revoked key isn't papered over with a cached schema", async (t) => {
+    let revoked = false;
+    const { client } = await setupServer(
+      t,
+      { ...ENV, CACHE_TTL_MS: "1", HTTP_RETRIES: "0" },
+      (url) => {
+        if (revoked && url.includes("GetSchemaForGame"))
+          return htmlResponse(BAD_KEY_403, { status: 403 });
+        return router(url);
+      },
+    );
+    const first = await client.callTool({
+      name: "get_game_achievements",
+      arguments: { appid: 620 },
+    });
+    assert.equal(first.isError, undefined);
+    await new Promise((r) => setTimeout(r, 5)); // let the 1 ms entry go stale
+    revoked = true;
+    const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
+    assertToolError(res, /^Steam rejected the configured STEAM_API_KEY/);
+  });
+
   test("get_game_achievements: a bad key on the schema call isn't read as 'no achievements'", async (t) => {
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       if (url.includes("GetSchemaForGame")) return htmlResponse(BAD_KEY_403, { status: 403 });

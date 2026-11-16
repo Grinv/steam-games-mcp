@@ -225,6 +225,59 @@ describe("response cache (cache: true)", () => {
     await assert.rejects(() => c.getJson("thing", { cache: true })); // not declared: propagates
   });
 
+  test("a body the call's validate rejects is never cached over a good one", async (t) => {
+    let empty = false;
+    installFetch(
+      t,
+      mockFetch(() => jsonResponse(empty ? { tags: [] } : { tags: ["a"] })),
+    );
+    const c = client({ cacheTtlMs: 1 });
+    const validate = (body: unknown) => {
+      if ((body as { tags: string[] }).tags.length === 0)
+        throw new ApiError({ code: "bad_request", message: "empty" });
+    };
+    await c.getJson("thing", { cache: true, validate });
+    await new Promise((r) => setTimeout(r, 5));
+    empty = true;
+    // Not in staleOn: the rejection propagates…
+    await assert.rejects(
+      () => c.getJson("thing", { cache: true, validate }),
+      (err: unknown) => err instanceof ApiError && err.code === "bad_request",
+    );
+    // …and the good body is still what's cached.
+    assert.deepEqual(
+      await c.getJson("thing", { cache: true, validate, staleOn: ["bad_request"] }),
+      {
+        tags: ["a"],
+      },
+    );
+  });
+
+  test("the client's classify runs before the cache decides on a stale copy", async (t) => {
+    let fail = false;
+    installFetch(
+      t,
+      mockFetch(() => (fail ? jsonResponse({}, { status: 403 }) : jsonResponse({ v: 1 }))),
+    );
+    const c = new HttpClient({
+      baseUrl: "https://example.test/api",
+      logger: silentLogger(),
+      cacheTtlMs: 1,
+      classify: (err) =>
+        err.code === "forbidden"
+          ? new ApiError({ code: "invalid_key", message: err.message })
+          : err,
+    });
+    await c.getJson("thing", { cache: true });
+    await new Promise((r) => setTimeout(r, 5));
+    fail = true;
+    // forbidden is declared ambiguous, but what Steam said was invalid_key.
+    await assert.rejects(
+      () => c.getJson("thing", { cache: true, staleOn: ["forbidden"] }),
+      (err: unknown) => err instanceof ApiError && err.code === "invalid_key",
+    );
+  });
+
   test("a body that isn't JSON fails like a request and is never cached", async (t) => {
     let calls = 0;
     installFetch(
@@ -313,6 +366,24 @@ describe("cancellation (the call's signal, via callScope)", () => {
     );
     assert.ok(performance.now() - start < 300, "returned as soon as the call was cancelled");
     assert.equal(mock.calls.length, 1);
+  });
+
+  test("an already-cancelled call never starts a cached request", async (t) => {
+    const mock = mockFetch(() => jsonResponse({}, { status: 503 }));
+    installFetch(t, mock);
+    const ac = new AbortController();
+    ac.abort();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown) => unhandled.push(e);
+    process.on("unhandledRejection", onUnhandled);
+    t.after(() => process.off("unhandledRejection", onUnhandled));
+    await assert.rejects(
+      inCall(ac.signal, () => client({ cacheTtlMs: 60_000 }).getJson("thing", { cache: true })),
+      (err: unknown) => err instanceof ApiError && err.code === "cancelled",
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(mock.calls.length, 0);
+    assert.deepEqual(unhandled, []);
   });
 
   test("a cancelled caller of a shared cached request only stops waiting; the others get it", async (t) => {

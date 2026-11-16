@@ -13,6 +13,7 @@
 import { ZodError } from "zod";
 import { ApiError, withFallbackOn } from "../lib/errors.ts";
 import type { Logger } from "../lib/logger.ts";
+import type { RequestOptions } from "../lib/http.ts";
 import { notFound } from "../format/shared.ts";
 import {
   computeFavoriteTagWeights,
@@ -52,11 +53,12 @@ import type { WishlistResponse } from "../format/web.ts";
 type Query = Record<string, string | number | boolean | undefined>;
 // The parent's authenticated `#get` (bakes in the key, sent when present per
 // AGENTS.md's keyless caveat — these endpoints answer without one too).
-type Get = <T>(
-  path: string,
-  query: Query,
-  opts?: { hasCredentials?: boolean; cache?: boolean },
-) => Promise<T>;
+/** The per-request options a Steam client passes through to HttpClient. */
+export type SteamGetOptions = Pick<
+  RequestOptions,
+  "hasCredentials" | "cache" | "staleOn" | "validate"
+>;
+type Get = <T>(path: string, query: Query, opts?: SteamGetOptions) => Promise<T>;
 
 // The include_* flags every store-service card call needs (reviews, release,
 // native platforms + compat, popular tags). Not include_basic_info: no card
@@ -213,30 +215,36 @@ export class StoreServiceClient {
   // empty dictionary would make every tag filter reject every item,
   // indistinguishable from "no games matched"), via #tagsUnavailable.
   async #tagNames(language: string): Promise<TagMap | ApiError> {
-    let res: GetTagListResponse;
     try {
-      res = await this.#get<GetTagListResponse>(
-        "IStoreService/GetTagList/v1/",
-        { language },
-        { hasCredentials: false, cache: true },
+      return summarizeTagList(
+        await this.#get<GetTagListResponse>(
+          "IStoreService/GetTagList/v1/",
+          { language },
+          {
+            hasCredentials: false,
+            cache: true,
+            // GetTagList answers an unrecognized `language` (an ISO code like
+            // "ru" instead of Steam's "russian") with 200 and an empty body
+            // rather than an error — no language legitimately has zero tags.
+            // A request problem, which is what makes the filter path fail
+            // loudly instead of matching nothing; never cached over a good
+            // dictionary, and if one is cached (a language that does exist),
+            // an empty answer is a hiccup and the cached one stands in.
+            validate: (body) => {
+              if (Object.keys(summarizeTagList(body as GetTagListResponse)).length > 0) return;
+              throw new ApiError({
+                code: "bad_request",
+                message: `Steam returned an empty tag dictionary for language "${language}"`,
+              });
+            },
+            staleOn: ["bad_request"],
+          },
+        ),
       );
     } catch (e) {
       if (!(e instanceof ApiError)) throw e;
       return e;
     }
-    const map = summarizeTagList(res);
-    // GetTagList answers an unrecognized `language` (an ISO code like "ru"
-    // instead of Steam's "russian") with 200 and an empty body rather than an
-    // error — no language legitimately has zero tags. That answer is Steam's
-    // own (cached like any other); read here as a request problem, which is
-    // what makes the filter path fail loudly instead of matching nothing.
-    if (Object.keys(map).length === 0) {
-      return new ApiError({
-        code: "bad_request",
-        message: `Steam returned an empty tag dictionary for language "${language}"`,
-      });
-    }
-    return map;
   }
 
   // A tag dictionary failure, explained for a caller that can't go on without
@@ -512,20 +520,9 @@ export class StoreServiceClient {
     // only this chunk's corrections. With `cache`, the request is cached (and
     // served stale while Steam is down, so getGame's details keep their
     // correction during an outage); a failure never is.
-    const load = async (chunk: number[]) => {
-      const res = await this.#get<StoreItemsResponse>(
-        "IStoreBrowseService/GetItems/v1/",
-        {
-          input_json: JSON.stringify({
-            ids: chunk.map((appid) => ({ appid })),
-            context,
-            data_request: { include_all_purchase_options: true },
-          }),
-        },
-        { hasCredentials: false, cache: opts.cache },
-      );
+    const shape = (body: unknown) => {
       try {
-        return summarizePurchasePrices(res);
+        return summarizePurchasePrices(body as StoreItemsResponse);
       } catch (e) {
         // A payload the price shape rejects is Steam's unusable answer, not a
         // bug here: classify it so it costs only the correction.
@@ -538,6 +535,21 @@ export class StoreServiceClient {
         });
       }
     };
+    const load = async (chunk: number[]) =>
+      shape(
+        await this.#get<StoreItemsResponse>(
+          "IStoreBrowseService/GetItems/v1/",
+          {
+            input_json: JSON.stringify({
+              ids: chunk.map((appid) => ({ appid })),
+              context,
+              data_request: { include_all_purchase_options: true },
+            }),
+          },
+          // Validated before caching, so an unusable payload is never cached.
+          { hasCredentials: false, cache: opts.cache, validate: shape },
+        ),
+      );
     const settled = await Promise.allSettled(chunks.map(load));
     // Rejects only on a bug: the outer Promise.all in StorefrontClient.getPrices/
     // getGame would otherwise turn an enrichment's upstream failure into a

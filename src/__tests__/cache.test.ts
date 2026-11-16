@@ -93,6 +93,20 @@ describe("wrap", () => {
     assert.equal(calls, 1);
   });
 
+  test("a shared failure nobody waits for any more isn't an unhandled rejection", async (t) => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown) => unhandled.push(e);
+    process.on("unhandledRejection", onUnhandled);
+    t.after(() => process.off("unhandledRejection", onUnhandled));
+    const cache = new TtlCache(60_000);
+    void cache.wrap("k", async () => {
+      await tick(5);
+      throw new Error("boom");
+    }); // every waiter has walked away
+    await tick(20);
+    assert.deepEqual(unhandled, []);
+  });
+
   test("a failed in-flight compute() clears the slot so the next call retries", async () => {
     const cache = new TtlCache(60_000);
     let calls = 0;

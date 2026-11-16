@@ -22,7 +22,7 @@ export const callScope = new AsyncLocalStorage<{
   staleErrors: unknown[];
 }>();
 
-interface RequestOptions {
+export interface RequestOptions {
   query?: Record<string, string | number | boolean | undefined>;
   /** Per-request override of HttpClientOptions.hasCredentials — for a call that
    *  opportunistically attaches a credential without needing one (e.g. a
@@ -39,6 +39,11 @@ interface RequestOptions {
    *  answer, so a stale copy is preferred to them too (besides any `retryable`
    *  failure). An endpoint quirk, declared at its call site. */
   staleOn?: readonly ApiErrorCode[];
+  /** Throws (an ApiError) when Steam answered with a body this call can't use
+   *  — e.g. an empty tag dictionary. Runs before caching, so such a body is
+   *  never cached over a good one, and fails like any other request (a stale
+   *  copy stands in if the error is retryable or in `staleOn`). */
+  validate?: (body: unknown) => void;
 }
 
 interface HttpClientOptions {
@@ -56,6 +61,10 @@ interface HttpClientOptions {
   hasCredentials?: boolean;
   /** How long a `cache: true` response stays fresh; 0 disables caching. */
   cacheTtlMs?: number;
+  /** This upstream's own reading of an HTTP failure (e.g. Steam's bad-key
+   *  page → invalid_key), applied before retries and the cache decide
+   *  anything, so they act on what actually happened. */
+  classify?: (err: ApiError) => ApiError;
 }
 
 const MAX_BACKOFF_MS = 8000;
@@ -72,10 +81,12 @@ export class HttpClient {
   async getJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const url = this.#buildUrl(path, options.query);
     const signal = callScope.getStore()?.signal;
-    const text = options.cache
-      ? await this.#cached(url, options, signal)
-      : ((await this.#request(url, options, "application/json", signal)) ?? "");
-    return text.length === 0 ? (undefined as T) : (parseJson(text) as T);
+    if (!options.cache) {
+      const text = (await this.#request(url, options, "application/json", signal)) ?? "";
+      return checked(text, options) as T;
+    }
+    const text = await this.#cached(url, options, signal);
+    return (text.length === 0 ? undefined : parseJson(text)) as T;
   }
 
   /** The raw response body, for the rare upstream that doesn't speak JSON —
@@ -95,6 +106,8 @@ export class HttpClient {
   // The request is shared, so a cancelled call only stops waiting for it: the
   // other waiters still get its answer, and so does the cache.
   async #cached(url: string, options: RequestOptions, signal?: AbortSignal): Promise<string> {
+    // Before starting a request nobody would wait for (or handle the failure of).
+    if (signal?.aborted) throw cancelled(signal);
     const stale = this.#cache.getStale(url);
     try {
       const shared = this.#cache.wrap(url, async () => {
@@ -103,7 +116,7 @@ export class HttpClient {
         const retries = stale === undefined ? undefined : 0;
         const text =
           (await this.#request(url, options, "application/json", undefined, retries)) ?? "";
-        if (text.length > 0) parseJson(text);
+        checked(text, options);
         return text;
       });
       return await untilCancelled(shared, signal);
@@ -178,7 +191,8 @@ export class HttpClient {
         signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
       });
       if (!res.ok) {
-        throw await toHttpError(res, options.hasCredentials ?? this.#opts.hasCredentials);
+        const err = await toHttpError(res, options.hasCredentials ?? this.#opts.hasCredentials);
+        throw this.#opts.classify ? this.#opts.classify(err) : err;
       }
       if (res.status === 204) return undefined;
       return await res.text();
@@ -228,6 +242,13 @@ async function toHttpError(res: Response, hasCredentials?: boolean): Promise<Api
     message: `HTTP ${res.status} ${res.statusText}${raw ? `: ${raw.slice(0, 500)}` : ""}`,
     retryAfterMs: parseRetryAfter(res.headers.get("retry-after")),
   });
+}
+
+// The parsed body, after the call's own validation: what may be cached.
+function checked(text: string, options: RequestOptions): unknown {
+  const body = text.length === 0 ? undefined : parseJson(text);
+  options.validate?.(body);
+  return body;
 }
 
 function parseJson(text: string): unknown {

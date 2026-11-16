@@ -74,6 +74,11 @@ export class TtlCache {
         return value;
       })
       .finally(() => this.#pending.delete(key));
+    // The cache owns this shared promise; each waiter observes it through its
+    // own chain. Marked handled here, so a failure that every waiter has
+    // stopped waiting for (e.g. all of them cancelled) isn't an unhandled
+    // rejection — whoever still awaits it gets the error as before.
+    promise.catch(() => {});
     this.#pending.set(key, promise);
     return promise;
   }

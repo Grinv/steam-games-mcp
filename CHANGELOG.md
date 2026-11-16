@@ -30,6 +30,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Stop showing a delisted game, or any definitive Steam answer, from a stale cache entry; cached data now stands in only for a Steam failure.
 - Cache Steam's "no such app" answer for `get_game` too, instead of asking again on every call.
 - Stop a system clock stepped back (NTP, a restored VM) from stalling every store request for as long as the step, or keeping cached data fresh that long.
+- Keep a good cached tag dictionary or price correction when Steam briefly answers with one it can't use, instead of caching that answer.
 - Log upstream failures the server answers around (missing player names, price corrections, achievement rarity, stale cache), which used to leave no trace.
 
 ## [0.17.2] - 2026-11-05

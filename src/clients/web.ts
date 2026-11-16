@@ -54,7 +54,7 @@ import {
   type GlobalAchievementsResponse,
   type PlayerAchievementsResponse,
 } from "../format/webAchievements.ts";
-import { StoreServiceClient } from "./storeService.ts";
+import { StoreServiceClient, type SteamGetOptions } from "./storeService.ts";
 import type { Logger } from "../lib/logger.ts";
 import type { Config } from "../config.ts";
 
@@ -83,6 +83,25 @@ const PRIVATE_FRIENDS_REASON =
 const APPID_SPECIFIC_CODES: readonly ApiErrorCode[] = ["forbidden", "bad_request", "not_found"];
 function isAppidSpecific(err: unknown): boolean {
   return err instanceof ApiError && APPID_SPECIFIC_CODES.includes(err.code);
+}
+
+// A bad/revoked key gets a 403 on every key-gated endpoint with this HTML page
+// ("Access is denied. Retrying will not help. Please verify your <pre>key=</pre>
+// parameter.", verified live) — the same status a private profile gets, but
+// never its JSON body. Classified as its own code where the response is read
+// (HttpClient's `classify`), before retries and the cache act on it, so no
+// caller reading a 403 as "private" or "no data for this appid" — nor a
+// stale-copy fallback declared for 403 — can mistake a key problem for one.
+// (Keyless endpoints ignore a bad key and answer 200, also verified live.)
+function classifySteamApiError(err: ApiError): ApiError {
+  if (err.code !== "forbidden" || !/verify your <pre>key=/i.test(err.message)) return err;
+  return new ApiError({
+    code: "invalid_key",
+    status: err.status,
+    hadCredentials: true,
+    message: err.message,
+    cause: err,
+  });
 }
 
 function friendIdsOf(r: FriendListResponse): string[] {
@@ -125,6 +144,7 @@ export class SteamWebClient {
       beforeRequest: (signal) => limiter.acquire(signal),
       hasCredentials: this.configured,
       cacheTtlMs: config.cacheTtlMs,
+      classify: classifySteamApiError,
     });
     this.#community = new HttpClient({
       baseUrl: STEAM_COMMUNITY_BASE_URL,
@@ -148,42 +168,8 @@ export class SteamWebClient {
   // client-wide credential flag, so a 401/403 there is never misattributed to
   // "the configured credentials are likely invalid" — see the callers under
   // "keyless-capable (key sent when present)" below.
-  //
-  // A bad/revoked key gets a 403 on every key-gated endpoint with this HTML page
-  // ("Access is denied. Retrying will not help. Please verify your <pre>key=</pre>
-  // parameter.", verified live) — the same status a private profile gets, but
-  // never its JSON body. Classified here, once, as its own code, so no caller
-  // reading a 403 as "private" or "no data for this appid" can mistake a key
-  // problem for a privacy setting. (Keyless endpoints ignore a bad key and
-  // answer 200, also verified live.)
-  async #get<T>(
-    path: string,
-    query: Query,
-    opts?: { hasCredentials?: boolean; cache?: boolean; staleOn?: readonly ApiErrorCode[] },
-  ): Promise<T> {
-    try {
-      return await this.#http.getJson<T>(path, {
-        query: { key: this.#key, ...query },
-        hasCredentials: opts?.hasCredentials,
-        cache: opts?.cache,
-        staleOn: opts?.staleOn,
-      });
-    } catch (e) {
-      if (
-        e instanceof ApiError &&
-        e.code === "forbidden" &&
-        /verify your <pre>key=/i.test(e.message)
-      ) {
-        throw new ApiError({
-          code: "invalid_key",
-          status: e.status,
-          hadCredentials: true,
-          message: e.message,
-          cause: e,
-        });
-      }
-      throw e;
-    }
+  #get<T>(path: string, query: Query, opts?: SteamGetOptions): Promise<T> {
+    return this.#http.getJson<T>(path, { ...opts, query: { key: this.#key, ...query } });
   }
 
   // Resolve the SteamID64 a player tool should act on: the explicit argument
