@@ -1,3 +1,4 @@
+import { ApiError } from "../lib/errors.ts";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -355,6 +356,16 @@ test("summarizeWishlist puts unranked (priority 0) entries last, oldest-added fi
 });
 
 describe("summarizePurchasePrices", () => {
+  test("a store_items that isn't a list is Steam's unusable answer, not our bug", () => {
+    assert.throws(
+      () =>
+        summarizePurchasePrices({
+          response: { store_items: {} as unknown as [] },
+        }),
+      (err: unknown) => err instanceof ApiError && err.code === "bad_response" && err.retryable,
+    );
+  });
+
   test("an undiscounted option falls back to final for initial", () => {
     const s = summarizePurchasePrices({
       response: {

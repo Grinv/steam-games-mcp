@@ -205,8 +205,10 @@ export function summarizeItems(
 export type PurchasePrices = z.infer<typeof purchasePricesSchema>;
 
 export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
+  const items = r.response?.store_items ?? [];
+  if (!Array.isArray(items)) throw unusablePrices("store_items isn't a list");
   const out: Record<string, z.infer<typeof purchasePricesSchema>[string]> = {};
-  for (const it of r.response?.store_items ?? []) {
+  for (const it of items) {
     if (typeof it.appid !== "number") continue;
     // The app's OWN package, like every card (ownPurchaseOption): when Valve's
     // best option is a bundle, the own package is still among purchase_options
@@ -238,15 +240,17 @@ export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
   // (it only feeds a price correction), not our tool output: classified as
   // an unusable answer, so it costs the correction instead of the call.
   const parsed = purchasePricesSchema.safeParse(out);
-  if (!parsed.success) {
-    throw new ApiError({
-      code: "bad_response",
-      message: `GetItems purchase options don't fit the price shape: ${parsed.error.message}`,
-      retryable: true,
-      cause: parsed.error,
-    });
-  }
+  if (!parsed.success) throw unusablePrices(parsed.error.message, parsed.error);
   return parsed.data;
+}
+
+function unusablePrices(why: string, cause?: unknown): ApiError {
+  return new ApiError({
+    code: "bad_response",
+    message: `GetItems purchase options don't fit the price shape: ${why}`,
+    retryable: true,
+    cause,
+  });
 }
 
 // ---- IWishlistService/GetWishlistSortedFiltered (enriched wishlist) ----------

@@ -767,14 +767,15 @@ export class StoreServiceClient {
     ]);
     if (total > 0 && filtered.res.answer)
       // The id list exists but the filtered call was refused: say so rather
-      // than reporting that nothing matched.
+      // than reporting that nothing matched. Not reproduced live (no filter
+      // tried 2026-11-17 drew a 400), so the detail doesn't guess a cause.
       throw new ApiError({
         code: "bad_request",
         status: 400,
         message: "GetWishlistSortedFiltered answered 400 for a readable wishlist",
         detail:
           "Steam refused the filtered wishlist request, though the wishlist itself is readable. " +
-          "Drop some filters.",
+          "Retry, or try fewer filters.",
       });
     return summarizeWishlistDetailed(filtered.res.data ?? {}, filtered.tagMap, filters(), {
       total,

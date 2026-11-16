@@ -64,6 +64,7 @@ for (const [label, body] of [
   ["an empty body", ""],
   ["a JSON null", "null"],
   ["a JSON number", "42"],
+  ["a JSON array", "[]"],
 ] as const) {
   test(`a 200 with ${label} is a retryable bad_response, never data`, async (t) => {
     installFetch(
@@ -419,6 +420,22 @@ describe("cancellation (the call's signal, via callScope)", () => {
     await assert.rejects(pending, (err: unknown) => err instanceof CallCancelled);
     assert.equal(seen.aborted, true);
     assert.equal(seen.calls, 1); // never retried
+  });
+
+  test("a bug landing alongside a cancel is still a bug, not a cancellation", async (t) => {
+    installFetch(
+      t,
+      mockFetch(() => jsonResponse({})),
+    );
+    const ac = new AbortController();
+    const validate = () => {
+      ac.abort();
+      throw new TypeError("bug in validate");
+    };
+    await assert.rejects(
+      inCall(ac.signal, () => client().getJson("thing", { validate })),
+      (err: unknown) => err instanceof TypeError,
+    );
   });
 
   test("stops waiting out a retry backoff", async (t) => {

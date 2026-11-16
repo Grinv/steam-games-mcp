@@ -180,7 +180,8 @@ export const Steam = {
     ],
   }),
   // Hidden game details are always a 403 "Profile is not public" — never a 401
-  // or 404 (44 of 44 sampled live 2026-11-17); an unknown appid is a 400.
+  // or 404 (44 of 44 sampled live 2026-11-17), and so is an id with no account
+  // (3 of 3); an unknown appid is a 400.
   GetPlayerAchievements: endpoint<PlayerAchievementsResponse, "private" | "no_stats">({
     path: "ISteamUserStats/GetPlayerAchievements/v1/",
     host: "api",

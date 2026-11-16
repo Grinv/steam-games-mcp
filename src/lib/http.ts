@@ -147,11 +147,12 @@ export class HttpClient {
         check?.(text ?? "");
         return text;
       } catch (err) {
-        if (signal?.aborted) throw cancelled(signal);
         // #once already turns every fetch failure into an ApiError, so
         // anything else here — a bug in `check`/`validate` — is a bug, never
-        // a "network" failure to retry or answer with a stale copy.
+        // a "network" failure to retry or answer with a stale copy; checked
+        // before cancellation, so a bug landing alongside a cancel is still one.
         if (!(err instanceof ApiError)) throw err;
+        if (signal?.aborted) throw cancelled(signal);
         const apiErr = err;
         if (!apiErr.retryable || attempt >= retries) throw apiErr;
         const backoff = backoffMs(attempt, apiErr);
@@ -255,7 +256,7 @@ async function toHttpError(res: Response, hasCredentials?: boolean): Promise<Api
 // callers then dereferenced into an internal error.
 function checked(text: string, options: RequestOptions): object {
   const body = parseJson(text);
-  if (body === null || typeof body !== "object") {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
     throw new ApiError({
       code: "bad_response",
       message: `Upstream returned ${text.length === 0 ? "an empty body" : `a non-object JSON body (${text.slice(0, 20)})`}`,
