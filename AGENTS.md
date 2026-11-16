@@ -143,8 +143,8 @@ npm run inspector      # run under the MCP Inspector
 - **A tool's answer is a required core plus optional parts** (a price
   correction, rarity, a Steam level, names, tags). A required part is a plain
   `await`: its failure is the tool's error. An optional one goes through
-  `optional(what, promise)` (`lib/call.ts`), or `noteDegraded(what, err)` for
-  one failed chunk of a batch: Steam failing becomes `undefined` plus a note,
+  `optional(what, promise)` (`lib/call.ts`), or `optionalParts(settled, what)`
+  for the chunks of a batch: Steam failing becomes `undefined` plus a note,
   a bug or the call's cancellation still propagates. Never a hand-written
   `try/catch` that degrades; every `allSettled`/`catch` around a Steam call is
   either that, or a code-based reading of a known answer (`withFallbackOn`,

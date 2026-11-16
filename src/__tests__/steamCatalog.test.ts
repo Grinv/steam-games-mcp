@@ -222,6 +222,9 @@ for (const [status, expectedCount, why] of [
   // GetGlobalAchievementPercentagesForApp's 403 is ambiguous: "no schema", or
   // Steam's edge under load — so a real cached list wins over it too.
   [403, 1, "an ambiguous 403 is answered with the stale list, not 'no achievements'"],
+  // Only the 403 is ambiguous (Steam's edge under load); a 404 is Steam's
+  // current answer about the appid, and wins over the cached list.
+  [404, 0, "a definitive 404 is Steam's answer, not papered over with the stale list"],
 ] as const) {
   test(`get_global_achievements after a cached list: a later ${status} → ${why}`, async (t) => {
     // Stale data answers Steam failing transiently, or a code the endpoint
@@ -776,6 +779,20 @@ describe("get_items", () => {
     const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
     const s = res.structuredContent as { items: { appid: number; tags: string[] }[] };
     assert.equal(s.items[0]!.tags.length, 0);
+  });
+
+  test("get_items: an empty tag dictionary's note tells the model to fix its language", async (t) => {
+    const { client } = await setupServer(
+      t,
+      { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
+      routerWithEmptyTagList,
+    );
+    const res = await client.callTool({
+      name: "get_items",
+      arguments: { appids: [620], language: "ru" },
+    });
+    const notes = (res.structuredContent as { notes: string[] }).notes;
+    assert.match(notes[0]!, /^Game tags unavailable: .*full language names/);
   });
 
   test("get_items: an empty tag dictionary still degrades to empty tags (display-only, never filtered)", async (t) => {

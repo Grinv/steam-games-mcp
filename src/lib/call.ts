@@ -61,3 +61,21 @@ export async function optional<T>(what: string, work: Promise<T>): Promise<T | u
     return undefined;
   }
 }
+
+/**
+ * optional() for a batch: the parts that came back, in order. Each part
+ * Steam failed to provide is noted as `what(i)` (its index in `settled`); a
+ * bug or the call's cancellation in any part propagates.
+ */
+export function optionalParts<T>(
+  settled: PromiseSettledResult<T>[],
+  what: (i: number) => string,
+): T[] {
+  const parts: T[] = [];
+  settled.forEach((r, i) => {
+    if (r.status === "fulfilled") parts.push(r.value);
+    else if (r.reason instanceof ApiError) noteDegraded(what(i), r.reason);
+    else throw r.reason;
+  });
+  return parts;
+}

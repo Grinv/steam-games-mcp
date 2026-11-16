@@ -70,8 +70,9 @@ export class HttpClient {
     const url = this.#buildUrl(path, options.query);
     const signal = callScope.getStore()?.signal;
     if (!options.cache) {
-      const text = (await this.#request(url, options, "application/json", signal)) ?? "";
-      return checked(text, options) as T;
+      const check = (text: string) => void checked(text, options);
+      const text = (await this.#request(url, options, "application/json", signal, check)) ?? "";
+      return parseJson(text) as T;
     }
     // Checked before it was cached, so it parses to an object.
     return parseJson(await this.#cached(url, options, signal)) as T;
@@ -102,10 +103,10 @@ export class HttpClient {
         // With a stale copy to fall back on, a retry would only delay the
         // answer it ends in (up to ~45 s of timeouts with the defaults).
         const retries = stale === undefined ? undefined : 0;
-        const text =
-          (await this.#request(url, options, "application/json", undefined, retries)) ?? "";
-        checked(text, options);
-        return text;
+        const check = (text: string) => void checked(text, options);
+        return (
+          (await this.#request(url, options, "application/json", undefined, check, retries)) ?? ""
+        );
       });
       return await untilCancelled(shared, signal);
     } catch (err) {
@@ -119,11 +120,14 @@ export class HttpClient {
 
   // `signal` (the call's cancellation) aborts the rate-limit wait, the fetch
   // and the backoff between retries alike; any of them ends in CallCancelled.
+  // `check` vets the body inside the attempt, so an unusable answer that may
+  // be a hiccup (a retryable bad_response) is retried like a 5xx.
   async #request(
     url: string,
     options: RequestOptions,
     accept: string,
     signal?: AbortSignal,
+    check?: (text: string) => void,
     retriesOverride?: number,
   ): Promise<string | undefined> {
     const retries = retriesOverride ?? this.#opts.retries ?? 2;
@@ -133,7 +137,9 @@ export class HttpClient {
     for (;;) {
       try {
         if (this.#opts.beforeRequest) await this.#opts.beforeRequest(signal);
-        return await this.#once(url, options, accept, timeoutMs, signal);
+        const text = await this.#once(url, options, accept, timeoutMs, signal);
+        check?.(text ?? "");
+        return text;
       } catch (err) {
         if (signal?.aborted) throw cancelled(signal);
         const apiErr = err instanceof ApiError ? err : toNetworkError(err);

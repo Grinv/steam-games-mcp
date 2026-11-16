@@ -11,7 +11,7 @@
 // its own — both clients hit the same api.steampowered.com host and must honor
 // one rate limiter and one cache, not one each.
 import { ApiError, withFallbackOn } from "../lib/errors.ts";
-import { noteDegraded } from "../lib/call.ts";
+import { noteDegraded, optionalParts } from "../lib/call.ts";
 import type { RequestOptions } from "../lib/http.ts";
 import { notFound } from "../format/shared.ts";
 import {
@@ -229,9 +229,16 @@ export class StoreServiceClient {
             // an empty answer is a hiccup and the cached one stands in.
             validate: (body) => {
               if (Object.keys(summarizeTagList(body as GetTagListResponse)).length > 0) return;
+              // The hint lives on the error itself, so every path that reports
+              // it — a tags filter, recommendations, or a "Game tags" note on
+              // a card — tells the model how to fix its input.
               throw new ApiError({
                 code: "bad_request",
                 message: `Steam returned an empty tag dictionary for language "${language}"`,
+                detail:
+                  `Steam has no tag dictionary for language "${language}": use one of Steam's ` +
+                  "full language names (english, russian, schinese — not an ISO code like " +
+                  "en/ru/zh).",
               });
             },
             staleOn: ["bad_request"],
@@ -254,14 +261,11 @@ export class StoreServiceClient {
       retryable: cause.retryable,
       hadCredentials: cause.hadCredentials,
       message: `tag dictionary unavailable (${language})`,
-      // The language hint only where it's the cause; a 429/5xx gets the
-      // code's own "retry" advice instead.
-      detail:
-        `Could not fetch Steam's tag dictionary, so ${consequence}.` +
-        (cause.code === "bad_request"
-          ? ` Check that language "${language}" is one of Steam's full language names ` +
-            "(english, russian, schinese — not an ISO code like en/ru/zh)."
-          : ""),
+      // The cause's own detail (e.g. the language hint) follows ours; a
+      // 429/5xx carries none and gets the code's "retry" advice instead.
+      detail: [`Could not fetch Steam's tag dictionary, so ${consequence}.`, cause.detail]
+        .filter(Boolean)
+        .join(" "),
       cause,
     });
   }
@@ -537,18 +541,13 @@ export class StoreServiceClient {
     // Rejects only on a bug: the outer Promise.all in StorefrontClient.getPrices/
     // getGame would otherwise turn an enrichment's upstream failure into a
     // failed tool call.
-    const merged: PurchasePrices = {};
-    settled.forEach((r, i) => {
-      if (r.status === "fulfilled") Object.assign(merged, r.value);
-      else if (!(r.reason instanceof ApiError)) throw r.reason;
-      else
-        noteDegraded(
-          `Price check of ${chunks[i]!.length} appids against the store's purchase options ` +
-            "(the price shown may be an upgrade or bundle SKU's, not the game's)",
-          r.reason,
-        );
-    });
-    return merged;
+    const parts = optionalParts(
+      settled,
+      (i) =>
+        `Price check of ${chunks[i]!.length} appids against the store's purchase options ` +
+        "(the price shown may be an upgrade or bundle SKU's, not the game's)",
+    );
+    return Object.assign({}, ...parts) as PurchasePrices;
   }
 
   // Personalized recommendations: derive weighted tag preferences from a

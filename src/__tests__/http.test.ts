@@ -79,6 +79,35 @@ for (const [label, body] of [
   });
 }
 
+test("an unusable body that may be a hiccup is retried like a 5xx; a definitive one isn't", async (t) => {
+  let calls = 0;
+  installFetch(
+    t,
+    mockFetch(() => {
+      calls += 1;
+      return calls === 1 ? new Response("<html>garbled", { status: 200 }) : jsonResponse({ v: 1 });
+    }),
+  );
+  for (const cache of [false, true]) {
+    calls = 0;
+    const v = await client({ retries: 1, cacheTtlMs: 60_000 }).getJson("thing", { cache });
+    assert.deepEqual(v, { v: 1 });
+    assert.equal(calls, 2, `cache=${cache}: retried once`);
+  }
+  // A validate rejection that isn't retryable (e.g. an unrecognized language)
+  // is the answer: one request, no retry.
+  calls = 1; // every call from here answers { v: 1 }
+  const before = calls;
+  await assert.rejects(() =>
+    client({ retries: 2 }).getJson("thing", {
+      validate: () => {
+        throw new ApiError({ code: "bad_request", message: "no" });
+      },
+    }),
+  );
+  assert.equal(calls - before, 1);
+});
+
 test("Retry-After lands on the typed retryAfterMs field, not in cause", async (t) => {
   installFetch(
     t,

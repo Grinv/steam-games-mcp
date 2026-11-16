@@ -10,6 +10,8 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
+import type { ApiError } from "../lib/errors.ts";
+import { problemDetail } from "../lib/result.ts";
 import {
   NO_SUCH_ACCOUNT_REASON,
   PRIVATE_PROFILE_REASON,
@@ -588,7 +590,7 @@ export const FRIENDS_CHECKED_MAX = 200;
 export function summarizeFriendsWhoOwn(
   appids: number[],
   friendIds: string[],
-  ownership: (Map<number, number> | null | { error: string })[],
+  ownership: (Map<number, number> | null | ApiError)[],
   players: PlayerSummariesResponse,
   opts: { max?: number; totalFriends?: number } = {},
 ): z.infer<typeof findFriendsWhoOwnFound> {
@@ -614,7 +616,9 @@ export function summarizeFriendsWhoOwn(
       // mean that invariant broke, not a real per-friend failure.
       unavailableFriends.push({
         ...nameOf(steamid),
-        reason: playtimes?.error ?? "no data returned",
+        // The pipeline's own wording, never the error's raw message
+        // (diagnostics, possibly an upstream HTML body).
+        reason: playtimes ? problemDetail(playtimes) : "no data returned",
       });
       return;
     }

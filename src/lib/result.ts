@@ -137,15 +137,10 @@ export const PROBLEM_CODES = Object.keys(PROBLEMS) as ProblemCode[];
  */
 export function toProblem(err: unknown, logger: Logger): Problem {
   if (err instanceof ApiError) {
-    const { title, advice } = PROBLEMS[err.code];
-    const status = err.status ? ` (${err.status})` : "";
-    const adviceText = typeof advice === "function" ? advice(err) : advice;
     return {
       type: TYPE_BASE + err.code,
-      title,
-      // redact(): a detail is our own text, but a credential must never reach
-      // the agent even if a future change folds a request URL into one.
-      detail: redact([`${title}${status}.`, err.detail, adviceText].filter(Boolean).join(" ")),
+      title: PROBLEMS[err.code].title,
+      detail: problemDetail(err),
       retryable: err.retryable,
       ...(err.status ? { upstream_status: err.status } : {}),
     };
@@ -155,6 +150,18 @@ export function toProblem(err: unknown, logger: Logger): Problem {
   // the reference SDK's reading too. See docs/errors.md#internal.
   logger.error("internal error in a tool call:", err);
   return ownProblem("internal");
+}
+
+/** An upstream failure as the one sentence the agent reads — pure (no
+ *  logging), so a formatter can use it for a per-item failure inside a
+ *  successful result (find_friends_who_own's unavailable_friends). */
+export function problemDetail(err: ApiError): string {
+  const { title, advice } = PROBLEMS[err.code];
+  const status = err.status ? ` (${err.status})` : "";
+  const adviceText = typeof advice === "function" ? advice(err) : advice;
+  // redact(): a detail is our own text, but a credential must never reach
+  // the agent even if a future change folds a request URL into one.
+  return redact([`${title}${status}.`, err.detail, adviceText].filter(Boolean).join(" "));
 }
 
 /** A problem this server raises itself (no thrown error): its own `detail`,

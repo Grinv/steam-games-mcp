@@ -9,8 +9,7 @@
 import { HttpClient } from "../lib/http.ts";
 import { RateLimiter } from "../lib/rateLimit.ts";
 import { ApiError, type ApiErrorCode, withFallbackOn } from "../lib/errors.ts";
-import { toProblem } from "../lib/result.ts";
-import { noteDegraded, optional } from "../lib/call.ts";
+import { noteDegraded, optional, optionalParts } from "../lib/call.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
 import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.ts";
 import {
@@ -78,13 +77,14 @@ const PRIVATE_FRIENDS_REASON =
   "Friends List = Public.";
 
 // The codes Steam answers for an appid that simply has no achievement data.
-// Its edge also answers a 403 under load (live-audit), so the same codes are
-// ambiguous: a cached list is preferred to them (`staleOn`), and only with
-// nothing cached are they read as "no achievements".
 const APPID_SPECIFIC_CODES: readonly ApiErrorCode[] = ["forbidden", "bad_request", "not_found"];
 function isAppidSpecific(err: unknown): boolean {
   return err instanceof ApiError && APPID_SPECIFIC_CODES.includes(err.code);
 }
+// Of those, only the 403 is also what Steam's edge answers under load
+// (live-audit), so it alone is ambiguous: a cached list is preferred to it.
+// A 400/404 is Steam's current answer about the appid, and wins.
+const ACHIEVEMENTS_STALE_ON: readonly ApiErrorCode[] = ["forbidden"];
 
 // A bad/revoked key gets a 403 on every key-gated endpoint with this HTML page
 // ("Access is denied. Retrying will not help. Please verify your <pre>key=</pre>
@@ -469,13 +469,8 @@ export class SteamWebClient {
         }),
       ),
     );
-    settled.forEach((r, i) => {
-      if (r.status === "fulfilled") return;
-      if (!(r.reason instanceof ApiError)) throw r.reason;
-      noteDegraded(`Names of ${chunks[i]!.length} players`, r.reason);
-    });
-    const players = settled.flatMap((r) =>
-      r.status === "fulfilled" ? (r.value.response?.players ?? []) : [],
+    const players = optionalParts(settled, (i) => `Names of ${chunks[i]!.length} players`).flatMap(
+      (r) => r.response?.players ?? [],
     );
     return { response: { players } };
   }
@@ -574,11 +569,9 @@ export class SteamWebClient {
       if (r.status === "fulfilled") return r.value;
       // One friend's upstream failure is theirs alone; a bug fails the call.
       if (!(r.reason instanceof ApiError)) throw r.reason;
-      // The same translation as a failed tool call, never the raw rejection
-      // message (diagnostics, possibly an upstream HTML body).
-      const error = toProblem(r.reason, this.#logger).detail;
-      failedByCause.set(error, [...(failedByCause.get(error) ?? []), r.reason]);
-      return { error };
+      const cause = `${r.reason.code}:${r.reason.status ?? ""}`;
+      failedByCause.set(cause, [...(failedByCause.get(cause) ?? []), r.reason]);
+      return r.reason;
     });
     for (const errs of failedByCause.values()) {
       noteDegraded(`Game ownership of ${errs.length} friends (see unavailable_friends)`, errs[0]!);
@@ -692,7 +685,7 @@ export class SteamWebClient {
         await this.#get<GlobalAchievementsResponse>(
           "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
           { gameid: appid },
-          { hasCredentials: false, cache: true, staleOn: APPID_SPECIFIC_CODES },
+          { hasCredentials: false, cache: true, staleOn: ACHIEVEMENTS_STALE_ON },
         ),
       );
     } catch (e) {
@@ -701,12 +694,7 @@ export class SteamWebClient {
       // problem even though a key happens to be attached when configured —
       // verified live: Steam answers this way for an appid with no
       // achievement schema (e.g. a DLC/soundtrack), not for an invalid key.
-      if (
-        e instanceof ApiError &&
-        (e.code === "forbidden" || e.code === "bad_request" || e.code === "not_found")
-      ) {
-        return summarizeGlobalAchievements({});
-      }
+      if (isAppidSpecific(e)) return summarizeGlobalAchievements({});
       throw e;
     }
   }
@@ -846,7 +834,7 @@ export class SteamWebClient {
       this.#get<GameSchemaResponse>(
         "ISteamUserStats/GetSchemaForGame/v2/",
         { appid, l },
-        { cache: true, staleOn: APPID_SPECIFIC_CODES },
+        { cache: true, staleOn: ACHIEVEMENTS_STALE_ON },
       ),
       // hasCredentials:false like every other keyless-by-design call site
       // (lib/http.ts fixes hasCredentials per client instance, not per
@@ -854,7 +842,7 @@ export class SteamWebClient {
       this.#get<GlobalAchievementsResponse>(
         "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
         { gameid: appid },
-        { hasCredentials: false, cache: true, staleOn: APPID_SPECIFIC_CODES },
+        { hasCredentials: false, cache: true, staleOn: ACHIEVEMENTS_STALE_ON },
       ),
     ]);
     if (schemaResult.status === "fulfilled") {

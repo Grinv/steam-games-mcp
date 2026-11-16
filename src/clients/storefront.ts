@@ -6,7 +6,7 @@
 import { HttpClient } from "../lib/http.ts";
 import { RateLimiter } from "../lib/rateLimit.ts";
 import { ApiError } from "../lib/errors.ts";
-import { noteDegraded } from "../lib/call.ts";
+import { optionalParts } from "../lib/call.ts";
 import {
   detailApp,
   summarizeFeatured,
@@ -164,8 +164,9 @@ export class StorefrontClient {
     // appdetails still supplies availability, whether a price exists at all
     // (priced:false otherwise) and the currency code (which GetItems never
     // returns) for every row; the parallel lookup only corrects the amounts.
-    // getPurchasePrices never rejects (best-effort per chunk), so this outer
-    // Promise.all can't defeat the allSettled around the appdetails chunks.
+    // getPurchasePrices rejects only on a bug or a cancel (a Steam failure is a
+    // noted gap per chunk), so this outer Promise.all can't let an upstream
+    // failure defeat the allSettled around the appdetails chunks.
     const [settled, overrides] = await Promise.all([
       Promise.allSettled(
         chunks.map((chunk) =>
@@ -190,13 +191,10 @@ export class StorefrontClient {
     if (chunks.length > 0 && fulfilled.length === 0) {
       throw (settled[0] as PromiseRejectedResult).reason;
     }
-    settled.forEach((r, i) => {
-      if (r.status === "fulfilled") return;
-      if (!(r.reason instanceof ApiError)) throw r.reason;
-      noteDegraded(`Prices of ${chunks[i]!.length} appids`, r.reason);
-    });
-    const merged: PriceDetailsResponse = {};
-    for (const r of fulfilled) Object.assign(merged, r.value);
+    const merged: PriceDetailsResponse = Object.assign(
+      {},
+      ...optionalParts(settled, (i) => `Prices of ${chunks[i]!.length} appids`),
+    );
     return summarizePrices(merged, appids, overrides);
   }
 
