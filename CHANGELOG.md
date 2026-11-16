@@ -27,6 +27,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Stop swallowing server bugs as "upstream unavailable" in the Steam level, followed-games count, tag dictionary and vanity `STEAM_ID` lookups.
 - Report an unreadable achievement-schema answer from Steam as a retryable error, not as "this game has no achievements".
+- Report an empty or non-object answer from Steam (e.g. `null`) as a retryable error, or a noted gap when it was an optional part, instead of an internal error.
 - Report a rejected key or a server bug in `get_player_achievements`' fallback schema lookup as such, not as "no achievement data for this appid".
 - Log a bug in the game-title prompt completions instead of silently showing no suggestions.
 - Answer from cache within one request timeout while Steam is down, instead of after every retry (up to ~45 s per call).

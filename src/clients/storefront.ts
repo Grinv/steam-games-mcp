@@ -65,13 +65,13 @@ export interface PurchasePriceSource {
 // appdetails answers every appid it's asked about, a nonexistent one too
 // ({success:false}; verified live 2026-11-16 on 100 mixed ids — the only
 // omission was appid 0, which no tool schema accepts). So a body without an
-// entry for each requested appid (empty, null, partial) is unusable: it fails
+// entry for each requested appid is unusable: it fails
 // like the request did — never cached, a stale copy stands in, the gap is
 // noted — instead of reading as "not available" or crashing on a lookup.
 function answersEvery(appids: number[]): (body: unknown) => void {
   return (body) => {
-    const answered = body !== null && typeof body === "object" ? body : {};
-    const missing = appids.filter((id) => !(String(id) in answered));
+    // getJson already rejects a body that isn't an object.
+    const missing = appids.filter((id) => !(String(id) in (body as object)));
     if (missing.length === 0) return;
     throw new ApiError({
       code: "bad_response",

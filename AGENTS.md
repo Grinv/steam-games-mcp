@@ -158,7 +158,9 @@ npm run inspector      # run under the MCP Inspector
 - **Caching is per request**, in `HttpClient` (`getJson(..., { cache: true })`,
   `lib/cache.ts`): one entry is one Steam response body, keyed by URL, so
   shaping and combining requests always run after the cache and a partial
-  answer is never stored as a whole one. Two hooks run before it, so it acts
+  answer is never stored as a whole one. `getJson<T>` returns a JSON object or
+  fails: an empty body, `null` or any non-object is `bad_response` (retryable),
+  never data a caller would dereference. Two hooks run before the cache, so it acts
   on what actually happened: the client's `classify` (Steam's bad-key page →
   `invalid_key`) and the call's `validate` (a body this call can't use, e.g. an
   empty tag dictionary, fails like a request and is never cached). A stale copy answers only a

@@ -73,8 +73,8 @@ export class HttpClient {
       const text = (await this.#request(url, options, "application/json", signal)) ?? "";
       return checked(text, options) as T;
     }
-    const text = await this.#cached(url, options, signal);
-    return (text.length === 0 ? undefined : parseJson(text)) as T;
+    // Checked before it was cached, so it parses to an object.
+    return parseJson(await this.#cached(url, options, signal)) as T;
   }
 
   /** The raw response body, for the rare upstream that doesn't speak JSON —
@@ -233,13 +233,25 @@ async function toHttpError(res: Response, hasCredentials?: boolean): Promise<Api
 }
 
 // The parsed body, after the call's own validation: what may be cached.
-function checked(text: string, options: RequestOptions): unknown {
-  const body = text.length === 0 ? undefined : parseJson(text);
+// getJson<T> promises an object, and every Steam JSON endpoint answers with
+// one — so an empty body, `null` or any non-object is an unusable answer
+// (retryable), not data: it used to come back as `undefined as T`, which
+// callers then dereferenced into an internal error.
+function checked(text: string, options: RequestOptions): object {
+  const body = parseJson(text);
+  if (body === null || typeof body !== "object") {
+    throw new ApiError({
+      code: "bad_response",
+      message: `Upstream returned ${text.length === 0 ? "an empty body" : `a non-object JSON body (${text.slice(0, 20)})`}`,
+      retryable: true,
+    });
+  }
   options.validate?.(body);
   return body;
 }
 
 function parseJson(text: string): unknown {
+  if (text.length === 0) return undefined; // checked() reports it
   try {
     return JSON.parse(text);
   } catch (err) {

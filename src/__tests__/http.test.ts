@@ -60,6 +60,25 @@ test("a 200 whose body isn't JSON is a retryable bad_response", async (t) => {
   );
 });
 
+for (const [label, body] of [
+  ["an empty body", ""],
+  ["a JSON null", "null"],
+  ["a JSON number", "42"],
+] as const) {
+  test(`a 200 with ${label} is a retryable bad_response, never data`, async (t) => {
+    installFetch(
+      t,
+      mockFetch(() => new Response(body, { status: 200 })),
+    );
+    for (const cache of [false, true]) {
+      await assert.rejects(
+        () => client({ cacheTtlMs: 60_000 }).getJson("thing", { cache }),
+        (err: unknown) => err instanceof ApiError && err.code === "bad_response" && err.retryable,
+      );
+    }
+  });
+}
+
 test("Retry-After lands on the typed retryAfterMs field, not in cause", async (t) => {
   installFetch(
     t,

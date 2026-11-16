@@ -6,8 +6,9 @@ import { ENV, router } from "./steamFixtures.ts";
 // The invariant behind lib/call.ts's optional() and tools/guard.ts's notes,
 // checked for every tool against every Steam endpoint it calls — so a new
 // tool or a new request is covered without a test of its own. When any one
-// request fails transiently, the answer is either a tool error, or a success
-// whose `notes` say what's missing. Never a silent success (a gap the model
+// request fails transiently — a 503, or a 200 with a body that isn't usable
+// JSON — the answer is either a tool error, or a success whose `notes` say
+// what's missing. Never a silent success (a gap the model
 // can't see), never found:false (a transient failure says nothing about
 // whether the thing exists), never an internal error.
 //
@@ -46,6 +47,11 @@ function argsFor(schema: {
 const endpointOf = (url: string) =>
   (/\/(I[A-Za-z]+\/[A-Za-z]+)\/v\d/.exec(url) ?? /\.com\/(api\/[a-z]+|[a-z]+)/.exec(url))?.[1];
 
+const FAULTS: [string, () => Response][] = [
+  ["503", () => new Response("{}", { status: 503 })],
+  ["200 with an empty body", () => new Response("", { status: 200 })],
+];
+
 type Result = {
   isError?: boolean;
   content: { text: string }[];
@@ -67,21 +73,22 @@ test("a transient failure of any one Steam request is a tool error or a noted ga
     const endpoints = new Set(clean.mock.calls.map((c) => endpointOf(c.url)).filter(Boolean));
     assert.ok(endpoints.size > 0, `${tool.name} reached no endpoint`);
 
-    for (const endpoint of endpoints) {
-      const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
-        endpointOf(url) === endpoint ? new Response("{}", { status: 503 }) : router(url),
-      );
-      const res = (await client.callTool({ name: tool.name, arguments: args })) as Result;
-      const where = `${tool.name} with ${endpoint} failing`;
-      checked += 1;
-      if (res.isError) {
-        assert.doesNotMatch(res.content[0]!.text, /^Internal error/, where);
-        continue;
+    for (const endpoint of endpoints)
+      for (const [fault, failure] of FAULTS) {
+        const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+          endpointOf(url) === endpoint ? failure() : router(url),
+        );
+        const res = (await client.callTool({ name: tool.name, arguments: args })) as Result;
+        const where = `${tool.name} with ${endpoint} answering ${fault}`;
+        checked += 1;
+        if (res.isError) {
+          assert.doesNotMatch(res.content[0]!.text, /^Internal error/, where);
+          continue;
+        }
+        assert.notEqual(res.structuredContent?.found, false, `${where}: found:false`);
+        if (!res.structuredContent?.notes?.length) silent.push(where);
       }
-      assert.notEqual(res.structuredContent?.found, false, `${where}: found:false`);
-      if (!res.structuredContent?.notes?.length) silent.push(where);
-    }
   }
   assert.deepEqual(silent, [], "succeeded without telling the model what's missing");
-  assert.ok(checked >= 35, `expected to cover every tool × endpoint, covered ${checked}`);
+  assert.ok(checked >= 70, `expected to cover every tool × endpoint × fault, covered ${checked}`);
 });
