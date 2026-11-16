@@ -217,37 +217,43 @@ test("get_global_achievements never caches that degraded empty result", async (t
   assert.equal(calls, 2);
 });
 
-test("get_global_achievements serves a stale list rather than the degraded empty one", async (t) => {
-  // The other half of moving the catch outside wrapStaleOnError: with a good
-  // entry already cached, a later 403 must fall back to it. Previously the
-  // empty result was set() straight over that entry, destroying the very
-  // fallback wrapStaleOnError exists to provide.
-  let calls = 0;
-  const { client } = await setupServer(t, { ...ENV, CACHE_TTL_MS: "1" }, (url) => {
-    if (!url.includes("GetGlobalAchievementPercentagesForApp")) return router(url);
-    calls++;
-    if (calls === 1) return router(url);
-    return jsonResponse({}, { status: 403 });
-  });
-  const first = await client.callTool({
-    name: "get_global_achievements",
-    arguments: { appid: 620 },
-  });
-  assert.equal((first.structuredContent as { count: number }).count, 1);
+for (const [status, expectedCount, why] of [
+  [503, 1, "a transient failure is answered with the stale list"],
+  // GetGlobalAchievementPercentagesForApp's 403 is ambiguous: "no schema", or
+  // Steam's edge under load — so a real cached list wins over it too.
+  [403, 1, "an ambiguous 403 is answered with the stale list, not 'no achievements'"],
+] as const) {
+  test(`get_global_achievements after a cached list: a later ${status} → ${why}`, async (t) => {
+    // Stale data answers Steam failing transiently, or a code the endpoint
+    // declared ambiguous (`staleOn`); a definitive 4xx elsewhere propagates
+    // (lib/http.ts's own tests).
+    let calls = 0;
+    const { client } = await setupServer(
+      t,
+      { ...ENV, CACHE_TTL_MS: "1", HTTP_RETRIES: "0" },
+      (url) => {
+        if (!url.includes("GetGlobalAchievementPercentagesForApp")) return router(url);
+        calls++;
+        if (calls === 1) return router(url);
+        return jsonResponse({}, { status });
+      },
+    );
+    const first = await client.callTool({
+      name: "get_global_achievements",
+      arguments: { appid: 620 },
+    });
+    assert.equal((first.structuredContent as { count: number }).count, 1);
 
-  await new Promise((r) => setTimeout(r, 5)); // let the 1 ms entry go stale
-  const second = await client.callTool({
-    name: "get_global_achievements",
-    arguments: { appid: 620 },
+    await new Promise((r) => setTimeout(r, 5)); // let the 1 ms entry go stale
+    const second = await client.callTool({
+      name: "get_global_achievements",
+      arguments: { appid: 620 },
+    });
+    assert.equal(second.isError, undefined);
+    assert.equal((second.structuredContent as { count: number }).count, expectedCount, why);
+    assert.equal(calls, 2);
   });
-  assert.equal(second.isError, undefined);
-  assert.equal(
-    (second.structuredContent as { count: number }).count,
-    1,
-    "a stale-but-real list beats degrading to empty",
-  );
-  assert.equal(calls, 2);
-});
+}
 
 test("get_current_players works without a key and returns the count", async (t) => {
   const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);

@@ -7,12 +7,11 @@
 // builder. The basic (light) get_wishlist and get_followed_games stay on
 // SteamWebClient, matching format/web.ts's ownership of their formatters.
 //
-// Shares the parent's HttpClient/TtlCache (passed in) rather than owning its
-// own — both clients hit the same api.steampowered.com host and must honor one
-// rate limiter and one cache, not one each.
+// Shares the parent's HttpClient (via the `get` passed in) rather than owning
+// its own — both clients hit the same api.steampowered.com host and must honor
+// one rate limiter and one cache, not one each.
 import { ZodError } from "zod";
 import { ApiError, withFallbackOn } from "../lib/errors.ts";
-import type { TtlCache } from "../lib/cache.ts";
 import type { Logger } from "../lib/logger.ts";
 import { notFound } from "../format/shared.ts";
 import {
@@ -53,7 +52,11 @@ import type { WishlistResponse } from "../format/web.ts";
 type Query = Record<string, string | number | boolean | undefined>;
 // The parent's authenticated `#get` (bakes in the key, sent when present per
 // AGENTS.md's keyless caveat — these endpoints answer without one too).
-type Get = <T>(path: string, query: Query, opts?: { hasCredentials?: boolean }) => Promise<T>;
+type Get = <T>(
+  path: string,
+  query: Query,
+  opts?: { hasCredentials?: boolean; cache?: boolean },
+) => Promise<T>;
 
 // The include_* flags every store-service card call needs (reviews, release,
 // native platforms + compat, popular tags). Not include_basic_info: no card
@@ -189,21 +192,13 @@ export const RECOMMENDATION_POOL_SIZE = 300;
 
 export class StoreServiceClient {
   readonly #get: Get;
-  readonly #cache: TtlCache;
   readonly #l: string;
   readonly #country: string;
   readonly #logger: Logger;
 
-  constructor(opts: {
-    get: Get;
-    cache: TtlCache;
-    language: string;
-    country: string;
-    logger: Logger;
-  }) {
+  constructor(opts: { get: Get; language: string; country: string; logger: Logger }) {
     this.#get = opts.get;
     this.#logger = opts.logger;
-    this.#cache = opts.cache;
     this.#l = opts.language;
     this.#country = opts.country;
   }
@@ -218,33 +213,30 @@ export class StoreServiceClient {
   // empty dictionary would make every tag filter reject every item,
   // indistinguishable from "no games matched"), via #tagsUnavailable.
   async #tagNames(language: string): Promise<TagMap | ApiError> {
+    let res: GetTagListResponse;
     try {
-      return await this.#cache.wrapStaleOnError(`tags:${language}`, async () => {
-        const res = await this.#get<GetTagListResponse>(
-          "IStoreService/GetTagList/v1/",
-          { language },
-          { hasCredentials: false },
-        );
-        const map = summarizeTagList(res);
-        // GetTagList answers an unrecognized `language` (an ISO code like "ru"
-        // instead of Steam's "russian") with 200 and an empty body rather than
-        // an error, so an empty dictionary means the fetch failed — no language
-        // legitimately has zero tags. Throw so it never reaches the cache and
-        // the catch below reports it as unavailable, which is what makes the
-        // filter path above fail loudly instead of matching nothing.
-        if (Object.keys(map).length === 0)
-          // A request problem (the language), not a bad answer: retrying the
-          // same call won't help.
-          throw new ApiError({
-            code: "bad_request",
-            message: `Steam returned an empty tag dictionary for language "${language}"`,
-          });
-        return map;
-      });
+      res = await this.#get<GetTagListResponse>(
+        "IStoreService/GetTagList/v1/",
+        { language },
+        { hasCredentials: false, cache: true },
+      );
     } catch (e) {
       if (!(e instanceof ApiError)) throw e;
       return e;
     }
+    const map = summarizeTagList(res);
+    // GetTagList answers an unrecognized `language` (an ISO code like "ru"
+    // instead of Steam's "russian") with 200 and an empty body rather than an
+    // error — no language legitimately has zero tags. That answer is Steam's
+    // own (cached like any other); read here as a request problem, which is
+    // what makes the filter path fail loudly instead of matching nothing.
+    if (Object.keys(map).length === 0) {
+      return new ApiError({
+        code: "bad_request",
+        message: `Steam returned an empty tag dictionary for language "${language}"`,
+      });
+    }
+    return map;
   }
 
   // A tag dictionary failure, explained for a caller that can't go on without
@@ -416,8 +408,8 @@ export class StoreServiceClient {
 
   // Steam charts (get_charts), all keyless, names riding along on each rank's
   // `item`: weekly top sellers, the weekly Steam Deck most-played, and the
-  // most-played / live-concurrent top-100s. Cached under the shared TtlCache
-  // TTL (CACHE_TTL_MS), stale-on-error.
+  // most-played / live-concurrent top-100s. Cached for CACHE_TTL_MS, with a
+  // stale copy served while Steam is down (lib/http.ts).
   async getCharts(
     chart: ChartName,
     opts: { limit: number; country?: string; weekOf?: number },
@@ -431,21 +423,17 @@ export class StoreServiceClient {
       // start_date is snapped by Steam to the week containing it (weeks start
       // Tuesday 00:00 UTC; history reaches back 10+ years, verified live).
       const { country, weekOf } = opts;
-      const res = await this.#cache.wrapStaleOnError(
-        `charts:top_sellers:${country ?? "global"}:${weekOf ?? "latest"}:${this.#l}:${limit}`,
-        () =>
-          this.#get<TopSellersResponse>(
-            "IStoreTopSellersService/GetWeeklyTopSellers/v1/",
-            {
-              input_json: JSON.stringify({
-                ...(country ? { country_code: country } : {}),
-                context: { country_code: country ?? this.#country, language: this.#l },
-                ...(weekOf !== undefined ? { start_date: weekOf } : {}),
-                page_count: limit,
-              }),
-            },
-            { hasCredentials: false },
-          ),
+      const res = await this.#get<TopSellersResponse>(
+        "IStoreTopSellersService/GetWeeklyTopSellers/v1/",
+        {
+          input_json: JSON.stringify({
+            ...(country ? { country_code: country } : {}),
+            context: { country_code: country ?? this.#country, language: this.#l },
+            ...(weekOf !== undefined ? { start_date: weekOf } : {}),
+            page_count: limit,
+          }),
+        },
+        { hasCredentials: false, cache: true },
       );
       return summarizeTopSellers(res, limit);
     }
@@ -457,21 +445,17 @@ export class StoreServiceClient {
       // names ride along on `item`, localized, hence the language. `limit` goes
       // upstream as `count`, like top_sellers' page_count: every entry carries a
       // full store item, so count 100 is ~80 KB vs ~8 KB for 10 (measured live).
-      const res = await this.#cache.wrapStaleOnError(
-        `charts:most_played_deck:${this.#l}:${limit}`,
-        () =>
-          this.#get<DeckMostPlayedResponse>(
-            "ISteamChartsService/GetMostPlayedSteamDeckGames/v1/",
-            {
-              input_json: JSON.stringify({
-                context: { country_code: this.#country, language: this.#l },
-                data_request: {},
-                top_played_period: 1,
-                count: limit,
-              }),
-            },
-            { hasCredentials: false },
-          ),
+      const res = await this.#get<DeckMostPlayedResponse>(
+        "ISteamChartsService/GetMostPlayedSteamDeckGames/v1/",
+        {
+          input_json: JSON.stringify({
+            context: { country_code: this.#country, language: this.#l },
+            data_request: {},
+            top_played_period: 1,
+            count: limit,
+          }),
+        },
+        { hasCredentials: false, cache: true },
       );
       return summarizeMostPlayedDeck(res, limit);
     }
@@ -481,17 +465,15 @@ export class StoreServiceClient {
     // per language, serving every `limit` from that one entry — cheaper than
     // the separate, uncached GetItems name lookup per call it replaces.
     const concurrent = chart === "concurrent_players";
-    const res = await this.#cache.wrapStaleOnError(`charts:${chart}:${this.#l}`, () =>
-      this.#get<MostPlayedResponse & ConcurrentPlayersResponse>(
-        `ISteamChartsService/${concurrent ? "GetGamesByConcurrentPlayers" : "GetMostPlayedGames"}/v1/`,
-        {
-          input_json: JSON.stringify({
-            context: { country_code: this.#country, language: this.#l },
-            data_request: {},
-          }),
-        },
-        { hasCredentials: false },
-      ),
+    const res = await this.#get<MostPlayedResponse & ConcurrentPlayersResponse>(
+      `ISteamChartsService/${concurrent ? "GetGamesByConcurrentPlayers" : "GetMostPlayedGames"}/v1/`,
+      {
+        input_json: JSON.stringify({
+          context: { country_code: this.#country, language: this.#l },
+          data_request: {},
+        }),
+      },
+      { hasCredentials: false, cache: true },
     );
     return concurrent ? summarizeConcurrentPlayers(res, limit) : summarizeMostPlayed(res, limit);
   }
@@ -526,10 +508,10 @@ export class StoreServiceClient {
     const chunks: number[][] = [];
     for (let i = 0; i < appids.length; i += PRICE_LOOKUP_CHUNK)
       chunks.push(appids.slice(i, i + PRICE_LOOKUP_CHUNK));
-    // Shaped inside the load, so a payload that fails its schema rejects like
-    // a failed request: it costs only this chunk's corrections, and with
-    // `cache` it is never stored (only a resolved load is). Caching the shaped
-    // map rather than the raw response also keeps the entry ~50 B, not ~1 KB.
+    // A payload that fails its schema rejects like a failed request: it costs
+    // only this chunk's corrections. With `cache`, the request is cached (and
+    // served stale while Steam is down, so getGame's details keep their
+    // correction during an outage); a failure never is.
     const load = async (chunk: number[]) => {
       const res = await this.#get<StoreItemsResponse>(
         "IStoreBrowseService/GetItems/v1/",
@@ -540,7 +522,7 @@ export class StoreServiceClient {
             data_request: { include_all_purchase_options: true },
           }),
         },
-        { hasCredentials: false },
+        { hasCredentials: false, cache: opts.cache },
       );
       try {
         return summarizePurchasePrices(res);
@@ -556,19 +538,7 @@ export class StoreServiceClient {
         });
       }
     };
-    // Stale-on-error so that during an outage getGame's stale appdetails entry
-    // is still served WITH its correction, not with the raw Storefront price.
-    // A failure is never cached, so it's retried on the next call.
-    const settled = await Promise.allSettled(
-      chunks.map((chunk) =>
-        opts.cache
-          ? this.#cache.wrapStaleOnError(
-              `purchase:${context.country_code}:${context.language}:${chunk.join(",")}`,
-              () => load(chunk),
-            )
-          : load(chunk),
-      ),
-    );
+    const settled = await Promise.allSettled(chunks.map(load));
     // Rejects only on a bug: the outer Promise.all in StorefrontClient.getPrices/
     // getGame would otherwise turn an enrichment's upstream failure into a
     // failed tool call.

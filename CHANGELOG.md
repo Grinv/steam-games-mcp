@@ -25,6 +25,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Stop swallowing server bugs as "upstream unavailable" in the Steam level, followed-games count, tag dictionary and vanity `STEAM_ID` lookups.
 - Report an unreadable achievement-schema answer from Steam as a retryable error, not as "this game has no achievements".
 - Log a bug in the game-title prompt completions instead of silently showing no suggestions.
+- Answer from cache within one request timeout while Steam is down, instead of after every retry (up to ~45 s per call).
+- Stop showing a delisted game, or any definitive Steam answer, from a stale cache entry; cached data now stands in only for a Steam failure.
+- Cache Steam's "no such app" answer for `get_game` too, instead of asking again on every call.
 - Log upstream failures the server answers around (missing player names, price corrections, achievement rarity, stale cache), which used to leave no trace.
 
 ## [0.17.2] - 2026-11-05

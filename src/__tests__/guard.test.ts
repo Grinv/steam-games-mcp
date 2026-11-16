@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ApiError } from "../lib/errors.ts";
-import { TtlCache } from "../lib/cache.ts";
+import { staleScope } from "../lib/http.ts";
 import { createLogger, type LogLevel } from "../lib/logger.ts";
 import { PROBLEM_META_KEY, STALE_META_KEY, jsonResult, type Problem } from "../lib/result.ts";
 import { toolOutput } from "../tools/guard.ts";
@@ -62,14 +62,13 @@ test("guard converts a thrown non-Error value without crashing", async () => {
 test("a stale-cache fallback during the call flags _meta and logs the upstream failure", async () => {
   const { out, lines, restore } = setup();
   try {
-    const cache = new TtlCache(1); // 1 ms TTL: the entry is stale by the second read
-    await cache.wrapStaleOnError("k", async () => ({ v: 1 }));
-    await new Promise((r) => setTimeout(r, 5));
-    const r = await out.reply(async () =>
-      cache.wrapStaleOnError("k", async () => {
-        throw new ApiError({ code: "server_error", status: 503, message: "HTTP 503" });
-      }),
-    );
+    const r = await out.reply(async () => {
+      // What lib/http.ts does when it answers a failed request from cache.
+      staleScope
+        .getStore()
+        ?.errors.push(new ApiError({ code: "server_error", status: 503, message: "HTTP 503" }));
+      return { v: 1 };
+    });
     assert.equal(r.isError, undefined);
     assert.deepEqual(r.structuredContent, { v: 1 });
     assert.equal((r._meta as Record<string, unknown>)[STALE_META_KEY], true);

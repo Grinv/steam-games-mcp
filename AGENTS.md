@@ -141,11 +141,16 @@ npm run inspector      # run under the MCP Inspector
     inside a successful result (e.g. `find_friends_who_own`'s per-friend
     reason) uses `toProblem(...).detail` too.
   - A degradation (enrichment or chunk failure answered around) catches only
-    `ApiError` — a bug must propagate — and logs it at `warn`; a stale-cache
-    fallback is collected per call via `staleScope` and flags
-    `_meta["io.github.Grinv/stale"]`. `_meta` keys use `META_PREFIX`
-    (`src/version.ts`), the reverse-DNS namespace of `mcpName`.
-- Keep clients fetch+cache only; all raw→agent-facing shaping lives in
+    `ApiError` — a bug must propagate — and logs it at `warn`.
+- **Caching is per request**, in `HttpClient` (`getJson(..., { cache: true })`,
+  `lib/cache.ts`): one entry is one Steam response body, keyed by URL, so
+  shaping, validation and combining requests always run after the cache and a
+  partial answer is never stored as a whole one. A stale copy answers only a
+  `retryable` failure (or a code the call site declares ambiguous with
+  `staleOn`), without retries when one exists; it is collected per call via
+  `staleScope` and flags `_meta["io.github.Grinv/stale"]`. `_meta` keys use `META_PREFIX`
+  (`src/version.ts`), the reverse-DNS namespace of `mcpName`.
+- Keep clients fetch only (caching is the request's `cache: true` option); all raw→agent-facing shaping lives in
   `src/format/` (`storefront.ts` / `web.ts` / `webAchievements.ts` / `store.ts`
   over the `storeCard.ts` toolkit, generic helpers in
   `shared.ts`). Every exported summarizer builds its return value via its

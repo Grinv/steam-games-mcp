@@ -4,29 +4,37 @@ import { TtlCache } from "../lib/cache.ts";
 
 const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-describe("bounded size (max)", () => {
-  test("evicts the oldest key once at capacity, keeping the newer ones", async () => {
-    const cache = new TtlCache(60_000, 2);
-    await cache.wrap("a", async () => 1);
-    await cache.wrap("b", async () => 2);
-    await cache.wrap("c", async () => 3); // over capacity → evicts "a"
-    assert.equal(cache.get("a"), undefined);
-    assert.equal(cache.get("b"), 2);
-    assert.equal(cache.get("c"), 3);
+describe("bounded size", () => {
+  test("evicts the oldest entries once over the size bound, keeping the newer ones", () => {
+    const cache = new TtlCache(60_000, 10);
+    cache.set("a", "aaaa");
+    cache.set("b", "bbbb");
+    cache.set("c", "cccc"); // 12 > 10 → evicts "a"
+    assert.equal(cache.getStale("a"), undefined);
+    assert.equal(cache.get("b"), "bbbb");
+    assert.equal(cache.get("c"), "cccc");
   });
 
-  test("refreshing an existing key at capacity evicts nothing and moves it to the back", () => {
-    const cache = new TtlCache(60_000, 2);
-    cache.set("a", 1);
-    cache.set("b", 2);
+  test("refreshing an existing key replaces its size and moves it to the back", () => {
+    const cache = new TtlCache(60_000, 10);
+    cache.set("a", "aaaa");
+    cache.set("b", "bbbb");
     // A refresh (what wrap does once "a" expires) re-inserts it, so a key
     // refreshed every TTL — the tag dictionary — is no longer the first evicted.
-    cache.set("a", 1);
-    assert.equal(cache.get("b"), 2); // the refresh itself evicted nothing
-    cache.set("c", 3); // "b" is now the oldest → evicted
-    assert.equal(cache.get("a"), 1);
-    assert.equal(cache.get("b"), undefined);
-    assert.equal(cache.get("c"), 3);
+    cache.set("a", "aaaa");
+    assert.equal(cache.get("b"), "bbbb"); // the refresh itself evicted nothing
+    cache.set("c", "cccc"); // "b" is now the oldest → evicted
+    assert.equal(cache.get("a"), "aaaa");
+    assert.equal(cache.getStale("b"), undefined);
+    assert.equal(cache.get("c"), "cccc");
+  });
+
+  test("a value bigger than the whole bound is not cached and evicts nothing", () => {
+    const cache = new TtlCache(60_000, 10);
+    cache.set("a", "aaaa");
+    cache.set("big", "x".repeat(11));
+    assert.equal(cache.getStale("big"), undefined);
+    assert.equal(cache.get("a"), "aaaa");
   });
 });
 
@@ -48,10 +56,10 @@ describe("wrap", () => {
     let calls = 0;
     const compute = async () => {
       calls += 1;
-      return 42;
+      return "42";
     };
-    assert.equal(await cache.wrap("k", compute), 42);
-    assert.equal(await cache.wrap("k", compute), 42);
+    assert.equal(await cache.wrap("k", compute), "42");
+    assert.equal(await cache.wrap("k", compute), "42");
     assert.equal(calls, 1);
   });
 
@@ -60,7 +68,7 @@ describe("wrap", () => {
     let calls = 0;
     const compute = async () => {
       calls += 1;
-      return 1;
+      return "1";
     };
     await cache.wrap("k", compute);
     await cache.wrap("k", compute);
@@ -73,15 +81,15 @@ describe("wrap", () => {
     const compute = async () => {
       calls += 1;
       await tick(5);
-      return 7;
+      return "7";
     };
     // Two callers race on the same key before either resolves.
     const [a, b] = await Promise.all([cache.wrap("k", compute), cache.wrap("k", compute)]);
-    assert.equal(a, 7);
-    assert.equal(b, 7);
+    assert.equal(a, "7");
+    assert.equal(b, "7");
     assert.equal(calls, 1); // only one real compute(), not two
     // A later, non-concurrent call still gets the (now cached) value without recomputing.
-    assert.equal(await cache.wrap("k", compute), 7);
+    assert.equal(await cache.wrap("k", compute), "7");
     assert.equal(calls, 1);
   });
 
@@ -95,66 +103,6 @@ describe("wrap", () => {
     await assert.rejects(() => cache.wrap("k", failing));
     await assert.rejects(() => cache.wrap("k", failing));
     assert.equal(calls, 2); // second call retried, not stuck on a resolved rejection
-  });
-});
-
-describe("wrapStaleOnError", () => {
-  test("serves the stale value when compute fails", async (t) => {
-    // Mock Date only (not setTimeout): this just needs the TTL to have elapsed,
-    // not an actual wait, so advancing the clock synchronously is both safe and
-    // deterministic — no real delay, no reliance on OS timer granularity.
-    t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
-    const cache = new TtlCache(1); // 1ms TTL → expires almost immediately
-    await cache.wrapStaleOnError("k", async () => 1);
-    t.mock.timers.tick(5);
-    const v = await cache.wrapStaleOnError("k", async () => {
-      throw new Error("upstream down");
-    });
-    assert.equal(v, 1);
-  });
-
-  test("rethrows when nothing was ever cached", async () => {
-    const cache = new TtlCache(60_000);
-    await assert.rejects(() =>
-      cache.wrapStaleOnError("missing", async () => {
-        throw new Error("boom");
-      }),
-    );
-  });
-
-  test("concurrent calls on a cold key share one in-flight compute()", async () => {
-    const cache = new TtlCache(60_000);
-    let calls = 0;
-    const compute = async () => {
-      calls += 1;
-      await tick(5);
-      return 9;
-    };
-    const [a, b] = await Promise.all([
-      cache.wrapStaleOnError("k", compute),
-      cache.wrapStaleOnError("k", compute),
-    ]);
-    assert.equal(a, 9);
-    assert.equal(b, 9);
-    assert.equal(calls, 1);
-  });
-
-  test("concurrent failures each independently fall back to the same stale value", async (t) => {
-    t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
-    const cache = new TtlCache(1); // 1ms TTL → expires almost immediately
-    await cache.wrapStaleOnError("k", async () => 5);
-    t.mock.timers.tick(5);
-    let calls = 0;
-    const failing = async () => {
-      calls += 1;
-      throw new Error("upstream down");
-    };
-    const [a, b] = await Promise.all([
-      cache.wrapStaleOnError("k", failing),
-      cache.wrapStaleOnError("k", failing),
-    ]);
-    assert.equal(a, 5);
-    assert.equal(b, 5);
-    assert.equal(calls, 1); // shared failure, not two independent upstream hits
+    assert.equal(cache.getStale("k"), undefined); // a failure is never cached
   });
 });

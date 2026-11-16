@@ -2,7 +2,7 @@
 // into a tool result (never thrown), so the agent receives an actionable
 // message. Built once per server with its logger (see server.ts), because an
 // unexpected error is logged here rather than shown to the agent.
-import { staleScope } from "../lib/cache.ts";
+import { staleScope } from "../lib/http.ts";
 import type { Logger } from "../lib/logger.ts";
 import {
   STALE_META_KEY,

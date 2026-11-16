@@ -1,99 +1,70 @@
-// Tiny in-memory TTL cache for read endpoints. Caching cuts latency and eases
-// pressure on rate-limited upstreams. Expired entries are retained (bounded by
-// max size) so they can be served as a stale fallback when the upstream is down.
+// In-memory TTL cache behind HttpClient: one entry per request URL, holding
+// Steam's raw response body. Caching a request — not a shaped result — keeps
+// the cache out of every decision about what a response means: shaping,
+// validation and combining several requests all run on the way out, so a
+// partial or definitive answer is never mistaken for a failure, or stored as
+// if it were complete. Expired entries are retained (bounded by size) so
+// HttpClient can serve one as a stale fallback while Steam is down.
 //
-// One instance is shared across many keys holding unrelated shapes (a raw
-// featured-categories payload, a tag-id→name map, a player's cached level,
-// ...), so the value type is chosen per call — via wrap/wrapStaleOnError's own
-// <T> — rather than fixed once on the class. That keeps every call site
-// exactly typed with no `as` casts to route a non-Record shape through.
-
-import { AsyncLocalStorage } from "node:async_hooks";
-
-/** Upstream failures a tool call was answered around with stale cache data.
- *  tools/guard.ts runs each call inside one scope, then logs these and flags
- *  the result's _meta; outside a scope (e.g. prompt completions) it's a no-op.
- *  Async context rather than a flag threaded through every client method:
- *  a stale fallback can fire many calls deep. */
-export const staleScope = new AsyncLocalStorage<{ errors: unknown[] }>();
+// Bodies are kept as text and parsed per read: a cached value can't be
+// mutated by whoever shapes it, and its size is known for the bound.
 
 interface Entry {
-  value: unknown;
+  value: string;
   expires: number;
 }
 
 export class TtlCache {
   readonly #ttlMs: number;
-  readonly #max: number;
+  readonly #maxSize: number;
+  #size = 0;
   readonly #map = new Map<string, Entry>();
   // In-flight compute() promises, keyed like #map. Without this, two callers
   // racing on the same cold/expired key (e.g. two tools reading the same
   // cached dictionary at once) would each fire their own upstream request;
   // the second now shares the first's promise instead.
-  readonly #pending = new Map<string, Promise<unknown>>();
+  readonly #pending = new Map<string, Promise<string>>();
 
-  constructor(ttlMs: number, max = 500) {
+  /** `maxSize` bounds the total cached text, in characters (≈ bytes for
+   *  Steam's JSON); the oldest entries are evicted past it. */
+  constructor(ttlMs: number, maxSize = 32 * 1024 * 1024) {
     this.#ttlMs = ttlMs;
-    this.#max = max;
+    this.#maxSize = maxSize;
   }
 
   /** Fresh (non-expired) value, or undefined. */
-  get<T>(key: string): T | undefined {
+  get(key: string): string | undefined {
     const hit = this.#map.get(key);
     if (!hit) return undefined;
-    return hit.expires > Date.now() ? (hit.value as T) : undefined;
+    return hit.expires > Date.now() ? hit.value : undefined;
   }
 
   /** Any cached value regardless of freshness — used for stale fallback. */
-  getStale<T>(key: string): T | undefined {
-    return this.#map.get(key)?.value as T | undefined;
+  getStale(key: string): string | undefined {
+    return this.#map.get(key)?.value;
   }
 
-  set<T>(key: string, value: T): void {
-    if (this.#ttlMs <= 0) return;
-    if (!this.#map.has(key) && this.#map.size >= this.#max) {
-      const oldest = this.#map.keys().next().value;
-      if (oldest !== undefined) this.#map.delete(oldest);
-    }
+  set(key: string, value: string): void {
+    if (this.#ttlMs <= 0 || value.length > this.#maxSize) return;
     // Re-inserted, not updated in place: a Map keeps a key's first insertion
     // position, so a key refreshed every TTL (the tag dictionary) would
     // otherwise be the first evicted and lose its stale fallback.
-    this.#map.delete(key);
+    this.#delete(key);
     this.#map.set(key, { value, expires: Date.now() + this.#ttlMs });
-  }
-
-  /** Get-or-compute, caching the resolved value. */
-  async wrap<T>(key: string, compute: () => Promise<T>): Promise<T> {
-    const cached = this.get<T>(key);
-    if (cached !== undefined) return cached;
-    return this.#dedupe(key, compute);
-  }
-
-  /**
-   * Like wrap, but if `compute` throws and a previously-cached (possibly stale)
-   * value exists, serve that instead of failing. Lets reads degrade gracefully
-   * when the upstream is temporarily down.
-   */
-  async wrapStaleOnError<T>(key: string, compute: () => Promise<T>): Promise<T> {
-    const fresh = this.get<T>(key);
-    if (fresh !== undefined) return fresh;
-    try {
-      return await this.#dedupe(key, compute);
-    } catch (err) {
-      const stale = this.getStale<T>(key);
-      if (stale === undefined) throw err;
-      staleScope.getStore()?.errors.push(err);
-      return stale;
+    this.#size += value.length;
+    for (const oldest of this.#map.keys()) {
+      if (this.#size <= this.#maxSize) break;
+      this.#delete(oldest);
     }
   }
 
-  // Share one in-flight compute() promise across concurrent callers of the
-  // same key, so a cold/expired key triggers exactly one upstream fetch no
-  // matter how many callers race on it. The resolved value is cached exactly
-  // once (by the shared promise's own .then, not per-caller); a rejection
-  // propagates to every waiter and clears the slot so the next call retries.
-  #dedupe<T>(key: string, compute: () => Promise<T>): Promise<T> {
-    const inFlight = this.#pending.get(key) as Promise<T> | undefined;
+  /** Fresh value, or compute() it — shared across concurrent callers of the
+   *  same key — and cache what it resolves to. A rejection propagates to every
+   *  waiter, is never cached, and clears the slot so the next call retries. */
+  wrap(key: string, compute: () => Promise<string>): Promise<string> {
+    const fresh = this.get(key);
+    if (fresh !== undefined) return Promise.resolve(fresh);
+    const inFlight = this.#pending.get(key);
     if (inFlight) return inFlight;
     const promise = compute()
       .then((value) => {
@@ -103,5 +74,12 @@ export class TtlCache {
       .finally(() => this.#pending.delete(key));
     this.#pending.set(key, promise);
     return promise;
+  }
+
+  #delete(key: string): void {
+    const hit = this.#map.get(key);
+    if (!hit) return;
+    this.#size -= hit.value.length;
+    this.#map.delete(key);
   }
 }

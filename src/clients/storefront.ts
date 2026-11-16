@@ -5,7 +5,6 @@
 // and a TTL cache; all shaping lives in ../format/storefront.ts.
 import { HttpClient } from "../lib/http.ts";
 import { RateLimiter } from "../lib/rateLimit.ts";
-import { TtlCache } from "../lib/cache.ts";
 import { ApiError } from "../lib/errors.ts";
 import {
   detailApp,
@@ -64,7 +63,6 @@ export interface PurchasePriceSource {
 
 export class StorefrontClient {
   readonly #http: HttpClient;
-  readonly #cache: TtlCache;
   readonly #cc: string;
   readonly #l: string;
   // Every price this client reports is corrected through this: see
@@ -86,8 +84,8 @@ export class StorefrontClient {
       retries: config.httpRetries,
       beforeRequest: () => limiter.acquire(),
       hasCredentials: false,
+      cacheTtlMs: config.cacheTtlMs,
     });
-    this.#cache = new TtlCache(config.cacheTtlMs);
   }
 
   async getGame(
@@ -98,40 +96,35 @@ export class StorefrontClient {
     const cc = country ?? this.#cc;
     const l = language ?? this.#l;
     // In parallel, not sequentially: the appid is already known, so correcting
-    // the price costs a request but no extra wall-clock. The price lookup stays
-    // OUTSIDE this cache entry: getPurchasePrices degrades a failed GetItems to
-    // "no corrections" rather than throwing, so inside the wrapper that
-    // degraded answer would be cached — serving the uncorrected Storefront
-    // price for the whole TTL, over any good stale entry. It caches its own
-    // successful responses instead, so a warm hit still makes no upstream call.
-    const [data, prices] = await Promise.all([
-      this.#cache.wrapStaleOnError(`app:${appid}:${cc}:${l}`, async () => {
-        const res = await this.#http.getJson<AppDetailsResponse>("api/appdetails", {
-          query: { appids: appid, cc, l, filters: APPDETAILS_FILTERS },
-        });
-        const entry = res[String(appid)];
-        if (!entry?.success || !entry.data) {
-          // appdetails answers {success:false} both for "no such app" and for "not
-          // sold in this country", so naming only the first sends the agent off to
-          // re-search a perfectly good appid. Confirmed live: appid 1174180 (Red
-          // Dead Redemption 2) is a full record under cc=US and success:false
-          // under cc=RU. A game removed from the store answers the same in every
-          // region (2026-11-05: 219820, 264040, 303700, 453170, all still on a
-          // public wishlist), so that's named too.
-          throw new ApiError({
-            code: "not_found",
-            message: `appdetails success:false for appid ${appid} cc ${cc}`,
-            detail:
-              `No Steam app with id ${appid} in region ${cc.toUpperCase()} — either the appid ` +
-              `doesn't exist or was removed from the store, or it isn't available in that ` +
-              `country (try another \`country\`).`,
-          });
-        }
-        return entry.data;
+    // the price costs a request but no extra wall-clock. Each request is cached
+    // on its own (lib/cache.ts), so a failed correction never taints the
+    // cached details, and a warm hit makes no upstream call at all.
+    const [res, prices] = await Promise.all([
+      this.#http.getJson<AppDetailsResponse>("api/appdetails", {
+        query: { appids: appid, cc, l, filters: APPDETAILS_FILTERS },
+        cache: true,
       }),
       this.#pricing.getPurchasePrices([appid], cc, l, { cache: true }),
     ]);
-    return detailApp(data, prices[String(appid)]);
+    const entry = res[String(appid)];
+    if (!entry?.success || !entry.data) {
+      // appdetails answers {success:false} both for "no such app" and for "not
+      // sold in this country", so naming only the first sends the agent off to
+      // re-search a perfectly good appid. Confirmed live: appid 1174180 (Red
+      // Dead Redemption 2) is a full record under cc=US and success:false
+      // under cc=RU. A game removed from the store answers the same in every
+      // region (2026-11-05: 219820, 264040, 303700, 453170, all still on a
+      // public wishlist), so that's named too.
+      throw new ApiError({
+        code: "not_found",
+        message: `appdetails success:false for appid ${appid} cc ${cc}`,
+        detail:
+          `No Steam app with id ${appid} in region ${cc.toUpperCase()} — either the appid ` +
+          `doesn't exist or was removed from the store, or it isn't available in that ` +
+          `country (try another \`country\`).`,
+      });
+    }
+    return detailApp(entry.data, prices[String(appid)]);
   }
 
   // Batch prices for many appids in one place. appdetails accepts a comma-list
@@ -189,21 +182,21 @@ export class StorefrontClient {
 
   // Review trend over time (monthly history + recent daily). Cached briefly.
   async getReviewHistogram(appid: number): Promise<Record<string, unknown>> {
-    return this.#cache.wrapStaleOnError(`hist:${appid}:${this.#l}`, async () => {
-      const res = await this.#http.getJson<ReviewHistogramResponse>(`appreviewhistogram/${appid}`, {
-        query: { l: this.#l },
-      });
-      return summarizeReviewHistogram(res);
+    const res = await this.#http.getJson<ReviewHistogramResponse>(`appreviewhistogram/${appid}`, {
+      query: { l: this.#l },
+      cache: true,
     });
+    return summarizeReviewHistogram(res);
   }
 
   // featuredcategories backs both getFeatured (all sections) and getSpecials (just
-  // the specials slice). Cache the RAW payload once per cc/l, so calling either —
-  // or both — hits the store at most once; each shapes the cached payload itself.
+  // the specials slice): one cached request per cc/l, so calling either — or
+  // both — hits the store at most once; each shapes the payload itself.
   #featured(cc: string, l: string): Promise<FeaturedResponse> {
-    return this.#cache.wrapStaleOnError(`featured:${cc}:${l}`, () =>
-      this.#http.getJson<FeaturedResponse>("api/featuredcategories", { query: { cc, l } }),
-    );
+    return this.#http.getJson<FeaturedResponse>("api/featuredcategories", {
+      query: { cc, l },
+      cache: true,
+    });
   }
 
   async getFeatured(country?: string, language?: string): Promise<Record<string, unknown>> {

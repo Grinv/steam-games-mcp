@@ -1,9 +1,18 @@
 // Thin fetch wrapper shared by both API clients: timeouts, bounded retries
-// with exponential backoff (honoring Retry-After), a default User-Agent, and
-// uniform mapping of failures to ApiError.
-import { ApiError, classifyStatus } from "./errors.ts";
+// with exponential backoff (honoring Retry-After), a default User-Agent,
+// uniform mapping of failures to ApiError, and the response cache.
+import { AsyncLocalStorage } from "node:async_hooks";
+import { ApiError, classifyStatus, type ApiErrorCode } from "./errors.ts";
+import { TtlCache } from "./cache.ts";
 import type { Logger } from "./logger.ts";
 import { USER_AGENT } from "../version.ts";
+
+/** Upstream failures a tool call was answered around with stale cache data.
+ *  tools/guard.ts runs each call inside one scope, then logs these and flags
+ *  the result's _meta; outside a scope (e.g. prompt completions) it's a no-op.
+ *  Async context rather than a flag threaded through every client method:
+ *  a cached request can sit many calls deep. */
+export const staleScope = new AsyncLocalStorage<{ errors: unknown[] }>();
 
 interface RequestOptions {
   query?: Record<string, string | number | boolean | undefined>;
@@ -13,6 +22,15 @@ interface RequestOptions {
    *  configured), so a 401/403 there is attributed correctly instead of
    *  blaming the client's overall credential state. */
   hasCredentials?: boolean;
+  /** Cache the response for HttpClientOptions.cacheTtlMs, keyed by the URL,
+   *  and serve a stale copy if Steam fails transiently. Only for answers that
+   *  don't depend on who asks or need to be live (catalog data, dictionaries,
+   *  charts) — never for a player's library or friends. */
+  cache?: boolean;
+  /** Codes that, for this endpoint, are as likely a passing hiccup as a real
+   *  answer, so a stale copy is preferred to them too (besides any `retryable`
+   *  failure). An endpoint quirk, declared at its call site. */
+  staleOn?: readonly ApiErrorCode[];
 }
 
 interface HttpClientOptions {
@@ -27,46 +45,68 @@ interface HttpClientOptions {
    *  client instance, not per request. Attached to any resulting ApiError so
    *  a 401/403 message can be precise instead of guessing. */
   hasCredentials?: boolean;
+  /** How long a `cache: true` response stays fresh; 0 disables caching. */
+  cacheTtlMs?: number;
 }
 
 const MAX_BACKOFF_MS = 8000;
 
 export class HttpClient {
   readonly #opts: HttpClientOptions;
+  readonly #cache: TtlCache;
 
   constructor(opts: HttpClientOptions) {
     this.#opts = opts;
+    this.#cache = new TtlCache(opts.cacheTtlMs ?? 0);
   }
 
   async getJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    const text = await this.#request(path, options, "application/json");
-    if (text === undefined || text.length === 0) return undefined as T;
-    try {
-      return JSON.parse(text) as T;
-    } catch (err) {
-      throw new ApiError({
-        code: "bad_response",
-        message: `Upstream returned invalid JSON (${text.length} bytes)`,
-        retryable: true,
-        cause: err,
-      });
-    }
+    const url = this.#buildUrl(path, options.query);
+    const text = options.cache
+      ? await this.#cached(url, options)
+      : ((await this.#request(url, options, "application/json")) ?? "");
+    return text.length === 0 ? (undefined as T) : (parseJson(text) as T);
   }
 
   /** The raw response body, for the rare upstream that doesn't speak JSON —
    *  Steam's community profile view (`?xml=1`) is the only one here. Same
    *  timeouts, retries and ApiError mapping as getJson. */
   async getText(path: string, options: RequestOptions = {}): Promise<string> {
-    return (await this.#request(path, options, "*/*")) ?? "";
+    return (await this.#request(this.#buildUrl(path, options.query), options, "*/*")) ?? "";
+  }
+
+  // A fresh cached body, else a request — shared with concurrent callers of
+  // the same URL. A body that isn't JSON fails like a request (bad_response)
+  // and is never cached. Steam failing transiently (`retryable`, or a code the
+  // call site declared ambiguous via `staleOn`) is answered with the stale
+  // copy if there is one; a definitive answer (4xx) or a bug propagates.
+  async #cached(url: string, options: RequestOptions): Promise<string> {
+    const stale = this.#cache.getStale(url);
+    try {
+      return await this.#cache.wrap(url, async () => {
+        // With a stale copy to fall back on, a retry would only delay the
+        // answer it ends in (up to ~45 s of timeouts with the defaults).
+        const retries = stale === undefined ? undefined : 0;
+        const text = (await this.#request(url, options, "application/json", retries)) ?? "";
+        if (text.length > 0) parseJson(text);
+        return text;
+      });
+    } catch (err) {
+      const staleWins =
+        err instanceof ApiError && (err.retryable || options.staleOn?.includes(err.code));
+      if (stale === undefined || !staleWins) throw err;
+      staleScope.getStore()?.errors.push(err);
+      return stale;
+    }
   }
 
   async #request(
-    path: string,
+    url: string,
     options: RequestOptions,
     accept: string,
+    retriesOverride?: number,
   ): Promise<string | undefined> {
-    const url = this.#buildUrl(path, options.query);
-    const retries = this.#opts.retries ?? 2;
+    const retries = retriesOverride ?? this.#opts.retries ?? 2;
     const timeoutMs = this.#opts.timeoutMs ?? 15000;
 
     let attempt = 0;
@@ -162,6 +202,19 @@ async function toHttpError(res: Response, hasCredentials?: boolean): Promise<Api
     message: `HTTP ${res.status} ${res.statusText}${raw ? `: ${raw.slice(0, 500)}` : ""}`,
     retryAfterMs: parseRetryAfter(res.headers.get("retry-after")),
   });
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new ApiError({
+      code: "bad_response",
+      message: `Upstream returned invalid JSON (${text.length} bytes)`,
+      retryable: true,
+      cause: err,
+    });
+  }
 }
 
 function toNetworkError(err: unknown): ApiError {

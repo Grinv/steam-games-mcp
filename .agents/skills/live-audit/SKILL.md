@@ -347,23 +347,15 @@ there) for:
 price_overview`), so the suite agrees with the bug instead of catching it.
   Same family as 0.13.0's `get_featured` "0.00 USD" fix — which is exactly why
   it needs the whole-codebase sweep §6 asks for, not a one-site patch.
-- **A degraded fallback RETURNED from inside a cache wrapper.** A `catch` that
-  turns an upstream failure into a clean empty result is correct; putting it
-  inside `wrapStaleOnError`'s callback is not — nor is calling a callee there
-  that swallows its own failure (`getPurchasePrices` → `{}` cached `get_game`'s
-  uncorrected price) — because the callback _returning_
-  is what makes `TtlCache#dedupe` `set()` the value. Confirmed in
-  `getGlobalAchievements`/`getGameAchievements`: one 403 (Steam's edge answers
-  that under load, not only for a schema-less appid) cached "this game has no
-  achievements" for the whole TTL — exactly how the tool's own description tells
-  the model to read an empty list — and `set()` it over a good-but-stale entry,
-  destroying the fallback the wrapper exists to serve. Check every `wrapStaleOnError`
-  /`wrap` call site: does its callback have a `catch` that RETURNS rather than
-  rethrows? The fix is to move the catch outside the wrapper (`#steamLevel` is
-  the correct shape). Where the degrade decision needs state known only inside
-  the callback, carry it on the thrown rejection, never a closure flag —
-  `#dedupe` shares one in-flight promise, so only the first concurrent caller
-  would ever run the callback that sets it.
+- **A cache that stores a meaning instead of a response.** The cache is
+  per request (`HttpClient`, `cache: true`): one entry is one Steam body,
+  and shaping, validation and combining requests run after it. Check that no
+  client caches a shaped or combined result of its own (that is how a
+  degraded answer — an uncorrected price, "no achievements" from one 403 —
+  used to get cached for the whole TTL over a good entry), that `cache: true`
+  is only on answers that aren't live or per-requester, and that an endpoint
+  whose 4xx can also be a passing hiccup declares it with `staleOn` (the
+  achievement endpoints' 403) rather than a client-side retry or fallback.
   This class is invisible to live testing: you cannot make the upstream 403 on
   cue, and one call in isolation returns the right answer — it is the SECOND
   call that is wrong.
