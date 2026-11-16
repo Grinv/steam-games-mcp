@@ -13,7 +13,7 @@
 import { ApiError } from "../lib/errors.ts";
 import type { Answered, CallOptions, Endpoint, Query } from "../lib/endpoint.ts";
 import { Steam } from "./endpoints.ts";
-import { noteDegraded, optionalParts } from "../lib/call.ts";
+import { noteDegraded, optionalParts, orFailure } from "../lib/call.ts";
 import { notFound } from "../format/shared.ts";
 import {
   computeFavoriteTagWeights,
@@ -204,12 +204,8 @@ export class StoreServiceClient {
   async #tagNames(language: string): Promise<TagMap | ApiError> {
     // Not optional(): the filter path must fail loudly (#tagsUnavailable),
     // the display path degrades — so the failure is handed back to decide.
-    try {
-      return summarizeTagList(await this.#call(Steam.GetTagList, { language }, { cache: true }));
-    } catch (e) {
-      if (!(e instanceof ApiError)) throw e;
-      return e;
-    }
+    const res = await orFailure(this.#call(Steam.GetTagList, { language }, { cache: true }));
+    return res instanceof ApiError ? res : summarizeTagList(res);
   }
 
   // A tag dictionary failure, explained for a caller that can't go on without
@@ -541,6 +537,9 @@ export class StoreServiceClient {
         data_request: storeCardDataRequest(),
       }),
     });
+    // Not reading Steam: only keeps this promise, awaited below, from being an
+    // unhandled rejection if an earlier await throws first.
+    // eslint-disable-next-line no-restricted-syntax
     samplePromise.catch(() => {});
     const tagMap = await tagMapPromise;
     if (tagMap instanceof ApiError) {

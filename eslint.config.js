@@ -17,6 +17,53 @@ export default defineConfig(
       ],
     },
   },
+  // The layering AGENTS.md describes, enforced. Clients fetch and read Steam
+  // only through clients/endpoints.ts and lib/call.ts's primitives — a
+  // hand-written catch there is how a cancel, a bug or a bad key got read as
+  // an answer; and they build no agent-facing text and touch no schemas.
+  {
+    files: ["src/clients/**/*.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CatchClause, CallExpression[callee.property.name='catch']",
+          message:
+            "Clients don't catch: declare Steam's answer in clients/endpoints.ts, or use " +
+            "optional()/optionalParts()/orFailure() from lib/call.ts.",
+        },
+      ],
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["zod", "**/*.schemas.ts"], message: "Schemas belong to format/." },
+            {
+              group: ["**/lib/result.ts"],
+              message: "Agent-facing text is built in format/ and tools/.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Formatters shape data; they don't fetch or know the transport.
+  {
+    files: ["src/format/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/clients/**", "**/lib/http.ts", "**/lib/cache.ts", "**/lib/endpoint.ts"],
+              message: "format/ shapes data; fetching and transport belong to clients/ and lib/.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Must be last: disables ESLint rules that conflict with Prettier.
   prettier,
 );

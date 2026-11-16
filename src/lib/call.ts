@@ -79,3 +79,15 @@ export function optionalParts<T>(
   });
   return parts;
 }
+
+/** A Steam failure as a value, for a caller that decides per use what it
+ *  means (fail loudly here, degrade there; try the next source). A bug or
+ *  the call's cancellation still propagates. */
+export async function orFailure<T>(work: Promise<T>): Promise<T | ApiError> {
+  try {
+    return await work;
+  } catch (err) {
+    if (!(err instanceof ApiError)) throw err;
+    return err;
+  }
+}

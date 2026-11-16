@@ -171,7 +171,11 @@ npm run inspector      # run under the MCP Inspector
   for the chunks of a batch: Steam failing becomes `undefined` plus a note,
   a bug or the call's cancellation still propagates. Never a hand-written
   `try/catch` that degrades; every `allSettled`/`catch` around a Steam call is
-  either that, or the endpoint's declared `answers`. A formatter renders `undefined` as unknown (`null`/empty),
+  either that, `orFailure()` (a Steam failure as a value, for a caller that
+  decides per use — e.g. the tag dictionary, fatal to a filter, optional on a
+  card), or the endpoint's declared `answers`. ESLint enforces it: no `catch`
+  in `src/clients/`, no schemas or agent-facing text there, and no fetching
+  or transport in `src/format/` (`eslint.config.js`). A formatter renders `undefined` as unknown (`null`/empty),
   never as a negative fact. `guard` turns the call's notes (and any stale
   fallback) into `structuredContent.notes` — the only place the model looks
   (verified: Claude Code feeds it structuredContent alone, not other content

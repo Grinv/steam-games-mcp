@@ -17,7 +17,7 @@ import {
   type Query,
 } from "../lib/endpoint.ts";
 import { Steam, classifySteamApiError } from "./endpoints.ts";
-import { noteDegraded, optional, optionalParts } from "../lib/call.ts";
+import { noteDegraded, optional, optionalParts, orFailure } from "../lib/call.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
 import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.ts";
 import {
@@ -186,14 +186,14 @@ export class SteamWebClient {
     // says nothing about the name) is the error rethrown rather than reported
     // as "check the spelling" of a STEAM_ID that may well be fine.
     let transient: ApiError | undefined;
-    const attempt = (p: Promise<string | undefined>) =>
-      p.catch((e: unknown) => {
-        // Only an upstream failure means "try the next lookup"; a bug isn't one.
-        if (!(e instanceof ApiError)) throw e;
-        this.#logger.debug("STEAM_ID vanity lookup failed:", e);
-        if (e.retryable) transient = e;
-        return undefined;
-      });
+    // Only an upstream failure means "try the next lookup"; a bug isn't one.
+    const attempt = async (p: Promise<string | undefined>) => {
+      const res = await orFailure(p);
+      if (!(res instanceof ApiError)) return res;
+      this.#logger.debug("STEAM_ID vanity lookup failed:", res);
+      if (res.retryable) transient = res;
+      return undefined;
+    };
     let steamid = this.configured ? await attempt(this.#vanityViaApi(raw)) : undefined;
     if (!steamid) {
       transient = undefined;
