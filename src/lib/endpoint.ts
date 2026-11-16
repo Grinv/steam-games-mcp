@@ -56,12 +56,12 @@ export type Answered<T, A extends string> = [A] extends [never]
   ? T
   : { data: T; answer?: undefined } | { answer: A; data?: undefined };
 
-/** Per-call choices, about this use rather than the endpoint. */
+/** Per-call choices, about this use rather than the endpoint. A body rule
+ *  isn't one: the cache is keyed by URL, so a rule must hold for every use of
+ *  it — it belongs on the Endpoint. */
 export interface CallOptions {
   /** Cache the response (see RequestOptions.cache). */
   cache?: boolean;
-  /** A body check specific to this use, after the endpoint's own. */
-  validate?: (body: unknown) => void;
 }
 
 /**
@@ -78,13 +78,7 @@ export async function call<T, A extends string>(
   extraQuery: Query = {},
 ): Promise<Answered<T, A>> {
   const { path, rest } = fillPath(ep.path, query);
-  const validate =
-    ep.validate || opts.validate
-      ? (body: unknown) => {
-          ep.validate?.(body as T, query);
-          opts.validate?.(body);
-        }
-      : undefined;
+  const validate = ep.validate ? (body: unknown) => ep.validate!(body as T, query) : undefined;
   const request: RequestOptions = {
     query: { ...extraQuery, ...rest },
     cache: opts.cache,

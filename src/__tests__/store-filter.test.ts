@@ -88,6 +88,7 @@ test("minReview / minReviews compare on the raw summary (missing = excluded)", (
   assert.ok(byPct(rev(80, 10)));
   assert.ok(!byPct(rev(79, 10)));
   assert.ok(!byPct(rev(0, 0))); // Steam's "No user reviews" summary → unrated
+  assert.ok(byPct(rev(85))); // a summary without a count keeps its %
   assert.ok(!byPct(item())); // no reviews → treated as below any threshold
   const byCount = storeItemFilter({ minReviews: 100 });
   assert.ok(byCount(rev(undefined, 100)));

@@ -4,6 +4,7 @@ import { HttpClient } from "../lib/http.ts";
 import { CallCancelled, callScope, type CallState } from "../lib/call.ts";
 import { ApiError } from "../lib/errors.ts";
 import { call, endpoint } from "../lib/endpoint.ts";
+import { classifySteamApiError } from "../clients/endpoints.ts";
 import { silentLogger, jsonResponse, htmlResponse, mockFetch, installFetch } from "./helpers.ts";
 import { USER_AGENT } from "../version.ts";
 
@@ -511,4 +512,22 @@ test("a bug in the host's classify is a bug, not a network failure to retry", as
   });
   await assert.rejects(c.getJson("thing"), (err: unknown) => err instanceof TypeError);
   assert.equal(mock.calls.length, 1); // not retried
+});
+
+test("Steam's bad-key page is recognized from the body, past the log message's 500 chars", async (t) => {
+  // The marker sits beyond what ApiError.message keeps.
+  const page = `<html>${" ".repeat(600)}Please verify your <pre>key=</pre> parameter</html>`;
+  installFetch(
+    t,
+    mockFetch(() => new Response(page, { status: 403 })),
+  );
+  const c = new HttpClient({
+    baseUrl: "https://example.test/api",
+    logger: silentLogger(),
+    classify: classifySteamApiError,
+  });
+  await assert.rejects(
+    c.getJson("thing"),
+    (err: unknown) => err instanceof ApiError && err.code === "invalid_key",
+  );
 });

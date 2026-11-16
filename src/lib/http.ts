@@ -40,10 +40,11 @@ interface HttpClientOptions {
   beforeRequest?: (signal?: AbortSignal) => Promise<void> | void;
   /** How long a `cache: true` response stays fresh; 0 disables caching. */
   cacheTtlMs?: number;
-  /** This upstream's own reading of an HTTP failure (e.g. Steam's bad-key
-   *  page → invalid_key), applied before retries and the cache decide
+  /** This upstream's own reading of an HTTP failure from its full body (e.g.
+   *  Steam's bad-key page → invalid_key) — not from `message`, which is
+   *  truncated log text. Applied before retries and the cache decide
    *  anything, so they act on what actually happened. */
-  classify?: (err: ApiError) => ApiError;
+  classify?: (err: ApiError, body: string) => ApiError;
 }
 
 const MAX_BACKOFF_MS = 8000;
@@ -209,7 +210,7 @@ export class HttpClient {
       // The error body is log-only: a failure reading it leaves it out.
       const raw = await res.text().catch(() => "");
       const err = toHttpError(res, raw);
-      throw this.#opts.classify ? this.#opts.classify(err) : err;
+      throw this.#opts.classify ? this.#opts.classify(err, raw) : err;
     } finally {
       clearTimeout(timer);
     }

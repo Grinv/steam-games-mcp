@@ -36,7 +36,6 @@ import type { ChartName } from "../format/charts.ts";
 import {
   summarizeTagList,
   type CompatFilters,
-  type StoreItemsResponse,
   type TagMap,
   TAG_LIMIT,
 } from "../format/storeCard.ts";
@@ -464,15 +463,15 @@ export class StoreServiceClient {
     const chunks: number[][] = [];
     for (let i = 0; i < appids.length; i += PRICE_LOOKUP_CHUNK)
       chunks.push(appids.slice(i, i + PRICE_LOOKUP_CHUNK));
-    // A payload that fails its schema rejects like a failed request: it costs
-    // only this chunk's corrections. With `cache`, the request is cached (and
-    // served stale while Steam is down, so getGame's details keep their
-    // correction during an outage); a failure never is.
-    const shape = (body: unknown) => summarizePurchasePrices(body as StoreItemsResponse);
+    // A payload that fails the price shape rejects like a failed request
+    // (Steam.GetPurchaseOptions' validate): it costs only this chunk's
+    // corrections. With `cache`, the request is cached (and served stale while
+    // Steam is down, so getGame's details keep their correction during an
+    // outage); a failure never is.
     const load = async (chunk: number[]) =>
-      shape(
+      summarizePurchasePrices(
         await this.#call(
-          Steam.GetItems,
+          Steam.GetPurchaseOptions,
           {
             input_json: JSON.stringify({
               ids: chunk.map((appid) => ({ appid })),
@@ -480,8 +479,7 @@ export class StoreServiceClient {
               data_request: { include_all_purchase_options: true },
             }),
           },
-          // Validated before caching, so an unusable payload is never cached.
-          { cache: opts.cache, validate: shape },
+          { cache: opts.cache },
         ),
       );
     const settled = await Promise.allSettled(chunks.map(load));
@@ -518,36 +516,32 @@ export class StoreServiceClient {
     }
     const l = opts.language ?? this.#l;
     const cc = opts.country ?? this.#country;
-    // None of the three requests depends on another's answer, so they run
-    // concurrently. They're still awaited in the original order, so a missing
-    // tag dictionary or an empty favorite-tag set wins over a failed sample or
-    // pool request exactly as before; the no-op catch below only keeps the
-    // sample request, if nobody awaits it (after an early throw/return), from
-    // becoming an unhandled rejection.
+    // The tag dictionary and the favorite-tag sample don't depend on each
+    // other, so they run concurrently; a missing dictionary still wins over a
+    // failed sample (checked first).
     const tagMapPromise = this.#tagNames(l);
     const sample = ownedGames
       .slice()
       .sort((a, b) => b.playtimeMinutes - a.playtimeMinutes)
       .slice(0, FAVORITE_TAG_SAMPLE_SIZE);
-    const samplePromise = this.#call(Steam.GetItems, {
-      input_json: JSON.stringify({
-        ids: sample.map((g) => ({ appid: g.appid })),
-        context: { language: l, country_code: cc },
-        data_request: storeCardDataRequest(),
-      }),
-    });
-    // Not reading Steam: only keeps this promise, awaited below, from being an
-    // unhandled rejection if an earlier await throws first.
-    // eslint-disable-next-line no-restricted-syntax
-    samplePromise.catch(() => {});
-    const tagMap = await tagMapPromise;
+    const [tagMap, sampleRes] = await Promise.all([
+      tagMapPromise,
+      orFailure(
+        this.#call(Steam.GetItems, {
+          input_json: JSON.stringify({
+            ids: sample.map((g) => ({ appid: g.appid })),
+            context: { language: l, country_code: cc },
+            data_request: storeCardDataRequest(),
+          }),
+        }),
+      ),
+    ]);
     if (tagMap instanceof ApiError) {
       // Same "fail loudly, don't silently degrade" rule as
       // #requireTagMapIfFiltering — recommendations are meaningless without it.
       throw this.#tagsUnavailable(tagMap, "recommendations can't be computed", l);
     }
-
-    const sampleRes = await samplePromise;
+    if (sampleRes instanceof ApiError) throw sampleRes;
     const tagWeights = computeFavoriteTagWeights(
       sampleRes.response?.store_items ?? [],
       new Map(sample.map((g) => [g.appid, g.playtimeMinutes])),

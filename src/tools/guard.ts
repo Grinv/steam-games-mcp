@@ -74,10 +74,15 @@ export function toolOutput(logger: Logger): ToolOutput {
     // the internal-error path (toProblem), where they're the diagnostics.
     const line = (err: ApiError) =>
       `${err.code}${err.status ? ` ${err.status}` : ""}: ${err.message.split("\n")[0]}`;
+    // Counted, not collapsed: two chunks missing alike ("Prices of 100
+    // appids") are two gaps, and the model must know both.
+    const gaps = new Map<string, number>();
     for (const { what, err } of state.degraded) {
       logger.warn(`partial answer, ${what} unavailable: ${line(err)}`);
-      notes.add(`${what} unavailable: ${toProblem(err, logger).detail}`);
+      const gap = `${what} unavailable: ${toProblem(err, logger).detail}`;
+      gaps.set(gap, (gaps.get(gap) ?? 0) + 1);
     }
+    for (const [gap, n] of gaps) notes.add(n > 1 ? `${n}× ${gap}` : gap);
     for (const { err, storedAt } of state.stale) {
       logger.warn(`served stale cache data after ${line(err)}`);
       // problemSummary, not the full detail: answering with a stale copy

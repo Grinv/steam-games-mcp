@@ -40,6 +40,7 @@ import {
   type GetTagListResponse,
   type StoreItemsResponse,
 } from "../format/storeCard.ts";
+import { summarizePurchasePrices } from "../format/store.ts";
 import type {
   ConcurrentPlayersResponse,
   DeckMostPlayedResponse,
@@ -72,9 +73,9 @@ const invalidSteamidProbe = (query: Record<string, string | number>) => ({
 // code where the response is read (HttpClient's `classify`), before retries,
 // the cache and any endpoint answer act on it. (Keyless endpoints ignore a
 // bad key and answer 200, also verified live.)
-export function classifySteamApiError(err: ApiError): ApiError {
+export function classifySteamApiError(err: ApiError, body: string): ApiError {
   if (err.code !== "forbidden" && err.code !== "unauthorized") return err;
-  if (!/verify your <pre>key=/i.test(err.message)) return err;
+  if (!/verify your <pre>key=/i.test(body)) return err;
   return new ApiError({
     code: "invalid_key",
     status: err.status,
@@ -328,6 +329,30 @@ export const Steam = {
         query: { input_json: json({ ids: [{ appid: 620 }], context: ctx }) },
         expect: "data",
         shows: "items",
+      },
+    ],
+  }),
+  // GetItems asked only for purchase options (data_request
+  // include_all_purchase_options), feeding a price correction: a body that
+  // doesn't fit the price shape fails like a request — never cached, a stale
+  // copy stands in. Its own entry because the rule holds for that query's URL,
+  // not for every GetItems answer.
+  GetPurchaseOptions: endpoint<StoreItemsResponse>({
+    path: "IStoreBrowseService/GetItems/v1/",
+    host: "api",
+    keyless: true,
+    validate: (body) => void summarizePurchasePrices(body),
+    probes: [
+      {
+        query: {
+          input_json: json({
+            ids: [{ appid: 3717330 }],
+            context: ctx,
+            data_request: { include_all_purchase_options: true },
+          }),
+        },
+        expect: "data",
+        shows: "purchase options that fit the price shape",
       },
     ],
   }),

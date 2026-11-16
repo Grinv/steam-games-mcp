@@ -217,6 +217,14 @@ export function priceFields(bp: StoreItem["best_purchase_option"]): {
 
 // ---- store cards ------------------------------------------------------------
 
+// Steam sends percent_positive: 0 for a game with no reviews at all (sampled
+// live 2026-11-17), so 0 there is "unknown", not "everyone disliked it". Only
+// an explicit zero count says so; a summary without a count keeps its %.
+export function reviewPercent(it: StoreItem): number | undefined {
+  const rev = it.reviews?.summary_filtered;
+  return rev?.review_count === 0 ? undefined : rev?.percent_positive;
+}
+
 // Fields common to every store card, independent of how price is shaped. Callers
 // append their own price block (flat for discover, nested for get_items). Not
 // `.parse()`d here — the exported summarizer that embeds a card already
@@ -224,13 +232,6 @@ export function priceFields(bp: StoreItem["best_purchase_option"]): {
 // return up to hundreds of cards per call, so re-validating each one twice on
 // top of that would be pure overhead). The `z.infer` return type still gets
 // this checked at the TS level.
-// Steam sends percent_positive: 0 for a game with no reviews at all (sampled
-// live 2026-11-17), so 0 there is "unknown", not "everyone disliked it".
-export function reviewPercent(it: StoreItem): number | undefined {
-  const rev = it.reviews?.summary_filtered;
-  return rev?.review_count ? rev.percent_positive : undefined;
-}
-
 export function baseCard(it: StoreItemWithAppid, tagMap?: TagMap): z.infer<typeof baseCardSchema> {
   const rev = it.reviews?.summary_filtered;
   return {

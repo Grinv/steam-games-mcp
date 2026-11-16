@@ -123,3 +123,23 @@ test("an optional part Steam failed to provide becomes undefined plus a note; a 
     restore();
   }
 });
+
+test("two parts missing alike are two gaps in the notes, not one", async () => {
+  const { out, restore } = setup();
+  try {
+    const fail = () =>
+      optional(
+        "Prices of 100 appids",
+        Promise.reject(new ApiError({ code: "rate_limited", status: 429, message: "HTTP 429" })),
+      );
+    const r = await out.reply(async () => {
+      await Promise.all([fail(), fail()]);
+      return {};
+    }, ctx());
+    const { notes } = r.structuredContent as { notes: string[] };
+    assert.equal(notes.length, 1);
+    assert.match(notes[0]!, /^2× Prices of 100 appids unavailable:/);
+  } finally {
+    restore();
+  }
+});

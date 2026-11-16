@@ -347,6 +347,12 @@ there) for:
 price_overview`), so the suite agrees with the bug instead of catching it.
   Same family as 0.13.0's `get_featured` "0.00 USD" fix — which is exactly why
   it needs the whole-codebase sweep §6 asks for, not a one-site patch.
+- **A decision taken from a stand-in for the fact** (AGENTS.md: "Decide from
+  the fact"). For every `if`/regex/`Set`/cache key in the diff, ask what fact
+  it decides on and whether it reads that fact or something derived from it:
+  `err.message` (truncated log text), a rendered note, a flag that guesses
+  ("was a key sent"), a falsy number standing for "absent", the extent of a
+  `try`. Each of these shipped and was caught only by review.
 - **A bug relabelled as an upstream failure.** Only `HttpClient#once` may turn
   a non-`ApiError` into an `ApiError` (fetch's own rejection). Grep for
   `toNetworkError(` and any `instanceof ApiError ? … : <wrap>` — a second

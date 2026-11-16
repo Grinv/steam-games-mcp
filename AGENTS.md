@@ -168,6 +168,18 @@ npm run inspector      # run under the MCP Inspector
   went unclassified while every test passed on a 403 fixture. The one
   exception is `ambiguous`: a passing edge failure can't be triggered on cue,
   so its probes show only the plain answer and a comment says what was seen.
+- **Decide from the fact, at the place it is known — never from a stand-in
+  for it.** Every bug in the error/cache rework's review rounds was one
+  decision taken from a proxy: advice picked by "was a key sent" instead of
+  the classified code; "is this fetch failing" by what sat inside a `try`;
+  a bad key read from the truncated log `message` instead of the body; a
+  body rule passed per call to a cache keyed by URL; two gaps merged because
+  their note text matched; "no reviews" read off a falsy count. So: classify
+  from Steam's response itself (status, body) in `classify`/`endpoints.ts`;
+  state a rule where its identity lives (a body rule on the Endpoint, whose
+  query is the URL); never read `ApiError.message` for a decision (it is log
+  text); never let a rendered string stand for identity (dedupe, count or
+  key by the data, not its wording).
 - **A tool's answer is a required core plus optional parts** (a price
   correction, rarity, a Steam level, names, tags). A required part is a plain
   `await`: its failure is the tool's error. An optional one goes through
