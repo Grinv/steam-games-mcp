@@ -25,25 +25,47 @@ test("getJson parses the body and sends a User-Agent + query params", async (t) 
   assert.equal(headers["User-Agent"], USER_AGENT);
 });
 
-// messageFor() (lib/result.ts) relies on unsafeDetail to decide whether it's
-// safe to echo err.message verbatim to the agent.
-test("toHttpError flags an unstructured raw body as unsafeDetail", async (t) => {
+// The raw body is diagnostics: it stays in `message` (the log) and never
+// becomes agent-facing `detail` — Steam's error bodies are HTML pages.
+test("toHttpError keeps the raw body for the log only", async (t) => {
   const mock = mockFetch(() =>
     htmlResponse("<html><body><h1>Bad Gateway</h1>edge error page</body></html>", { status: 400 }),
   );
   installFetch(t, mock);
   await assert.rejects(
     () => client().getJson("thing"),
-    (err: unknown) => err instanceof ApiError && err.unsafeDetail === true,
+    (err: unknown) =>
+      err instanceof ApiError &&
+      err.code === "bad_request" &&
+      /edge error page/.test(err.message) &&
+      err.detail === undefined,
   );
 });
 
-test("toHttpError does not flag a structured JSON error as unsafeDetail", async (t) => {
-  const mock = mockFetch(() => jsonResponse({ message: "bad appid" }, { status: 400 }));
-  installFetch(t, mock);
+test("a 200 whose body isn't JSON is a retryable bad_response", async (t) => {
+  installFetch(
+    t,
+    mockFetch(() => htmlResponse("<html>not json</html>", { status: 200 })),
+  );
   await assert.rejects(
     () => client().getJson("thing"),
-    (err: unknown) => err instanceof ApiError && err.unsafeDetail === false,
+    (err: unknown) =>
+      err instanceof ApiError &&
+      err.code === "bad_response" &&
+      err.retryable &&
+      err.cause instanceof SyntaxError,
+  );
+});
+
+test("Retry-After lands on the typed retryAfterMs field, not in cause", async (t) => {
+  installFetch(
+    t,
+    mockFetch(() => jsonResponse({}, { status: 429, headers: { "retry-after": "2" } })),
+  );
+  await assert.rejects(
+    () => client({ retries: 0 }).getJson("thing"),
+    (err: unknown) =>
+      err instanceof ApiError && err.retryAfterMs === 2000 && err.cause === undefined,
   );
 });
 

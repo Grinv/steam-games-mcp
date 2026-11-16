@@ -445,8 +445,13 @@ false` at its own call site — otherwise a 403 there gets misattributed to
   sharing the same `#get`/`HttpClient` binding: `StoreServiceClient`
   (`storeService.ts`) has its own `Get` type that once lacked an `opts` param,
   keeping the bug live a whole release past the `web.ts` fix.
-- Tool failures that don't go through `guard()`/`result.ts` — AGENTS.md
-  requires every tool failure return `{ isError: true }`, never a raw throw.
+- Tool failures that don't go through `toolOutput`'s `guard()`/`reply()` and
+  `toProblem()` — AGENTS.md requires every tool failure return
+  `{ isError: true }` with the Problem in `_meta`, never a raw throw.
+- An `ApiError` whose `code` doesn't say what happened, or agent-facing text
+  put in `message` instead of `detail` (`message` is log-only and never read
+  by `toProblem`), or a bare `catch {}` that swallows a bug along with the
+  upstream failure it meant to absorb.
 - `.clients/` files doing any response-shaping themselves instead of leaving
   it entirely to `src/format/` — AGENTS.md says clients are fetch+cache only.
 - Logger/credential leakage: the Web API key travels as a `key` query param —
@@ -457,8 +462,8 @@ false` at its own call site — otherwise a 403 there gets misattributed to
   sink an entire batch call (e.g. `find_friends_who_own`'s per-friend
   lookup)** — this bug class needs a source-level trace, not a live call (you
   can't make one specific sub-request fail on cue). Check two things: (1) the
-  rejection's raw `.message` must route through `messageFor()` (or an
-  equivalent sanitizer), never embedded as `r.reason.message` directly — an
+  rejection must route through `toProblem(...).detail`, never embedded as
+  `r.reason.message` directly — an
   `ApiError.message` can carry up to 500 raw chars of an upstream body per
   `lib/http.ts`'s `toHttpError` (e.g. an HTML error page); (2) the `allSettled`
   must not sit inside an _outer_ `Promise.all` alongside another call that can

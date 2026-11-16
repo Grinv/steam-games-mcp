@@ -10,8 +10,10 @@
 // Shares the parent's HttpClient/TtlCache (passed in) rather than owning its
 // own — both clients hit the same api.steampowered.com host and must honor one
 // rate limiter and one cache, not one each.
+import { ZodError } from "zod";
 import { ApiError, withFallbackOn } from "../lib/errors.ts";
 import type { TtlCache } from "../lib/cache.ts";
+import type { Logger } from "../lib/logger.ts";
 import { notFound } from "../format/shared.ts";
 import {
   computeFavoriteTagWeights,
@@ -190,9 +192,17 @@ export class StoreServiceClient {
   readonly #cache: TtlCache;
   readonly #l: string;
   readonly #country: string;
+  readonly #logger: Logger;
 
-  constructor(opts: { get: Get; cache: TtlCache; language: string; country: string }) {
+  constructor(opts: {
+    get: Get;
+    cache: TtlCache;
+    language: string;
+    country: string;
+    logger: Logger;
+  }) {
     this.#get = opts.get;
+    this.#logger = opts.logger;
     this.#cache = opts.cache;
     this.#l = opts.language;
     this.#country = opts.country;
@@ -202,12 +212,12 @@ export class StoreServiceClient {
   // (keyless). Store items carry only numeric tagids; this resolves them to the
   // readable tag names surfaced on each card. Cached per language and tiny
   // (~450 entries, stable), so one fetch serves many cards.
-  // Returns null (rather than throwing) on upstream failure — callers that only
+  // Returns the upstream failure (rather than throwing it) — callers that only
   // DISPLAY tags can degrade gracefully (empty tags list); callers that FILTER
-  // by tags must check for null themselves and fail loudly instead of silently
-  // returning zero matches (an empty dictionary would make every tag filter
-  // reject every item, indistinguishable from "no games matched").
-  async #tagNames(language: string): Promise<TagMap | null> {
+  // by tags must fail loudly instead of silently returning zero matches (an
+  // empty dictionary would make every tag filter reject every item,
+  // indistinguishable from "no games matched"), via #tagsUnavailable.
+  async #tagNames(language: string): Promise<TagMap | ApiError> {
     try {
       return await this.#cache.wrapStaleOnError(`tags:${language}`, async () => {
         const res = await this.#get<GetTagListResponse>(
@@ -223,16 +233,40 @@ export class StoreServiceClient {
         // the catch below reports it as unavailable, which is what makes the
         // filter path above fail loudly instead of matching nothing.
         if (Object.keys(map).length === 0)
+          // A request problem (the language), not a bad answer: retrying the
+          // same call won't help.
           throw new ApiError({
-            code: "unknown",
-            message: `Steam returned an empty tag dictionary for language "${language}".`,
-            retryable: true,
+            code: "bad_request",
+            message: `Steam returned an empty tag dictionary for language "${language}"`,
           });
         return map;
       });
-    } catch {
-      return null;
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+      return e;
     }
+  }
+
+  // A tag dictionary failure, explained for a caller that can't go on without
+  // it. Keeps the upstream failure's own code, status and retryability (a 429
+  // still reads as a rate limit), adding only what it means here.
+  #tagsUnavailable(cause: ApiError, consequence: string, language: string): ApiError {
+    return new ApiError({
+      code: cause.code,
+      status: cause.status,
+      retryable: cause.retryable,
+      hadCredentials: cause.hadCredentials,
+      message: `tag dictionary unavailable (${language})`,
+      // The language hint only where it's the cause; a 429/5xx gets the
+      // code's own "retry" advice instead.
+      detail:
+        `Could not fetch Steam's tag dictionary, so ${consequence}.` +
+        (cause.code === "bad_request"
+          ? ` Check that language "${language}" is one of Steam's full language names ` +
+            "(english, russian, schinese — not an ISO code like en/ru/zh)."
+          : ""),
+      cause,
+    });
   }
 
   // Tag names → ids for a server-side tag filter, which needs the dictionary
@@ -251,23 +285,19 @@ export class StoreServiceClient {
   // unavailable — never silently treats that as "nothing matched".
   #requireTagMapIfFiltering(
     tags: string[] | undefined,
-    tagMap: TagMap | null,
+    tagMap: TagMap | ApiError,
     language: string,
   ): TagMap | undefined {
-    if (tagMap !== null) return tagMap;
-    if (!tags?.length) return undefined;
-    // "unknown" is the one ApiErrorCode whose mapped message (lib/result.ts)
-    // includes our own text verbatim — the other codes render a fixed,
-    // generic sentence per code and would swallow this explanation.
-    throw new ApiError({
-      code: "unknown",
-      message:
-        "could not fetch Steam's tag dictionary right now, so the `tags` filter can't be " +
-        `reliably applied. Check that language "${language}" is one of Steam's full language ` +
-        "names (english, russian, schinese — not an ISO code like en/ru/zh), then retry, or " +
-        "drop `tags` to see unfiltered results.",
-      retryable: true,
-    });
+    if (!(tagMap instanceof ApiError)) return tagMap;
+    if (tags?.length) {
+      throw this.#tagsUnavailable(
+        tagMap,
+        "the `tags` filter can't be reliably applied (drop `tags` to see unfiltered results)",
+        language,
+      );
+    }
+    this.#logger.warn("tag names unavailable; cards list no tags:", tagMap);
+    return undefined;
   }
 
   // Shared shape behind getItems/#queryCatalog/getWishlistDetailed: fetch the
@@ -500,20 +530,32 @@ export class StoreServiceClient {
     // a failed request: it costs only this chunk's corrections, and with
     // `cache` it is never stored (only a resolved load is). Caching the shaped
     // map rather than the raw response also keeps the entry ~50 B, not ~1 KB.
-    const load = async (chunk: number[]) =>
-      summarizePurchasePrices(
-        await this.#get<StoreItemsResponse>(
-          "IStoreBrowseService/GetItems/v1/",
-          {
-            input_json: JSON.stringify({
-              ids: chunk.map((appid) => ({ appid })),
-              context,
-              data_request: { include_all_purchase_options: true },
-            }),
-          },
-          { hasCredentials: false },
-        ),
+    const load = async (chunk: number[]) => {
+      const res = await this.#get<StoreItemsResponse>(
+        "IStoreBrowseService/GetItems/v1/",
+        {
+          input_json: JSON.stringify({
+            ids: chunk.map((appid) => ({ appid })),
+            context,
+            data_request: { include_all_purchase_options: true },
+          }),
+        },
+        { hasCredentials: false },
       );
+      try {
+        return summarizePurchasePrices(res);
+      } catch (e) {
+        // A payload the price shape rejects is Steam's unusable answer, not a
+        // bug here: classify it so it costs only the correction.
+        if (!(e instanceof ZodError)) throw e;
+        throw new ApiError({
+          code: "bad_response",
+          message: "GetItems purchase options don't fit the price shape",
+          retryable: true,
+          cause: e,
+        });
+      }
+    };
     // Stale-on-error so that during an outage getGame's stale appdetails entry
     // is still served WITH its correction, not with the raw Storefront price.
     // A failure is never cached, so it's retried on the next call.
@@ -527,10 +569,15 @@ export class StoreServiceClient {
           : load(chunk),
       ),
     );
-    // Never rejects: the outer Promise.all in StorefrontClient.getPrices/getGame
-    // would otherwise turn an enrichment's failure into a failed tool call.
+    // Rejects only on a bug: the outer Promise.all in StorefrontClient.getPrices/
+    // getGame would otherwise turn an enrichment's upstream failure into a
+    // failed tool call.
     const merged: PurchasePrices = {};
-    for (const r of settled) if (r.status === "fulfilled") Object.assign(merged, r.value);
+    for (const r of settled) {
+      if (r.status === "fulfilled") Object.assign(merged, r.value);
+      else if (!(r.reason instanceof ApiError)) throw r.reason;
+      else this.#logger.warn("purchase-price correction unavailable for a chunk:", r.reason);
+    }
     return merged;
   }
 
@@ -579,16 +626,10 @@ export class StoreServiceClient {
     );
     samplePromise.catch(() => {});
     const tagMap = await tagMapPromise;
-    if (tagMap === null) {
+    if (tagMap instanceof ApiError) {
       // Same "fail loudly, don't silently degrade" rule as
       // #requireTagMapIfFiltering — recommendations are meaningless without it.
-      throw new ApiError({
-        code: "unknown",
-        message:
-          "could not fetch Steam's tag dictionary right now, so recommendations can't be " +
-          "computed. Retry shortly.",
-        retryable: true,
-      });
+      throw this.#tagsUnavailable(tagMap, "recommendations can't be computed", l);
     }
 
     const sampleRes = await samplePromise;
@@ -822,9 +863,12 @@ export class StoreServiceClient {
       // The id list exists but the filtered call was refused: say so rather
       // than reporting that nothing matched.
       throw new ApiError({
-        code: "unknown",
-        message: "Steam refused the filtered wishlist request; retry, or drop some filters.",
-        retryable: true,
+        code: "bad_request",
+        status: 400,
+        message: "GetWishlistSortedFiltered answered 400 for a readable wishlist",
+        detail:
+          "Steam refused the filtered wishlist request, though the wishlist itself is readable. " +
+          "Drop some filters.",
       });
     return summarizeWishlistDetailed(filtered?.res ?? {}, filtered?.tagMap, filters(), {
       total,

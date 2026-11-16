@@ -6,9 +6,22 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Attach every tool error to its result as an RFC 9457 problem in `_meta["io.github.Grinv/problem"]` (type, title, detail, `retryable`, Steam's status), alongside the text the model reads; see [docs/errors.md](docs/errors.md).
+- Flag a result served from stale cache after a Steam failure with `_meta["io.github.Grinv/stale"]`.
+
 ### Changed
 
 - Build the bundle with tsdown instead of tsup, shrinking `dist/index.js` from 890 kB to 527 kB.
+- Report a server bug as "Internal error in steam-games-mcp" and log its stack, instead of showing the agent the raw exception text.
+- Keep a Steam failure's own cause in a tool error: a rate-limited or failed tag dictionary now says so and whether to retry, and an unrecognized `language` is named as the cause instead of advising a retry.
+- Drop the made-up "(404)" from not-found errors that had no HTTP 404 behind them.
+
+### Fixed
+
+- Stop swallowing server bugs as "upstream unavailable" in the Steam level, followed-games count, tag dictionary and vanity `STEAM_ID` lookups.
+- Log upstream failures the server answers around (missing player names, price corrections, achievement rarity, stale cache), which used to leave no trace.
 
 ## [0.17.2] - 2026-11-05
 

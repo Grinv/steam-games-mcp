@@ -72,6 +72,20 @@ describe("createLogger", () => {
     assert.doesNotMatch(calls[0]!.message, /supersecret/);
   });
 
+  test("an error logs its stack and cause chain, and a cyclic chain terminates", () => {
+    const calls: SinkCall[] = [];
+    const a = new Error("outer", { cause: new Error("inner") });
+    const b = new Error("loop");
+    b.cause = b;
+    captureStderr(() => {
+      const log = createLogger("debug", (level, message) => calls.push({ level, message }));
+      log.error("failed:", a);
+      log.error("failed:", b);
+    });
+    assert.match(calls[0]!.message, /Error: outer\n\s+at [\s\S]*caused by: Error: inner/);
+    assert.match(calls[1]!.message, /Error: loop/);
+  });
+
   test("a throwing sink never breaks logging", () => {
     const { lines } = captureStderr(() => {
       const log = createLogger("info", () => {

@@ -8,6 +8,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.ts";
+import type { ToolOutput } from "./guard.ts";
 import { LANGUAGE_ISO_WARNING, READ_ONLY, appid, language } from "./common.ts";
 import {
   PUBLIC_PROFILE_NOTE,
@@ -74,12 +75,16 @@ export const CHECK_APPIDS_MAX = 50;
 // Exported so the schema, the description and the bound's test read one number.
 export const OWNED_GAMES_LIMIT_MAX = 300;
 
-export function registerPlayerWebTools(server: McpServer, web: SteamWebClient): void {
+export function registerPlayerWebTools(
+  server: McpServer,
+  web: SteamWebClient,
+  { reply }: ToolOutput,
+): void {
   // Every tool below is gated on the key via requireKey (webShared.ts). Two
   // variants: the tools whose target profile also has to be public get the extra
   // note, the four that read fine regardless (see PUBLIC_PROFILE_NOTE) don't.
-  const requireKey = makeRequireKey(web);
-  const requireKeyAndPublicProfile = makeRequireKey(web, PUBLIC_PROFILE_NOTE);
+  const requireKey = makeRequireKey(web, reply);
+  const requireKeyAndPublicProfile = makeRequireKey(web, reply, PUBLIC_PROFILE_NOTE);
 
   server.registerTool(
     "get_game_achievements",

@@ -4,9 +4,9 @@
 // tools/common.ts, which stays domain-agnostic (shared with tools/storefront.ts
 // too) — `steamid` and the steamid-resolving helper below are Web-API-specific.
 import { z } from "zod";
-import { errorResult, type ToolResult } from "../lib/result.ts";
+import { ownProblem, problemResult, type ToolResult } from "../lib/result.ts";
 import { STEAMID64_RE } from "../format/shared.ts";
-import { reply } from "./common.ts";
+import type { ToolOutput } from "./guard.ts";
 
 // Appended to the key-gate message, but only for the tools that ALSO need the
 // target profile's privacy opened up. Four key-gated tools don't:
@@ -28,14 +28,17 @@ export const PUBLIC_PROFILE_NOTE =
 // `note` is kept a construction-time argument rather than a per-call one so the
 // returned wrapper still matches steamIdTool's `wrap` signature exactly.
 export const requireKey =
-  (web: { configured: boolean }, note = "") =>
+  (web: { configured: boolean }, reply: ToolOutput["reply"], note = "") =>
   (fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> => {
     if (!web.configured) {
       return Promise.resolve(
-        errorResult(
-          "This tool needs a Steam Web API key. Set STEAM_API_KEY to a free key from " +
-            "https://steamcommunity.com/dev/apikey." +
-            note,
+        problemResult(
+          ownProblem(
+            "not_configured",
+            "This tool needs a Steam Web API key. Set STEAM_API_KEY to a free key from " +
+              "https://steamcommunity.com/dev/apikey." +
+              note,
+          ),
         ),
       );
     }

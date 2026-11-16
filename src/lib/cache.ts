@@ -8,6 +8,15 @@
 // <T> — rather than fixed once on the class. That keeps every call site
 // exactly typed with no `as` casts to route a non-Record shape through.
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
+/** Upstream failures a tool call was answered around with stale cache data.
+ *  tools/guard.ts runs each call inside one scope, then logs these and flags
+ *  the result's _meta; outside a scope (e.g. prompt completions) it's a no-op.
+ *  Async context rather than a flag threaded through every client method:
+ *  a stale fallback can fire many calls deep. */
+export const staleScope = new AsyncLocalStorage<{ errors: unknown[] }>();
+
 interface Entry {
   value: unknown;
   expires: number;
@@ -72,8 +81,9 @@ export class TtlCache {
       return await this.#dedupe(key, compute);
     } catch (err) {
       const stale = this.getStale<T>(key);
-      if (stale !== undefined) return stale;
-      throw err;
+      if (stale === undefined) throw err;
+      staleScope.getStore()?.errors.push(err);
+      return stale;
     }
   }
 

@@ -44,9 +44,10 @@ src/
   tools/          # storefront.ts, webStore.ts (keyless-capable Web API tools),
                   #   webPlayer.ts (key-gated player tools), webShared.ts (steamid
                   #   schema, steamIdTool helper and requireKey, shared by the two),
-                  #   common.ts (shared param schemas, toCompatFilters + reply
-                  #   wrapper across storefront+web), guard.ts, prompts.ts (MCP
-                  #   Prompts)
+                  #   common.ts (shared param schemas, toCompatFilters across
+                  #   storefront+web), guard.ts (toolOutput: the guard/reply
+                  #   wrappers, built per server with its logger), prompts.ts
+                  #   (MCP Prompts)
   __tests__/      # node:test (*.test.ts) + helpers.ts
 scripts/          # run-tests.ts, sync-version.ts (generic), check-api.ts
                   #   (domain), preversion-check.ts (CHANGELOG gate) — plain
@@ -114,8 +115,30 @@ npm run inspector      # run under the MCP Inspector
   `notifications/message` mirroring (removed per SEP-2577 / protocol
   2026-07-28 — see `src/server.ts`'s comment on `serveStdio`). To add a log
   destination, pass a `sink` to `createLogger` rather than calling `console.*`.
-- Tool failures return `{ isError: true }` results (via `guard()` / `result.ts`),
-  never thrown — the agent should get an actionable message.
+- Tool failures return `{ isError: true }` results, never thrown — the agent
+  should get an actionable message. One pipeline, three layers
+  ([docs/errors.md](docs/errors.md) is the user-facing side):
+  - **Classify** where a failure is detected: an `ApiError` whose `code` says
+    what happened (never picked for how it renders). `message` is diagnostics
+    for the log (it may hold Steam's raw HTML body); agent-facing specifics go
+    in `detail` and are always our own text. A domain error explaining an
+    upstream failure keeps that failure's `code`/`status`/`retryable` and
+    wraps it as `cause`.
+  - **Translate** in one place, `toProblem()` in `lib/result.ts`: an RFC 9457
+    problem built from `code`/`status`/`detail` via a `Record` table (a new
+    code without an entry doesn't compile). Anything that isn't an `ApiError`
+    is a bug — logged with stack and cause chain, shown to the agent as a
+    stable "internal error".
+  - **Output** only through `toolOutput(logger)`'s `guard`/`reply`
+    (`tools/guard.ts`): the model reads `detail` as the result text, the
+    Problem rides in `_meta["io.github.Grinv/problem"]`. A partial failure
+    inside a successful result (e.g. `find_friends_who_own`'s per-friend
+    reason) uses `toProblem(...).detail` too.
+  - A degradation (enrichment or chunk failure answered around) catches only
+    `ApiError` — a bug must propagate — and logs it at `warn`; a stale-cache
+    fallback is collected per call via `staleScope` and flags
+    `_meta["io.github.Grinv/stale"]`. `_meta` keys use `META_PREFIX`
+    (`src/version.ts`), the reverse-DNS namespace of `mcpName`.
 - Keep clients fetch+cache only; all raw→agent-facing shaping lives in
   `src/format/` (`storefront.ts` / `web.ts` / `webAchievements.ts` / `store.ts`
   over the `storeCard.ts` toolkit, generic helpers in

@@ -71,8 +71,10 @@ export class StorefrontClient {
   // format/storefront.ts's overridePrice() for what's wrong with the numbers
   // the Storefront API itself returns.
   readonly #pricing: PurchasePriceSource;
+  readonly #logger: Logger;
 
   constructor(config: Config, logger: Logger, pricing: PurchasePriceSource) {
+    this.#logger = logger;
     this.#cc = config.country;
     this.#l = config.language;
     this.#pricing = pricing;
@@ -118,7 +120,8 @@ export class StorefrontClient {
           // public wishlist), so that's named too.
           throw new ApiError({
             code: "not_found",
-            message:
+            message: `appdetails success:false for appid ${appid} cc ${cc}`,
+            detail:
               `No Steam app with id ${appid} in region ${cc.toUpperCase()} — either the appid ` +
               `doesn't exist or was removed from the store, or it isn't available in that ` +
               `country (try another \`country\`).`,
@@ -173,6 +176,11 @@ export class StorefrontClient {
     const fulfilled = settled.filter((r) => r.status === "fulfilled");
     if (chunks.length > 0 && fulfilled.length === 0) {
       throw (settled[0] as PromiseRejectedResult).reason;
+    }
+    for (const r of settled) {
+      if (r.status === "fulfilled") continue;
+      if (!(r.reason instanceof ApiError)) throw r.reason;
+      this.#logger.warn("prices unavailable for a chunk of appids:", r.reason);
     }
     const merged: PriceDetailsResponse = {};
     for (const r of fulfilled) Object.assign(merged, r.value);

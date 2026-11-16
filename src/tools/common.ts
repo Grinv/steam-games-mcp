@@ -1,12 +1,10 @@
 // Shared tool building blocks used by both the storefront and Web API tool
 // registrations: common annotations, reusable zod parameter schemas (written for
-// the calling model), and the reply() wrapper that turns a formatter result into
-// a guarded ToolResult. Kept here so the two registration files stay DRY.
+// the calling model). Kept here so the two registration files stay DRY; the
+// reply()/guard() wrappers live in guard.ts, built per server with its logger.
 import { z } from "zod";
-import { jsonResult, type ToolResult } from "../lib/result.ts";
 import type { CompatFilters } from "../format/storeCard.ts";
 import { compatFilterSchema } from "../format/store.schemas.ts";
-import { guard } from "./guard.ts";
 
 export const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
 
@@ -142,8 +140,3 @@ export function toCompatFilters(input: {
     steamFrame: input.steam_frame,
   };
 }
-
-// Run a formatter and wrap its result as a JSON ToolResult; guard() turns any
-// thrown ApiError into an actionable { isError: true } result.
-export const reply = (fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> =>
-  guard(async () => jsonResult(await fn()));

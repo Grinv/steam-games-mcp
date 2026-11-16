@@ -621,7 +621,7 @@ describe("genuine upstream failures propagate as actionable tool errors", () => 
         }),
     );
     const res = await client.callTool({ name: "get_game", arguments: { appid: 620 } });
-    assertToolError(res, /invalid json/i);
+    assertToolError(res, /unusable response/i);
   });
 });
 

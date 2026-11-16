@@ -912,8 +912,8 @@ describe("find_friends_who_own", () => {
     assert.equal(s.unavailable_friends[0]!.steamid, "76561197960287931");
     assert.match(s.unavailable_friends[0]!.reason, /5xx|500|retry later/i);
     // The raw upstream error body must never reach this field verbatim — it's
-    // sanitized the same way a top-level tool failure's message is (messageFor()),
-    // not embedded as-is (which could otherwise leak raw HTML/error-page text).
+    // translated the same way a top-level tool failure is (toProblem()), not
+    // embedded as-is (which could otherwise leak raw HTML/error-page text).
     assert.doesNotMatch(s.unavailable_friends[0]!.reason, /server exploded/);
   });
 
@@ -1289,7 +1289,7 @@ describe("compare_players", () => {
       arguments: { steamid: "76561197960287930", other_steamid: "76561197960287931" },
     });
     assert.equal(res.isError, true);
-    assert.match(textOf(res), /5xx\). Please retry/);
+    assert.match(textOf(res), /\(500\)\. Please retry later/);
   });
 });
 
@@ -1543,7 +1543,7 @@ describe("STEAM_ID default / vanity resolution", () => {
         : jsonResponse({}),
     );
     const res = await client.callTool({ name: "get_followed_games", arguments: {} });
-    assertToolError(res, /could not resolve the STEAM_ID vanity name "nobody-such-vanity"/);
+    assertToolError(res, /Could not resolve the STEAM_ID vanity name "nobody-such-vanity"/);
     assertToolError(res, /17-digit SteamID64/);
   });
 
@@ -1575,7 +1575,7 @@ describe("STEAM_ID default / vanity resolution", () => {
       },
     );
     const res = await client.callTool({ name: "get_followed_games", arguments: {} });
-    assertToolError(res, /could not resolve the STEAM_ID vanity name "nobody-such-vanity"/);
+    assertToolError(res, /Could not resolve the STEAM_ID vanity name "nobody-such-vanity"/);
   });
 
   test("a vanity STEAM_ID that fails to resolve errors clearly", async (t) => {

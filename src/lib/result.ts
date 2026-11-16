@@ -1,7 +1,9 @@
 // Helpers that build MCP tool results. Tool handlers return these objects;
 // failures become { isError: true } results (never thrown) so the agent
 // receives an actionable message instead of a protocol error.
-import { redact, type ApiError } from "./errors.ts";
+import { ApiError, redact, type ApiErrorCode } from "./errors.ts";
+import type { Logger } from "./logger.ts";
+import { META_PREFIX } from "../version.ts";
 
 export interface ToolResult {
   content: { type: "text"; text: string }[];
@@ -23,86 +25,148 @@ export function jsonResult(structured: Record<string, unknown>): ToolResult {
   };
 }
 
-export function errorResult(message: string): ToolResult {
-  // Defense-in-depth: no current path puts the API key into an error string (it
-  // only ever lives in request URLs, redacted at the single URL-logging site in
-  // lib/http.ts), but redacting here too means a future change that folds a URL
-  // into a thrown message can't leak the key straight to the agent.
-  return { content: [{ type: "text", text: redact(message) }], isError: true };
+/**
+ * A tool failure as an RFC 9457 problem details object. MCP has no HTTP
+ * response, so RFC 9457's `status` (the status of *this* HTTP response) is
+ * not used; Steam's status is the `upstream_status` extension, and
+ * `retryable` tells the caller whether trying again can help. The model reads
+ * `detail` as the result text; the whole object rides in `_meta`, never in
+ * `structuredContent`, which MCP reserves for data matching the tool's
+ * outputSchema. Same shape as the sibling servers (tmdb-mcp).
+ */
+export interface Problem {
+  type: string;
+  title: string;
+  detail: string;
+  retryable: boolean;
+  upstream_status?: number;
 }
 
-/** Translate an upstream ApiError into a friendly, actionable tool error. */
-export function apiErrorToResult(err: ApiError): ToolResult {
-  return errorResult(messageFor(err));
-}
+/** `_meta` key for the Problem on an error result. */
+export const PROBLEM_META_KEY = `${META_PREFIX}problem`;
+/** `_meta` key flagging a result served from stale cache after an upstream failure. */
+export const STALE_META_KEY = `${META_PREFIX}stale`;
 
-// `err.message` is safe to embed verbatim unless toHttpError flagged it as
-// carrying raw, untrusted upstream body text (see ApiError.unsafeDetail) —
-// in that case fall back to a detail-free sentence instead of echoing it.
-function detailOf(err: ApiError): string {
-  return err.unsafeDetail ? "." : `: ${err.message}`;
-}
+// Each problem type's URI points at its section in docs/errors.md.
+const TYPE_BASE = "https://github.com/Grinv/steam-games-mcp/blob/main/docs/errors.md#";
 
-/** Translate an upstream ApiError into a friendly, actionable message. Exported
- *  (not just used via apiErrorToResult) so callers that embed an upstream
- *  failure into a structured sub-field — e.g. find_friends_who_own's
- *  `unavailable_friends[].reason` — can reuse the same sanitized wording
- *  instead of surfacing `err.message` (which may carry raw upstream HTML/body
- *  text, per lib/http.ts's toHttpError) directly to the agent. */
-export function messageFor(err: ApiError): string {
-  switch (err.code) {
-    case "unauthorized":
+type OwnCode = "internal" | "not_configured";
+type ProblemCode = ApiErrorCode | OwnCode;
+
+// One entry per problem type — a Record, so the compiler rejects a code
+// without one. `title` is fixed per type (as RFC 9457 requires); toProblem
+// alone composes each occurrence's `detail` from typed fields, never from an
+// error's free-text message.
+const PROBLEMS: Record<
+  ProblemCode,
+  { title: string; advice?: string | ((err: ApiError) => string) }
+> = {
+  unauthorized: {
+    title: "The upstream service rejected the request",
+    advice: (err) =>
+      err.hadCredentials === false
+        ? "This tool sends no credentials at all, so this isn't a credentials problem — retry, " +
+          "or check for an upstream outage."
+        : "The credentials may be missing or expired — check the configured API key.",
+  },
+  forbidden: {
+    title: "The upstream service denied access",
+    advice: (err) => {
       if (err.hadCredentials === false) {
         return (
-          "The upstream service rejected the request (401), but this tool sends no credentials at " +
-          "all, so this isn't a credentials problem — retry, or check for an upstream outage."
-        );
-      }
-      return (
-        "The upstream service rejected the credentials (401). They may be missing or expired — " +
-        "check the configured API key / token."
-      );
-    case "forbidden":
-      if (err.hadCredentials === false) {
-        return (
-          "The upstream service denied access (403), but this tool sends no credentials at all, so " +
-          "this isn't a credentials problem — it's more likely an unrelated upstream security block " +
-          "(e.g. a request that resembles an injection attempt). Try different input."
+          "This tool sends no credentials at all, so this isn't a credentials problem — it's " +
+          "more likely an unrelated upstream security block (e.g. a request that resembles an " +
+          "injection attempt). Try different input."
         );
       }
       if (err.hadCredentials === true) {
         return (
-          "The upstream service denied access (403). The configured credentials are likely invalid, " +
-          "expired, or lack permission for this request."
+          "The configured credentials are likely invalid, expired, or lack permission for this " +
+          "request."
         );
       }
       return (
-        "The upstream service denied access (403). This can be a genuine credentials/permission " +
-        "issue, but many of this server's tools call it without any credentials at all — a 403 " +
-        "there is more likely an unrelated upstream security block (e.g. a request that resembles " +
-        "an injection attempt). Try different input first, and only suspect the configured API key " +
-        "if this tool actually requires one."
+        "This can be a genuine credentials/permission issue, but many of this server's tools " +
+        "call Steam without any credentials at all — a 403 there is more likely an unrelated " +
+        "upstream security block (e.g. a request that resembles an injection attempt). Try " +
+        "different input first, and only suspect the configured API key if this tool actually " +
+        "requires one."
       );
-    case "not_found":
-      // Domain code throws `not_found` with a specific, agent-facing message
-      // (e.g. "No Steam app with id 123") — folding it in here, the same way
-      // `bad_request` below does, instead of discarding it for a generic
-      // string that was silently swallowing that detail on every not-found.
-      return `No matching resource was found (404)${detailOf(err)}`;
-    case "rate_limited":
-      // Steam's Store/Community endpoints are observed live to answer a rate
-      // limit as HTTP 420 as well as the documented 429 — report whichever
-      // one actually happened instead of assuming 429.
-      return `Upstream rate limit hit (${err.status ?? 429}). Please retry in a few seconds.`;
-    case "server_error":
-      return "The upstream service returned an error (5xx). Please retry later.";
-    case "network":
-      return "Could not reach the upstream service (network error). Check connectivity and retry.";
-    case "timeout":
-      return "The upstream request timed out. Please retry.";
-    case "bad_request":
-      return `The request was rejected as invalid${detailOf(err)}`;
-    default:
-      return `Unexpected error talking to the upstream service${detailOf(err)}`;
+    },
+  },
+  not_found: { title: "No matching resource was found" },
+  rate_limited: {
+    title: "The upstream service is rate-limiting requests",
+    advice: "Please retry in a few seconds.",
+  },
+  server_error: { title: "The upstream service returned an error", advice: "Please retry later." },
+  network: {
+    title: "Could not reach the upstream service (network error)",
+    advice: "Check connectivity and retry.",
+  },
+  timeout: { title: "The upstream request timed out", advice: "Please retry." },
+  bad_request: { title: "The request is invalid" },
+  bad_response: {
+    title: "The upstream service returned an unusable response",
+    advice: "Please retry later.",
+  },
+  unknown: { title: "Unexpected error talking to the upstream service" },
+  internal: {
+    title: "Internal error in steam-games-mcp",
+    advice: "Details are in the server log (stderr); please report it.",
+  },
+  not_configured: { title: "This tool is not configured" },
+};
+
+/** Every problem type; each `type` URI's section must exist in docs/errors.md. */
+export const PROBLEM_CODES = Object.keys(PROBLEMS) as ProblemCode[];
+
+/**
+ * The one place a failure becomes tool-facing text. An ApiError is described
+ * by its code, status and agent-safe `detail` — never by its `message`, which
+ * is diagnostics and may hold a raw response body. Anything else is a bug in
+ * this server: it is logged in full (stack and cause chain) and the caller
+ * gets a stable "internal error" instead of its internals.
+ */
+export function toProblem(err: unknown, logger: Logger): Problem {
+  if (err instanceof ApiError) {
+    const { title, advice } = PROBLEMS[err.code];
+    const status = err.status ? ` (${err.status})` : "";
+    const adviceText = typeof advice === "function" ? advice(err) : advice;
+    return {
+      type: TYPE_BASE + err.code,
+      title,
+      // redact(): a detail is our own text, but a credential must never reach
+      // the agent even if a future change folds a request URL into one.
+      detail: redact([`${title}${status}.`, err.detail, adviceText].filter(Boolean).join(" ")),
+      retryable: err.retryable,
+      ...(err.status ? { upstream_status: err.status } : {}),
+    };
   }
+  // Reported as a tool error, not a JSON-RPC one: it originates while the
+  // tool runs, so the model must see the call failed (MCP's isError rule) —
+  // the reference SDK's reading too. See docs/errors.md#internal.
+  logger.error("internal error in a tool call:", err);
+  return ownProblem("internal");
+}
+
+/** A problem this server raises itself (no thrown error): its own `detail`,
+ *  or the type's title and advice. */
+export function ownProblem(code: OwnCode, detail?: string): Problem {
+  const { title, advice } = PROBLEMS[code];
+  return {
+    type: TYPE_BASE + code,
+    title,
+    detail: detail ?? [`${title}.`, advice].filter(Boolean).join(" "),
+    retryable: false,
+  };
+}
+
+/** An isError tool result: the model reads `detail`; the Problem is `_meta`. */
+export function problemResult(problem: Problem): ToolResult {
+  return {
+    content: [{ type: "text", text: problem.detail }],
+    isError: true,
+    _meta: { [PROBLEM_META_KEY]: problem },
+  };
 }

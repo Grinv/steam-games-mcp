@@ -1,90 +1,155 @@
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ApiError, type ApiErrorCode } from "../lib/errors.ts";
-import { apiErrorToResult, errorResult, jsonResult, messageFor } from "../lib/result.ts";
+import {
+  PROBLEM_CODES,
+  PROBLEM_META_KEY,
+  jsonResult,
+  ownProblem,
+  problemResult,
+  toProblem,
+} from "../lib/result.ts";
+import { createLogger, type LogLevel } from "../lib/logger.ts";
+import { silentLogger } from "./helpers.ts";
+
+const TYPE_BASE = "https://github.com/Grinv/steam-games-mcp/blob/main/docs/errors.md#";
+
+function capturingLogger() {
+  const lines: { level: Exclude<LogLevel, "silent">; text: string }[] = [];
+  const original = console.error;
+  console.error = () => {};
+  const logger = createLogger("debug", (level, text) => lines.push({ level, text }));
+  return { logger, lines, restore: () => (console.error = original) };
+}
 
 test("jsonResult carries both text and structuredContent", () => {
   const r = jsonResult({ a: 1 });
   assert.equal(r.isError, undefined);
   assert.deepEqual(r.structuredContent, { a: 1 });
   assert.match(r.content[0]!.text, /"a":1/); // compact, no pretty-print whitespace
+  assert.equal("_meta" in r, false);
 });
 
-test("errorResult sets content and isError flag", () => {
-  const e = errorResult("bad");
-  assert.equal(e.isError, true);
-  assert.equal(e.content[0]!.text, "bad");
-});
+describe("toProblem", () => {
+  test("gives every ApiError code its own type, title and actionable text", () => {
+    const cases: [ApiErrorCode, RegExp][] = [
+      ["unauthorized", /rejected the request/i],
+      ["forbidden", /denied access/i],
+      ["not_found", /no matching resource/i],
+      ["rate_limited", /rate-limiting.*retry/i],
+      ["server_error", /returned an error.*retry later/i],
+      ["network", /network/i],
+      ["timeout", /timed out/i],
+      ["bad_request", /invalid/i],
+      ["bad_response", /unusable response/i],
+      ["unknown", /unexpected/i],
+    ];
+    for (const [code, re] of cases) {
+      const p = toProblem(new ApiError({ code, message: "diag" }), silentLogger());
+      assert.equal(p.type, TYPE_BASE + code);
+      assert.match(p.detail, re);
+      assert.ok(p.detail.startsWith(p.title), `${code}: detail opens with the title`);
+    }
+  });
 
-test("apiErrorToResult produces an actionable message per error code", () => {
-  const cases: [ApiErrorCode, RegExp][] = [
-    ["unauthorized", /expired|credentials/i],
-    ["forbidden", /denied access/i],
-    ["not_found", /no matching resource|404/i],
-    ["rate_limited", /rate limit/i],
-    ["server_error", /5xx|retry later/i],
-    ["network", /network/i],
-    ["timeout", /timed out/i],
-    ["bad_request", /invalid/i],
-    ["unknown", /unexpected/i],
-  ];
-  for (const [code, re] of cases) {
-    const r = apiErrorToResult(new ApiError({ code, message: "detail" }));
-    assert.equal(r.isError, true);
-    assert.match(r.content[0]!.text, re);
-  }
-});
-
-test("forbidden (403) message doesn't blame credentials unconditionally when hadCredentials is unknown", () => {
-  // Many tools (search_games, get_game, discover_games, ...) call the
-  // keyless Storefront/Web API with no credentials attached at all — a 403
-  // there is an upstream security block (e.g. an injection-shaped search
-  // term), not a credentials problem, so the message must not assert it is.
-  const r = apiErrorToResult(new ApiError({ code: "forbidden", message: "detail" }));
-  const text = r.content[0]!.text;
-  assert.match(text, /without any credentials|no credentials/i);
-  assert.doesNotMatch(text, /^The upstream service denied access \(403\)\. The credentials/);
-});
-
-test("messageFor never echoes err.message when it's flagged as carrying raw upstream body text", () => {
-  // Regression: not_found/bad_request/default used to interpolate err.message
-  // verbatim, which for an HTTP-derived ApiError can be up to 500 raw chars of
-  // the upstream response body (lib/http.ts's toHttpError) — e.g. an HTML
-  // error page from a CDN/edge. unsafeDetail marks exactly that case.
-  const rawBody = "<html><body><h1>Bad Gateway</h1>some CDN error page</body></html>";
-  const codes: ApiErrorCode[] = ["not_found", "bad_request", "unknown"];
-  for (const code of codes) {
-    const r = messageFor(
-      new ApiError({ code, message: `HTTP 400 Bad Request: ${rawBody}`, unsafeDetail: true }),
+  test("never reads the diagnostic message, but appends our own detail", () => {
+    const rawBody = "<html><body><h1>Bad Gateway</h1>some CDN error page</body></html>";
+    const p = toProblem(
+      new ApiError({
+        code: "not_found",
+        status: 404,
+        message: `HTTP 404: ${rawBody}`,
+        detail: "No Steam app with id 5.",
+      }),
+      silentLogger(),
     );
-    assert.doesNotMatch(r, /<html>|CDN error page/i);
-  }
-  // A curated domain message (unsafeDetail unset/false) must still come through.
-  const domainMsg = messageFor(
-    new ApiError({ code: "not_found", message: "No Steam app with id 5" }),
-  );
-  assert.match(domainMsg, /No Steam app with id 5/);
+    assert.doesNotMatch(p.detail, /<html>|CDN error page/i);
+    assert.equal(p.detail, "No matching resource was found (404). No Steam app with id 5.");
+    assert.equal(p.upstream_status, 404);
+  });
+
+  test("shows a status only when there was one (a domain not_found isn't a 404)", () => {
+    const p = toProblem(
+      new ApiError({ code: "not_found", message: "d", detail: "No app." }),
+      silentLogger(),
+    );
+    assert.equal(p.detail, "No matching resource was found. No app.");
+    assert.equal("upstream_status" in p, false);
+  });
+
+  test("carries retryable from the error", () => {
+    const p = toProblem(
+      new ApiError({ code: "rate_limited", status: 420, message: "d", retryable: true }),
+      silentLogger(),
+    );
+    assert.equal(p.retryable, true);
+    assert.match(p.detail, /\(420\)/); // whichever status Steam actually sent
+  });
+
+  test("redacts a credential that slips into a detail", () => {
+    const p = toProblem(
+      new ApiError({ code: "bad_request", message: "d", detail: "see https://x/?key=DEADBEEF" }),
+      silentLogger(),
+    );
+    assert.doesNotMatch(p.detail, /DEADBEEF/);
+  });
+
+  test("words 401/403 by whether the request carried credentials", () => {
+    const text = (code: ApiErrorCode, hadCredentials?: boolean) =>
+      toProblem(new ApiError({ code, message: "d", hadCredentials }), silentLogger()).detail;
+    // Keyless call: plainly not a credentials problem.
+    assert.match(text("forbidden", false), /isn't a credentials problem/i);
+    assert.match(text("unauthorized", false), /isn't a credentials problem/i);
+    // Keyed call: the key is the likely cause, no hedging.
+    assert.match(text("forbidden", true), /credentials are likely invalid/i);
+    assert.doesNotMatch(text("forbidden", true), /can be a genuine credentials/i);
+    // Unknown: hedge, and don't blame credentials outright.
+    assert.match(text("forbidden"), /without any credentials/i);
+  });
+
+  test("an unexpected (non-ApiError) failure is logged in full, hidden from the agent", () => {
+    const { logger, lines, restore } = capturingLogger();
+    try {
+      const err = new TypeError("Cannot read properties of undefined", {
+        cause: new Error("root cause"),
+      });
+      const p = toProblem(err, logger);
+      assert.equal(p.type, TYPE_BASE + "internal");
+      assert.doesNotMatch(p.detail, /Cannot read|root cause/);
+      assert.match(p.detail, /server log/);
+      assert.equal(p.retryable, false);
+      assert.equal(lines.length, 1);
+      assert.equal(lines[0]!.level, "error");
+      assert.match(lines[0]!.text, /TypeError: Cannot read properties/);
+      assert.match(lines[0]!.text, /caused by: Error: root cause/);
+    } finally {
+      restore();
+    }
+  });
 });
 
-test("messageFor gives a precise, non-hedged message once hadCredentials is known", () => {
-  // hadCredentials: false — e.g. a keyless Storefront call — must say plainly
-  // this isn't a credentials problem, not hedge.
-  const keyless403 = messageFor(
-    new ApiError({ code: "forbidden", message: "d", hadCredentials: false }),
-  );
-  assert.match(keyless403, /isn't a credentials problem/i);
-  assert.doesNotMatch(keyless403, /can be a genuine credentials/i);
+test("ownProblem uses its own detail, or the type's title and advice", () => {
+  const p = ownProblem("not_configured", "Set STEAM_API_KEY.");
+  assert.equal(p.type, TYPE_BASE + "not_configured");
+  assert.equal(p.detail, "Set STEAM_API_KEY.");
+  assert.match(ownProblem("internal").detail, /^Internal error in steam-games-mcp\. Details/);
+});
 
-  const keyless401 = messageFor(
-    new ApiError({ code: "unauthorized", message: "d", hadCredentials: false }),
-  );
-  assert.match(keyless401, /isn't a credentials problem/i);
+test("problemResult puts the detail in content and the Problem in _meta", () => {
+  const p = ownProblem("not_configured", "Set it.");
+  const r = problemResult(p);
+  assert.equal(r.isError, true);
+  assert.equal(r.content[0]!.text, "Set it.");
+  assert.deepEqual(r._meta, { [PROBLEM_META_KEY]: p });
+  assert.equal(r.structuredContent, undefined); // reserved for outputSchema data
+});
 
-  // hadCredentials: true — a key-gated call actually failed with a key
-  // attached — must say the key is the likely cause, not hedge either way.
-  const keyed403 = messageFor(
-    new ApiError({ code: "forbidden", message: "d", hadCredentials: true }),
-  );
-  assert.match(keyed403, /credentials are likely invalid|expired|lack permission/i);
-  assert.doesNotMatch(keyed403, /can be a genuine credentials/i);
+// Each problem's `type` URI points at docs/errors.md#<code>; a code without a
+// section would be a dead link, a section without a code dead documentation.
+test("docs/errors.md has a section for exactly every problem type", () => {
+  const doc = readFileSync(join(import.meta.dirname, "../../docs/errors.md"), "utf8");
+  const sections = [...doc.matchAll(/^## (\S+)$/gm)].map((m) => m[1]!);
+  assert.deepEqual(sections.sort(), [...PROBLEM_CODES].sort());
 });

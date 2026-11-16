@@ -2,7 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { VERSION } from "../version.ts";
+import { META_PREFIX, MCP_NAME, VERSION } from "../version.ts";
 import { connectServer } from "./helpers.ts";
 import { renderChangelogRelease, unreleasedHasBullets } from "../../scripts/sync-version.ts";
 
@@ -173,6 +173,22 @@ test("server.json versions (+ mcpb release URL) match package.json", () => {
 // the published server name, so these must stay identical.
 test("package.json mcpName matches server.json name", () => {
   assert.equal(pkg.mcpName, server.name);
+});
+
+test("version.ts MCP_NAME matches package.json mcpName", () => {
+  assert.equal(MCP_NAME, pkg.mcpName);
+});
+
+// The MCP spec's _meta key prefix: dot-separated labels (letter first, letter
+// or digit last, letters/digits/hyphens inside), then "/"; a second label of
+// "mcp" or "modelcontextprotocol" is reserved for MCP itself.
+test("META_PREFIX follows the MCP spec's _meta prefix grammar and isn't reserved", () => {
+  assert.match(
+    META_PREFIX,
+    /^[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\/$/,
+  );
+  assert.doesNotMatch(META_PREFIX.split(".")[1] ?? "", /^(mcp|modelcontextprotocol)\/?$/);
+  assert.equal(META_PREFIX, "io.github.Grinv/");
 });
 
 // The MCP Registry server.schema caps description at 100 chars (npm/manifest

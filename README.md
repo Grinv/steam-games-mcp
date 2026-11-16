@@ -172,6 +172,11 @@ default to you, so "my wishlist / library" works without passing an ID each time
 > (keyless) store APIs. SteamDB is not used (no public API + scraping disallowed).
 > Steam has no price-history API, so that isn't offered. Not affiliated with Valve.
 
+A failed call returns `isError` with an actionable message for the model; a
+client application also gets the failure as an RFC 9457 problem in the result's
+`_meta` — see
+[docs/errors.md](https://github.com/Grinv/steam-games-mcp/blob/main/docs/errors.md).
+
 ## Prompts
 
 Guided one-shot prompts that orchestrate several tools for a common question.

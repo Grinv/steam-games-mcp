@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.ts";
 import type { StoreServiceClient } from "../clients/storeService.ts";
+import type { ToolOutput } from "./guard.ts";
 import {
   COUNTRY_UNKNOWN_WARNING,
   LANGUAGE_ISO_WARNING,
@@ -19,7 +20,6 @@ import {
   country,
   language,
   platform,
-  reply,
   steamDeck,
   steamFrame,
   steamMachine,
@@ -58,6 +58,7 @@ export function registerStoreWebTools(
   server: McpServer,
   web: SteamWebClient,
   store: StoreServiceClient,
+  { reply }: ToolOutput,
 ): void {
   server.registerTool(
     "search_games",

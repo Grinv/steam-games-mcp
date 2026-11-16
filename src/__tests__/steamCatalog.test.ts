@@ -566,6 +566,9 @@ describe("get_wishlist", () => {
       arguments: { tags: ["Puzzle"], language: "ru" },
     });
     assertToolError(res, /tag dictionary/i);
+    // The language is the cause, so the text names it and doesn't suggest a retry.
+    assertToolError(res, /full language names/);
+    assert.doesNotMatch((res.content as { text: string }[])[0]!.text, /retry/i);
   });
 
   test("get_wishlist: country/language alone switch to detailed mode (not silently ignored)", async (t) => {
@@ -1140,6 +1143,9 @@ describe("discover_games", () => {
       arguments: { min_discount: 80, tags: ["puzzle"] },
     });
     assertToolError(res, /tag dictionary/i);
+    // An upstream failure keeps its own code: retry advice, no language hint.
+    assertToolError(res, /retry/i);
+    assert.doesNotMatch((res.content as { text: string }[])[0]!.text, /language names/);
   });
 
   test("discover_games: still succeeds without a tags filter even when GetTagList is unavailable", async (t) => {

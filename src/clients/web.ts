@@ -10,7 +10,7 @@ import { HttpClient } from "../lib/http.ts";
 import { RateLimiter } from "../lib/rateLimit.ts";
 import { TtlCache } from "../lib/cache.ts";
 import { ApiError, type ApiErrorCode, withFallbackOn } from "../lib/errors.ts";
-import { messageFor } from "../lib/result.ts";
+import { toProblem } from "../lib/result.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
 import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.ts";
 import {
@@ -147,10 +147,12 @@ export class SteamWebClient {
   // steamcommunity.com, for the keyless vanity fallback below only — a third
   // host, so it can't share #http (api.steampowered.com) or its rate limiter.
   readonly #community: HttpClient;
+  readonly #logger: Logger;
   /** True when a Steam Web API key is configured; player tools short-circuit otherwise. */
   readonly configured: boolean;
 
   constructor(config: Config, logger: Logger) {
+    this.#logger = logger;
     this.#key = config.steamApiKey;
     this.#l = config.language;
     this.#country = config.country;
@@ -180,6 +182,7 @@ export class SteamWebClient {
       cache: this.#cache,
       language: this.#l,
       country: this.#country,
+      logger,
     });
   }
 
@@ -204,8 +207,9 @@ export class SteamWebClient {
     if (!raw) {
       throw new ApiError({
         code: "bad_request",
-        message:
-          "no steamid was given and STEAM_ID is not set. Pass a 17-digit SteamID64, or set " +
+        message: "no steamid argument and no STEAM_ID default",
+        detail:
+          "No steamid was given and STEAM_ID is not set. Pass a 17-digit SteamID64, or set " +
           "STEAM_ID (a SteamID64 or vanity name) in the server config.",
       });
     }
@@ -223,7 +227,10 @@ export class SteamWebClient {
     let transient: ApiError | undefined;
     const attempt = (p: Promise<string | undefined>) =>
       p.catch((e: unknown) => {
-        if (e instanceof ApiError && TRANSIENT_CODES.includes(e.code)) transient = e;
+        // Only an upstream failure means "try the next lookup"; a bug isn't one.
+        if (!(e instanceof ApiError)) throw e;
+        this.#logger.debug("STEAM_ID vanity lookup failed:", e);
+        if (TRANSIENT_CODES.includes(e.code)) transient = e;
         return undefined;
       });
     let steamid = this.configured ? await attempt(this.#vanityViaApi(raw)) : undefined;
@@ -234,9 +241,10 @@ export class SteamWebClient {
     if (!steamid && transient) throw transient;
     if (!steamid) {
       throw new ApiError({
-        code: "bad_request",
-        message:
-          `could not resolve the STEAM_ID vanity name "${raw}" to a SteamID64 — check the ` +
+        code: "not_found",
+        message: `STEAM_ID vanity name "${raw}" did not resolve`,
+        detail:
+          `Could not resolve the STEAM_ID vanity name "${raw}" to a SteamID64 — check the ` +
           "spelling (it's the part after /id/ in the profile URL, and the profile must exist), " +
           "or set STEAM_ID to a 17-digit SteamID64 instead.",
       });
@@ -298,7 +306,9 @@ export class SteamWebClient {
         return { level: res.response?.player_level ?? null };
       });
       return wrapped.level;
-    } catch {
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+      this.#logger.warn("Steam level unavailable:", e);
       return null;
     }
   }
@@ -489,6 +499,11 @@ export class SteamWebClient {
         }),
       ),
     );
+    for (const r of settled) {
+      if (r.status === "fulfilled") continue;
+      if (!(r.reason instanceof ApiError)) throw r.reason;
+      this.#logger.warn("player names unavailable for a chunk of steamids:", r.reason);
+    }
     const players = settled.flatMap((r) =>
       r.status === "fulfilled" ? (r.value.response?.players ?? []) : [],
     );
@@ -586,19 +601,14 @@ export class SteamWebClient {
         this.#ownedPlaytimes(id, appids),
       ),
     ]);
-    const ownership = settled.map((r) =>
-      r.status === "fulfilled"
-        ? r.value
-        : // messageFor(), not the raw rejection message: an ApiError's own
-          // `.message` can carry up to 500 raw characters of an upstream error
-          // body (e.g. an HTML error page, per lib/http.ts's toHttpError) —
-          // that must never reach this schema-validated, agent-facing field
-          // unsanitized, the same way a top-level tool failure never does.
-          {
-            error:
-              r.reason instanceof ApiError ? messageFor(r.reason) : "An unexpected error occurred.",
-          },
-    );
+    const ownership = settled.map((r) => {
+      if (r.status === "fulfilled") return r.value;
+      // One friend's upstream failure is theirs alone; a bug fails the call.
+      if (!(r.reason instanceof ApiError)) throw r.reason;
+      // The same translation as a failed tool call, never the raw rejection
+      // message (diagnostics, possibly an upstream HTML body).
+      return { error: toProblem(r.reason, this.#logger).detail };
+    });
     return summarizeFriendsWhoOwn(appids, ids, ownership, players, {
       totalFriends: allIds.length,
     });
@@ -752,12 +762,21 @@ export class SteamWebClient {
       );
     } catch (err) {
       if (err instanceof ApiError && err.code === "not_found") {
-        throw new ApiError({ code: "not_found", message: `No Steam app with id ${appid}` });
+        throw new ApiError({
+          code: "not_found",
+          message: `GetNumberOfCurrentPlayers 404 for appid ${appid}`,
+          detail: `No Steam app with id ${appid}.`,
+          cause: err,
+        });
       }
       throw err;
     }
     if (res.response?.result !== 1) {
-      throw new ApiError({ code: "not_found", message: `No Steam app with id ${appid}` });
+      throw new ApiError({
+        code: "not_found",
+        message: `GetNumberOfCurrentPlayers result ${res.response?.result} for appid ${appid}`,
+        detail: `No Steam app with id ${appid}.`,
+      });
     }
     return summarizeCurrentPlayers(res, appid);
   }
@@ -819,7 +838,9 @@ export class SteamWebClient {
         { steamid },
         { hasCredentials: false },
       );
-    } catch {
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+      this.#logger.warn("followed-games count unavailable:", e);
       return {};
     }
   }
@@ -886,6 +907,10 @@ export class SteamWebClient {
           }
           const withoutRarity = summarizeGameSchema(schemaResult.value, {});
           if (isAppidSpecific(globalResult.reason)) return withoutRarity;
+          this.#logger.warn(
+            `achievement rarity unavailable for appid ${appid}:`,
+            globalResult.reason,
+          );
           throw new SchemaWithoutRarity(withoutRarity);
         }
         const err = schemaResult.reason as unknown;

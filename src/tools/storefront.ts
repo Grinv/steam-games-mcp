@@ -6,9 +6,10 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { StorefrontClient } from "../clients/storefront.ts";
 import type { StoreServiceClient } from "../clients/storeService.ts";
-import { errorResult, jsonResult } from "../lib/result.ts";
-import { guard } from "./guard.ts";
-import { ITEMS_MAX, PRICES_MAX, READ_ONLY, appid, country, language, reply } from "./common.ts";
+import { ApiError } from "../lib/errors.ts";
+import { jsonResult } from "../lib/result.ts";
+import type { ToolOutput } from "./guard.ts";
+import { ITEMS_MAX, PRICES_MAX, READ_ONLY, appid, country, language } from "./common.ts";
 import {
   getFeaturedOutput,
   getGameOutput,
@@ -23,6 +24,7 @@ export function registerStorefrontTools(
   store: StorefrontClient,
   // get_game's name lookup: the same search search_games uses.
   search: StoreServiceClient,
+  { guard, reply }: ToolOutput,
 ): void {
   server.registerTool(
     "get_game",
@@ -69,7 +71,13 @@ export function registerStorefrontTools(
         if (!resolved) {
           // The schema's .refine() above guarantees name is set whenever appid isn't.
           const found = await search.resolveAppId(name!, cc, l);
-          if (!found) return errorResult(`No Steam game found matching "${name}".`);
+          if (!found) {
+            throw new ApiError({
+              code: "not_found",
+              message: `search found no game for name "${name}"`,
+              detail: `No Steam game found matching "${name}".`,
+            });
+          }
           resolved = found;
         }
         return jsonResult(await store.getGame(resolved, cc, l));

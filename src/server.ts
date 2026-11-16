@@ -11,6 +11,7 @@ import { registerStorefrontTools } from "./tools/storefront.ts";
 import { registerStoreWebTools } from "./tools/webStore.ts";
 import { registerPlayerWebTools } from "./tools/webPlayer.ts";
 import { registerPrompts } from "./tools/prompts.ts";
+import { toolOutput } from "./tools/guard.ts";
 import { VERSION } from "./version.ts";
 
 const INSTRUCTIONS =
@@ -55,9 +56,10 @@ export function buildServer(config: Config, logger: Logger): McpServer {
     },
   );
 
-  registerStorefrontTools(server, store, web.store);
-  registerStoreWebTools(server, web, web.store);
-  registerPlayerWebTools(server, web);
+  const out = toolOutput(logger);
+  registerStorefrontTools(server, store, web.store, out);
+  registerStoreWebTools(server, web, web.store, out);
+  registerPlayerWebTools(server, web, out);
   registerPrompts(server, web.store);
   return server;
 }

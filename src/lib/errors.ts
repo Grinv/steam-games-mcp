@@ -1,6 +1,8 @@
 // Typed errors for upstream API failures. Clients throw `ApiError`; tool
 // handlers convert it into an MCP tool result (see lib/result.ts) so the
-// agent gets an actionable, non-protocol error.
+// agent gets an actionable, non-protocol error. Every known situation has its
+// own code: the tool-facing text is built from code/status/detail only, and
+// `message` is diagnostics for logs (it may hold a raw response body).
 
 export type ApiErrorCode =
   | "unauthorized" // 401 — token missing/expired/invalid
@@ -10,26 +12,29 @@ export type ApiErrorCode =
   | "server_error" // 5xx — upstream broke
   | "network" // connection failed
   | "timeout" // request aborted by our timeout
-  | "bad_request" // 400/405/422 — malformed or unsupported request
-  | "unknown";
+  | "bad_request" // 400/405/422, or a request we can't serve as given
+  | "bad_response" // a success status with a body we can't use (invalid JSON, empty dictionary)
+  | "unknown"; // any other upstream status
 
 interface ApiErrorOptions {
   code: ApiErrorCode;
+  /** Diagnostics for the log; never shown to the agent. */
   message: string;
+  /** Agent-facing specifics, appended to the code's fixed text: our own
+   *  explanation (e.g. which appid wasn't found). Never upstream text. */
+  detail?: string;
   status?: number;
   retryable?: boolean;
+  /** Retry-After hint, in ms, for the retry backoff. */
+  retryAfterMs?: number;
+  /** The underlying error this one wraps (a fetch/JSON.parse failure, or the
+   *  upstream ApiError a domain error explains). */
   cause?: unknown;
   /** Whether the request that failed carried a credential (API key/token).
    *  Set by the client, not guessed from the error itself — lets a 401/403
    *  message be precise instead of hedging between "bad credentials" and
-   *  "this endpoint never sends any" (see lib/result.ts's messageFor). */
+   *  "this endpoint never sends any" (see lib/result.ts's toProblem). */
   hadCredentials?: boolean;
-  /** True when `message` may embed raw, untrusted upstream response body text
-   *  (e.g. an HTML error page from a CDN/edge) rather than a curated domain
-   *  message or Steam's own structured JSON error field. Set only by
-   *  `lib/http.ts`'s `toHttpError` — `messageFor()` (lib/result.ts) uses this
-   *  to avoid echoing that text verbatim to the agent. */
-  unsafeDetail?: boolean;
 }
 
 export class ApiError extends Error {
@@ -37,7 +42,8 @@ export class ApiError extends Error {
   readonly status: number | undefined;
   readonly retryable: boolean;
   readonly hadCredentials: boolean | undefined;
-  readonly unsafeDetail: boolean;
+  readonly detail: string | undefined;
+  readonly retryAfterMs: number | undefined;
 
   constructor(opts: ApiErrorOptions) {
     super(opts.message, opts.cause === undefined ? undefined : { cause: opts.cause });
@@ -46,7 +52,8 @@ export class ApiError extends Error {
     this.status = opts.status;
     this.retryable = opts.retryable ?? false;
     this.hadCredentials = opts.hadCredentials;
-    this.unsafeDetail = opts.unsafeDetail ?? false;
+    this.detail = opts.detail;
+    this.retryAfterMs = opts.retryAfterMs;
   }
 }
 

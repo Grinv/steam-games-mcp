@@ -45,8 +45,9 @@ export class HttpClient {
       return JSON.parse(text) as T;
     } catch (err) {
       throw new ApiError({
-        code: "unknown",
-        message: "Upstream returned invalid JSON",
+        code: "bad_response",
+        message: `Upstream returned invalid JSON (${text.length} bytes)`,
+        retryable: true,
         cause: err,
       });
     }
@@ -151,34 +152,16 @@ async function toHttpError(res: Response, hasCredentials?: boolean): Promise<Api
   } catch {
     /* ignore body read errors */
   }
-  // Prefer a structured `message`/`error` field; fall back to the raw body.
-  const structured = parseErrorMessage(raw);
-  const detail = structured ?? raw.slice(0, 500);
-  const retryAfter = parseRetryAfter(res.headers.get("retry-after"));
+  // The body is log-only: Steam answers errors with HTML pages (a CDN's, or
+  // "verify your key="), never a structured reason worth showing the agent.
   return new ApiError({
     code,
     status: res.status,
     retryable,
     hadCredentials: hasCredentials,
-    message: `HTTP ${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`,
-    unsafeDetail: structured === undefined && raw.length > 0,
-    ...(retryAfter === undefined ? {} : { cause: { retryAfterMs: retryAfter } }),
+    message: `HTTP ${res.status} ${res.statusText}${raw ? `: ${raw.slice(0, 500)}` : ""}`,
+    retryAfterMs: parseRetryAfter(res.headers.get("retry-after")),
   });
-}
-
-// Many JSON APIs return an error envelope like { message } or { error }.
-function parseErrorMessage(raw: string): string | undefined {
-  if (!raw) return undefined;
-  try {
-    const obj: unknown = JSON.parse(raw);
-    if (obj === null || typeof obj !== "object") return undefined;
-    const rec = obj as Record<string, unknown>;
-    if (typeof rec.message === "string") return rec.message;
-    if (typeof rec.error === "string") return rec.error;
-    return undefined;
-  } catch {
-    return undefined; // not JSON — caller falls back to the raw body
-  }
 }
 
 function toNetworkError(err: unknown): ApiError {
@@ -192,8 +175,8 @@ function toNetworkError(err: unknown): ApiError {
 }
 
 function backoffMs(attempt: number, err: ApiError): number {
-  const hinted = (err.cause as { retryAfterMs?: number } | undefined)?.retryAfterMs;
-  if (typeof hinted === "number" && hinted > 0) return Math.min(hinted, MAX_BACKOFF_MS);
+  const hinted = err.retryAfterMs;
+  if (hinted !== undefined && hinted > 0) return Math.min(hinted, MAX_BACKOFF_MS);
   const base = Math.min(MAX_BACKOFF_MS, 500 * 2 ** attempt);
   // Random, not derived from `attempt`: concurrent requests failing together
   // (e.g. a burst answered with 429) must not all retry at the same instant.
