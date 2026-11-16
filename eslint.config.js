@@ -20,7 +20,8 @@ export default defineConfig(
   // The layering AGENTS.md describes, enforced. Clients fetch and read Steam
   // only through clients/endpoints.ts and lib/call.ts's primitives — a
   // hand-written catch there is how a cancel, a bug or a bad key got read as
-  // an answer; and they build no agent-facing text and touch no schemas.
+  // an answer; and they touch no schemas or lib/result.ts (a client words only
+  // the detail of an error it classifies).
   {
     files: ["src/clients/**/*.ts"],
     rules: {

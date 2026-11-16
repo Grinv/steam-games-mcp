@@ -451,13 +451,13 @@ false`, an uncorrected price shown as checked) is this bug. Run
   cleanly through the shared key-check helper when `STEAM_API_KEY` is unset,
   or a keyless-capable tool in `src/tools/webStore.ts`/`storefront.ts` that
   accidentally requires the key when it shouldn't (re-check against AGENTS.md's
-  "Keyless caveat" list). Also check the _error-message_ side: a 403 on a
-  keyless endpoint is never the key's fault, which `call()` (`lib/endpoint.ts`)
-  knows only from the endpoint's `keyless: true` in `clients/endpoints.ts` —
-  so diff that flag against the Keyless caveat list for every endpoint, not
-  just a new one. History: when this was a per-call-site `hasCredentials:
-false` override, a past pass fixed one method of five and missed four, and a
-  second client kept the bug a whole release past the first fix.
+  "Keyless caveat" list (the endpoint's `keyless` in `clients/endpoints.ts`).
+  Also check the _error-message_ side: a 401/403 must never blame the key —
+  Steam's bad-key page is classified as `invalid_key` at the source, so any
+  other 401/403 is not the key, whether or not one was sent. History: this
+  advice used to be picked by whether the call carried a key, a guess that
+  had to be overridden per call site (one method of five fixed, four missed)
+  and that turned false once the bad key got its own code.
 - Tool failures that don't go through the `tool()` registrar (`toolRegistrar`
   in `tools/guard.ts`, over `toolOutput`'s `guard()`/`reply()`) and
   `toProblem()` — AGENTS.md requires every tool failure return

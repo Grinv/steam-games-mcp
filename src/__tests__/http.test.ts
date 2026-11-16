@@ -498,3 +498,17 @@ test("a path parameter missing from the query is our bug, never sent to Steam", 
   );
   assert.equal(mock.calls.length, 0);
 });
+
+test("a bug in the host's classify is a bug, not a network failure to retry", async (t) => {
+  const mock = mockFetch(() => jsonResponse({}, { status: 403 }));
+  installFetch(t, mock);
+  const c = new HttpClient({
+    baseUrl: "https://example.test/api",
+    logger: silentLogger(),
+    classify: () => {
+      throw new TypeError("bug in classify");
+    },
+  });
+  await assert.rejects(c.getJson("thing"), (err: unknown) => err instanceof TypeError);
+  assert.equal(mock.calls.length, 1); // not retried
+});

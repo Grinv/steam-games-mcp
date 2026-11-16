@@ -12,12 +12,6 @@ import { USER_AGENT } from "../version.ts";
 
 export interface RequestOptions {
   query?: Record<string, string | number | boolean | undefined>;
-  /** Per-request override of HttpClientOptions.hasCredentials — for a call that
-   *  opportunistically attaches a credential without needing one (e.g. a
-   *  keyless-by-design endpoint sent a key anyway because one happens to be
-   *  configured), so a 401/403 there is attributed correctly instead of
-   *  blaming the client's overall credential state. */
-  hasCredentials?: boolean;
   /** Cache the response for HttpClientOptions.cacheTtlMs, keyed by the URL,
    *  and serve a stale copy if Steam fails transiently. Only for answers that
    *  don't depend on who asks or need to be live (catalog data, dictionaries,
@@ -44,10 +38,6 @@ interface HttpClientOptions {
   /** Called before each request; lets callers throttle (rate limiting). It
    *  gets the call's cancellation signal, to stop waiting once it fires. */
   beforeRequest?: (signal?: AbortSignal) => Promise<void> | void;
-  /** Whether this client ever sends a credential (API key/token) — fixed per
-   *  client instance, not per request. Attached to any resulting ApiError so
-   *  a 401/403 message can be precise instead of guessing. */
-  hasCredentials?: boolean;
   /** How long a `cache: true` response stays fresh; 0 disables caching. */
   cacheTtlMs?: number;
   /** This upstream's own reading of an HTTP failure (e.g. Steam's bad-key
@@ -191,29 +181,35 @@ export class HttpClient {
     // hang res.text() forever.
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        headers: { "User-Agent": USER_AGENT, Accept: accept },
-        signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
+    // The one place a non-ApiError becomes an ApiError, bound to the I/O
+    // itself (the fetch, reading the body) rather than to a block of code:
+    // whatever else runs here — classify, building the error — fails as the
+    // bug it is, not as "network".
+    const io = <T>(op: Promise<T>): Promise<T> =>
+      op.catch((err: unknown) => {
+        if (signal?.aborted) throw cancelled(signal);
+        if (controller.signal.aborted) {
+          throw new ApiError({
+            code: "timeout",
+            message: `Request timed out after ${timeoutMs}ms`,
+            retryable: true,
+            cause: err,
+          });
+        }
+        throw toNetworkError(err);
       });
-      if (!res.ok) {
-        const err = await toHttpError(res, options.hasCredentials ?? this.#opts.hasCredentials);
-        throw this.#opts.classify ? this.#opts.classify(err) : err;
-      }
-      if (res.status === 204) return undefined;
-      return await res.text();
-    } catch (err) {
-      if (err instanceof ApiError) throw err;
-      if (signal?.aborted) throw cancelled(signal);
-      if (controller.signal.aborted) {
-        throw new ApiError({
-          code: "timeout",
-          message: `Request timed out after ${timeoutMs}ms`,
-          retryable: true,
-          cause: err,
-        });
-      }
-      throw toNetworkError(err);
+    try {
+      const res = await io(
+        fetch(url, {
+          headers: { "User-Agent": USER_AGENT, Accept: accept },
+          signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
+        }),
+      );
+      if (res.ok) return res.status === 204 ? undefined : await io(res.text());
+      // The error body is log-only: a failure reading it leaves it out.
+      const raw = await res.text().catch(() => "");
+      const err = toHttpError(res, raw);
+      throw this.#opts.classify ? this.#opts.classify(err) : err;
     } finally {
       clearTimeout(timer);
     }
@@ -230,21 +226,14 @@ export class HttpClient {
   }
 }
 
-async function toHttpError(res: Response, hasCredentials?: boolean): Promise<ApiError> {
+function toHttpError(res: Response, raw: string): ApiError {
   const { code, retryable } = classifyStatus(res.status);
-  let raw = "";
-  try {
-    raw = await res.text();
-  } catch {
-    /* ignore body read errors */
-  }
   // The body is log-only: Steam answers errors with HTML pages (a CDN's, or
   // "verify your key="), never a structured reason worth showing the agent.
   return new ApiError({
     code,
     status: res.status,
     retryable,
-    hadCredentials: hasCredentials,
     message: `HTTP ${res.status} ${res.statusText}${raw ? `: ${raw.slice(0, 500)}` : ""}`,
     retryAfterMs: parseRetryAfter(res.headers.get("retry-after")),
   });
@@ -283,7 +272,6 @@ function parseJson(text: string): unknown {
 }
 
 function toNetworkError(err: unknown): ApiError {
-  if (err instanceof ApiError) return err;
   return new ApiError({
     code: "network",
     message: err instanceof Error ? `Network error: ${err.message}` : "Network error",

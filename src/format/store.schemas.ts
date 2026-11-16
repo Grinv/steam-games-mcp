@@ -135,6 +135,26 @@ export const searchGamesOutput = z.strictObject({
   ),
 });
 
+// The part of a GetItems answer summarizePurchasePrices() reads, checked
+// before it reads it: a payload that doesn't fit costs the price correction
+// (bad_response), never a TypeError. Loose: any other field passes through.
+export const purchaseItemsInput = z.looseObject({
+  response: z
+    .looseObject({
+      store_items: z
+        .array(
+          z.looseObject({
+            appid: z.number().optional(),
+            is_free: z.boolean().optional(),
+            best_purchase_option: z.looseObject({}).optional(),
+            purchase_options: z.array(z.looseObject({})).optional(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
+});
+
 // store.ts's summarizePurchasePrices() — the base-game purchase price of each
 // appid, keyed by appid, used to correct the Storefront API's unreliable
 // price_overview (see format/storefront.ts's overridePrice()). Internal to the

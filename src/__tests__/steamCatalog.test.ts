@@ -322,12 +322,12 @@ test("get_current_players errors on a 200 response with a non-1 result too", asy
   assertToolError(res, /no steam app with id 999999999/i);
 });
 
-test("get_current_players: a 403 with a key configured is not blamed on credentials (endpoint is keyless by design)", async (t) => {
+test("get_current_players: a 403 with a key configured is not blamed on credentials", async (t) => {
   const { client } = await setupServer(t, ENV, (url) =>
     url.includes("GetNumberOfCurrentPlayers") ? jsonResponse({}, { status: 403 }) : router(url),
   );
   const res = await client.callTool({ name: "get_current_players", arguments: { appid: 730 } });
-  assertToolError(res, /sends no credentials/i);
+  assertToolError(res, /isn't the API key/i);
 });
 
 describe("get_wishlist", () => {
@@ -347,7 +347,7 @@ describe("get_wishlist", () => {
     assert.equal(s.items[0]!.appid, 620); // priority 1 sorts first
   });
 
-  test("get_wishlist (light): a 403 with a key configured is not blamed on credentials (endpoint is keyless by design)", async (t) => {
+  test("get_wishlist (light): a 403 with a key configured is not blamed on credentials", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetWishlist/v1") ? jsonResponse({}, { status: 403 }) : router(url),
     );
@@ -355,7 +355,7 @@ describe("get_wishlist", () => {
       name: "get_wishlist",
       arguments: { steamid: "76561198028121353" },
     });
-    assertToolError(res, /sends no credentials/i);
+    assertToolError(res, /isn't the API key/i);
   });
 
   test("get_wishlist include_details returns full store cards (name, price, tags) in one call", async (t) => {
@@ -781,18 +781,15 @@ describe("get_items", () => {
     assert.equal(s.items.find((i) => i.appid === 999)!.available, false);
   });
 
-  test("get_items: a 403 with a key configured is not blamed on credentials (endpoint is keyless by design)", async (t) => {
-    // Regression: IStoreBrowseService/GetItems is keyless-capable, same as the
-    // SteamWebClient methods above — but backed by StoreServiceClient
-    // (clients/storeService.ts), a separate code path that initially missed
-    // the hasCredentials override applied to the others.
+  test("get_items: a 403 with a key configured is not blamed on the key", async (t) => {
+    // Regression: GetItems once told the agent its working key was bad.
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("IStoreBrowseService/GetItems")
         ? jsonResponse({}, { status: 403 })
         : router(url),
     );
     const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
-    assertToolError(res, /sends no credentials/i);
+    assertToolError(res, /isn't the API key/i);
   });
 
   test("get_items: still succeeds when GetTagList is unavailable (tags are display-only there)", async (t) => {
@@ -915,7 +912,7 @@ describe("get_followed_games", () => {
     assert.equal(s.total, 0);
   });
 
-  test("get_followed_games: a 403 with a key configured is not blamed on credentials (endpoint is keyless by design)", async (t) => {
+  test("get_followed_games: a 403 with a key configured is not blamed on credentials", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetGamesFollowed") ? jsonResponse({}, { status: 403 }) : jsonResponse({}),
     );
@@ -923,7 +920,7 @@ describe("get_followed_games", () => {
       name: "get_followed_games",
       arguments: { steamid: "76561197960287930" },
     });
-    assertToolError(res, /sends no credentials/i);
+    assertToolError(res, /isn't the API key/i);
   });
 
   test("get_followed_games still succeeds when GetGamesFollowedCount fails (falls back to appids.length)", async (t) => {

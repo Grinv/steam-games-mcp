@@ -96,17 +96,12 @@ describe("toProblem", () => {
     assert.doesNotMatch(p.detail, /DEADBEEF/);
   });
 
-  test("words 401/403 by whether the request carried credentials", () => {
-    const text = (code: ApiErrorCode, hadCredentials?: boolean) =>
-      toProblem(new ApiError({ code, message: "d", hadCredentials }), silentLogger()).detail;
-    // Keyless call: plainly not a credentials problem.
-    assert.match(text("forbidden", false), /isn't a credentials problem/i);
-    assert.match(text("unauthorized", false), /isn't a credentials problem/i);
-    // Keyed call: the key is the likely cause, no hedging.
-    assert.match(text("forbidden", true), /credentials are likely invalid/i);
-    assert.doesNotMatch(text("forbidden", true), /can be a genuine credentials/i);
-    // Unknown: hedge, and don't blame credentials outright.
-    assert.match(text("forbidden"), /without any credentials/i);
+  test("401/403 never blame the key: a rejected key is invalid_key at the source", () => {
+    for (const code of ["forbidden", "unauthorized"] as const) {
+      const { detail } = toProblem(new ApiError({ code, message: "d" }), silentLogger());
+      assert.match(detail, /isn't the API key/i);
+      assert.doesNotMatch(detail, /invalid|expired|check the configured/i);
+    }
   });
 
   test("an unexpected (non-ApiError) failure is logged in full, hidden from the agent", () => {

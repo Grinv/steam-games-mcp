@@ -57,6 +57,11 @@ type ProblemCode = ApiErrorCode | OwnCode;
 // without one. `title` is fixed per type (as RFC 9457 requires); toProblem
 // alone composes each occurrence's `detail` from typed fields, never from an
 // error's free-text message.
+// A rejected key never reaches unauthorized/forbidden: Steam's bad-key page is
+// classified as invalid_key at the source (whatever its status), so these say
+// what is left — whether or not the call carried a key.
+const NOT_THE_KEY = "It isn't the API key (a rejected key is reported as such). ";
+
 const PROBLEMS: Record<
   ProblemCode,
   { title: string; advice?: string | ((err: ApiError) => string) }
@@ -69,36 +74,14 @@ const PROBLEMS: Record<
   },
   unauthorized: {
     title: "The upstream service rejected the request",
-    advice: (err) =>
-      err.hadCredentials === false
-        ? "This tool sends no credentials at all, so this isn't a credentials problem — retry, " +
-          "or check for an upstream outage."
-        : "The credentials may be missing or expired — check the configured API key.",
+    advice: NOT_THE_KEY + "Retry, or check for an upstream outage.",
   },
   forbidden: {
     title: "The upstream service denied access",
-    advice: (err) => {
-      if (err.hadCredentials === false) {
-        return (
-          "This tool sends no credentials at all, so this isn't a credentials problem — it's " +
-          "more likely an unrelated upstream security block (e.g. a request that resembles an " +
-          "injection attempt). Try different input."
-        );
-      }
-      if (err.hadCredentials === true) {
-        return (
-          "The configured credentials are likely invalid, expired, or lack permission for this " +
-          "request."
-        );
-      }
-      return (
-        "This can be a genuine credentials/permission issue, but many of this server's tools " +
-        "call Steam without any credentials at all — a 403 there is more likely an unrelated " +
-        "upstream security block (e.g. a request that resembles an injection attempt). Try " +
-        "different input first, and only suspect the configured API key if this tool actually " +
-        "requires one."
-      );
-    },
+    advice:
+      NOT_THE_KEY +
+      "Most likely an upstream security block (e.g. a request that resembles an injection " +
+      "attempt): try different input, or retry later.",
   },
   not_found: { title: "No matching resource was found" },
   rate_limited: {

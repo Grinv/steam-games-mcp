@@ -360,15 +360,18 @@ test("summarizeWishlist puts unranked (priority 0) entries last, oldest-added fi
 });
 
 describe("summarizePurchasePrices", () => {
-  test("a store_items that isn't a list is Steam's unusable answer, not our bug", () => {
-    assert.throws(
-      () =>
-        summarizePurchasePrices({
-          response: { store_items: {} as unknown as [] },
-        }),
-      (err: unknown) => err instanceof ApiError && err.code === "bad_response" && !err.retryable,
-    );
-  });
+  for (const [label, store_items] of [
+    ["a store_items that isn't a list", {}],
+    ["a null item", [null]],
+    ["an item whose purchase_options isn't a list", [{ appid: 1, purchase_options: "x" }]],
+  ] as const) {
+    test(`${label} is Steam's unusable answer, not our bug`, () => {
+      assert.throws(
+        () => summarizePurchasePrices({ response: { store_items: store_items as never } }),
+        (err: unknown) => err instanceof ApiError && err.code === "bad_response" && !err.retryable,
+      );
+    });
+  }
 
   test("an undiscounted option falls back to final for initial", () => {
     const s = summarizePurchasePrices({

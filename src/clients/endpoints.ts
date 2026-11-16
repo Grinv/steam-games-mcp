@@ -78,7 +78,6 @@ export function classifySteamApiError(err: ApiError): ApiError {
   return new ApiError({
     code: "invalid_key",
     status: err.status,
-    hadCredentials: true,
     message: err.message,
     cause: err,
   });

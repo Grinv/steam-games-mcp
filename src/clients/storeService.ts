@@ -216,7 +216,6 @@ export class StoreServiceClient {
       code: cause.code,
       status: cause.status,
       retryable: cause.retryable,
-      hadCredentials: cause.hadCredentials,
       message: `tag dictionary unavailable (${language})`,
       // The cause's own detail (e.g. the language hint) follows ours; a
       // 429/5xx carries none and gets the code's "retry" advice instead.

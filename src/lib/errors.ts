@@ -31,18 +31,12 @@ interface ApiErrorOptions {
   /** The underlying error this one wraps (a fetch/JSON.parse failure, or the
    *  upstream ApiError a domain error explains). */
   cause?: unknown;
-  /** Whether the request that failed carried a credential (API key/token).
-   *  Set by the client, not guessed from the error itself — lets a 401/403
-   *  message be precise instead of hedging between "bad credentials" and
-   *  "this endpoint never sends any" (see lib/result.ts's toProblem). */
-  hadCredentials?: boolean;
 }
 
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
   readonly status: number | undefined;
   readonly retryable: boolean;
-  readonly hadCredentials: boolean | undefined;
   readonly detail: string | undefined;
   readonly retryAfterMs: number | undefined;
 
@@ -52,7 +46,6 @@ export class ApiError extends Error {
     this.code = opts.code;
     this.status = opts.status;
     this.retryable = opts.retryable ?? false;
-    this.hadCredentials = opts.hadCredentials;
     this.detail = opts.detail;
     this.retryAfterMs = opts.retryAfterMs;
   }

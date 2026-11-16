@@ -33,8 +33,8 @@ export interface Endpoint<T, A extends string = never> {
   /** Path under the host; `{name}` is filled from (and removed from) the query. */
   path: string;
   host: "api" | "store";
-  /** True when the endpoint works without the key: a 401/403 there is never
-   *  the key's fault (the key is still sent when configured). */
+  /** True when the endpoint works without the key (it is still sent when
+   *  configured): its probes run in check:api even with no key. */
   keyless: boolean;
   /** Plain answers Steam sends as HTTP errors: code → answer. */
   answers?: Partial<Record<ApiErrorCode, A>>;
@@ -90,7 +90,6 @@ export async function call<T, A extends string>(
     cache: opts.cache,
     staleOn: ep.ambiguous,
     validate,
-    ...(ep.keyless ? { hasCredentials: false } : {}),
   };
   if (!ep.answers) return (await http.getJson<T>(path, request)) as Answered<T, A>;
   let data: T;

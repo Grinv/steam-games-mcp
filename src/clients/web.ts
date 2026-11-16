@@ -130,7 +130,6 @@ export class SteamWebClient {
       timeoutMs: config.httpTimeoutMs,
       retries: config.httpRetries,
       beforeRequest: (signal) => limiter.acquire(signal),
-      hasCredentials: this.configured,
       cacheTtlMs: config.cacheTtlMs,
       classify: classifySteamApiError,
     });
@@ -139,7 +138,6 @@ export class SteamWebClient {
       logger,
       timeoutMs: config.httpTimeoutMs,
       retries: config.httpRetries,
-      hasCredentials: false,
     });
     // Shares this #http (one rate limiter, one cache) rather than owning its
     // own — both clients hit the same api.steampowered.com host.

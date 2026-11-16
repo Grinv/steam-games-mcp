@@ -18,6 +18,7 @@ import { wishlistNotFound } from "./shared.schemas.ts";
 import {
   discoverGamesOutput,
   getItemsOutput,
+  purchaseItemsInput,
   purchasePricesSchema,
   recommendedGamesFound,
   searchGamesOutput,
@@ -206,10 +207,10 @@ export function summarizeItems(
 export type PurchasePrices = z.infer<typeof purchasePricesSchema>;
 
 export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
-  const items = r.response?.store_items ?? [];
-  if (!Array.isArray(items)) throw unusablePrices("store_items isn't a list");
+  const input = purchaseItemsInput.safeParse(r);
+  if (!input.success) throw unusablePrices(input.error.message, input.error);
   const out: Record<string, z.infer<typeof purchasePricesSchema>[string]> = {};
-  for (const it of items) {
+  for (const it of r.response?.store_items ?? []) {
     if (typeof it.appid !== "number") continue;
     // The app's OWN package, like every card (ownPurchaseOption): when Valve's
     // best option is a bundle, the own package is still among purchase_options
