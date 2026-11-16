@@ -91,7 +91,7 @@ export class HttpClient {
   // A fresh cached body, else a request — shared with concurrent callers of
   // the same URL. A body that isn't JSON fails like a request (bad_response)
   // and is never cached. Steam failing transiently (`retryable`, or a code the
-  // call site declared ambiguous via `staleOn`) is answered with the stale
+  // endpoint declares `ambiguous`, passed in as `staleOn`) is answered with the stale
   // copy if there is one; a definitive answer (4xx) or a bug propagates.
   //
   // The request is shared, so a cancelled call only stops waiting for it: the

@@ -70,9 +70,11 @@ settings.
 ## Storage and retention
 
 - **Caching**: successful API responses are cached in the server process's
-  own memory only (never written to disk), for a short configurable TTL
-  (`CACHE_TTL_MS`, default 5 minutes) to cut latency and avoid hammering the
-  Storefront/Web APIs. Not every endpoint is cached (e.g. reviews, the
+  own memory only (never written to disk), as raw Steam responses keyed by
+  request URL, fresh for a short configurable TTL (`CACHE_TTL_MS`, default 5
+  minutes) to cut latency and avoid hammering the Storefront/Web APIs. An
+  expired copy is kept (bounded to ~32 MB, oldest evicted first) and used only
+  to answer a call while Steam is failing, flagged in the result. Not every endpoint is cached (e.g. reviews, the
   `get_prices` batch and `get_current_players`' count are always fetched
   fresh, while `get_charts`' rankings, live chart included, can be up to one
   TTL old); player-specific data is never cached, with two exceptions:
@@ -96,7 +98,7 @@ settings.
 Material changes will be noted in [CHANGELOG.md](CHANGELOG.md) and reflected
 here, at the same URL, with the effective date below updated.
 
-_Last updated: 2026-10-20._
+_Last updated: 2026-11-17._
 
 ## Contact
 

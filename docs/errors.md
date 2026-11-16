@@ -47,13 +47,14 @@ fix the key. Keyless tools are unaffected — Steam ignores a bad key there.
 
 ## unauthorized
 
-Steam rejected the request (HTTP 401). With `STEAM_API_KEY` set it's usually the
-key; on a keyless endpoint it's an upstream hiccup, and the text says which.
+Steam rejected the request (HTTP 401) for a reason other than a bad key (that's
+`invalid_key`, whatever status Steam sends it with). A private friends list is
+not this error: it's answered with `found: false`.
 
 ## forbidden
 
-Steam denied access (HTTP 403): an invalid key on a key-gated call, or an
-upstream security block on a keyless one (e.g. a search term that resembles an
+Steam denied access (HTTP 403) for a reason other than a bad key (that's
+`invalid_key`): e.g. an upstream security block (a search term that resembles an
 injection attempt). A private profile is not this error: player tools answer
 it with `found: false`.
 
@@ -94,8 +95,9 @@ Steam doesn't recognize the `language` (an ISO code like `ru` instead of
 
 ## bad_response
 
-Steam answered with a success status but a body that can't be used (invalid
-JSON). Usually transient.
+Steam answered with a success status but a body that can't be used: invalid
+JSON, an empty or non-object body, or one the endpoint's own check rejects (e.g.
+an appdetails answer missing an appid it was asked about). Usually transient.
 
 ## unknown
 

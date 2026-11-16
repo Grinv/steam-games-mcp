@@ -32,8 +32,9 @@ src/
                   #   builds its return value via `schema.parse({...})`, see Conventions);
                   #   storeCard.ts shares store.schemas.ts with store.ts
   lib/            # GENERIC carcass: http, rateLimit, cache, concurrency, errors,
-                  #   logger, result, call (the tool call's scope: cancellation,
-                  #   optional()/optionalParts(), CallCancelled)
+                  #   logger, result, endpoint (the Endpoint shape and call()),
+                  #   call (the tool call's scope: cancellation,
+                  #   optional()/optionalParts()/orFailure(), CallCancelled)
   clients/        # endpoints.ts (every Steam endpoint and what its answers
                   #   mean, with live probes — see "What Steam means"),
                   #   storefront.ts (keyless store; takes storeService as a
@@ -49,7 +50,8 @@ src/
                   #   schema, steamIdTool helper and keyGate, shared by the two),
                   #   common.ts (shared param schemas, toCompatFilters across
                   #   storefront+web), guard.ts (toolOutput: the guard/reply
-                  #   wrappers, built per server with its logger), prompts.ts
+                  #   wrappers, built per server with its logger; toolRegistrar:
+                  #   the tool() every tool registers through), prompts.ts
                   #   (MCP Prompts)
   __tests__/      # node:test (*.test.ts) + helpers.ts
 scripts/          # run-tests.ts, sync-version.ts (generic), check-api.ts
@@ -127,7 +129,7 @@ npm run inspector      # run under the MCP Inspector
     in `detail` and are always our own text. A domain error explaining an
     upstream failure keeps that failure's `code`/`status`/`retryable` and
     wraps it as `cause`. Facts true of every Steam endpoint are classified
-    once, at the source: a bad key is `invalid_key` (in `SteamWebClient.#get`),
+    once, at the source: a bad key is `invalid_key` (in `SteamWebClient`'s `classify`),
     and "is this transient" is only ever `err.retryable` — never a code list
     re-derived at a call site. A client method maps only its own endpoint's
     quirks (e.g. GetFriendList's 401 = private), and only by `code`.

@@ -17,12 +17,16 @@
   arbitrary host.
 - **Your key stays yours.** `STEAM_API_KEY` is read once from the environment
   at startup, sent only as a query parameter on requests to the Steam Web API,
-  and never written to disk, cached, or included in a tool result. Logging
+  and never written to disk or included in a tool result (in memory it is part
+  of the request URL that keys a cached response). Logging
   redacts it (and any `Bearer`/OAuth-style token) before a line reaches
   stderr, and tool error messages are redacted the same way before they reach
   the client (see `src/lib/errors.ts`'s `redact`).
-- **No data is kept between requests beyond a small TTL cache** (`CACHE_TTL_MS`,
-  default 5 minutes) of non-personal store/catalog responses (game details,
+- **No data is kept between requests beyond a small in-memory cache** of raw
+  Steam responses, fresh for `CACHE_TTL_MS` (default 5 minutes); an expired
+  copy is kept (bounded to ~32 MB, oldest evicted first) only to answer while
+  Steam is failing, and such a result says so. It holds non-personal
+  store/catalog responses (game details,
   review histogram, tag dictionary, the featured/specials payload, the
   top-sellers / most-played / Steam Deck most-played / live-players charts, `get_game`'s price
   correction, global achievement percentages and a game's achievement

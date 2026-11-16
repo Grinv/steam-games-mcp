@@ -30,7 +30,12 @@ export const baseCardSchema = z.strictObject({
   appid: z.number(),
   name: z.string().nullable(),
   store_url: z.string().nullable(),
-  review_percent: z.number().nullable(),
+  review_percent: z
+    .number()
+    .nullable()
+    .describe(
+      "% of reviews that are positive; null when unknown, e.g. a game with no reviews yet.",
+    ),
   review_count: z.number().nullable(),
   review_label: z.string().nullable(),
   platforms: z.array(z.string()),

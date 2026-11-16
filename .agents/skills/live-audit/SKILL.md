@@ -422,9 +422,9 @@ false`, an uncorrected price shown as checked) is this bug. Run
   same 403 a private profile gets, on every key-gated endpoint — told apart
   only by the body (an HTML "verify your `<pre>key=</pre>`" page vs. JSON like
   `"Profile is not public"`; a private friends list is a 401 with `{}`). It is
-  classified once, in `SteamWebClient.#get`, as its own `invalid_key` code, so
+  classified once, in `SteamWebClient`'s `classify`, as its own `invalid_key` code, so
   no `catch` mapping `forbidden`/`unauthorized` to a privacy or "no data"
-  verdict can see it — check that a new key-gated call goes through `#get`
+  verdict can see it — check that a new key-gated call goes through `#call`
   (a direct `#http` call would bypass it). History: `get_player_achievements`
   and `get_friend_list` shipped telling the agent to change privacy settings
   when the key was the problem, while `get_player_summary` correctly blamed the
@@ -451,17 +451,15 @@ false`, an uncorrected price shown as checked) is this bug. Run
   cleanly through the shared key-check helper when `STEAM_API_KEY` is unset,
   or a keyless-capable tool in `src/tools/webStore.ts`/`storefront.ts` that
   accidentally requires the key when it shouldn't (re-check against AGENTS.md's
-  "Keyless caveat" list). Also check the _error-message_ side: `HttpClient`'s
-  `hasCredentials` is fixed per client instance (`lib/http.ts`), not per
-  request, so every keyless-capable method must override `hasCredentials:
-false` at its own call site — otherwise a 403 there gets misattributed to
-  "the configured credentials are likely invalid" whenever any key is set.
-  Diff every method under `web.ts`'s "keyless-capable" comment block, not just
-  one (a past pass fixed one of five and missed four), and every OTHER client
-  sharing the same `#get`/`HttpClient` binding: `StoreServiceClient`
-  (`storeService.ts`) has its own `Get` type that once lacked an `opts` param,
-  keeping the bug live a whole release past the `web.ts` fix.
-- Tool failures that don't go through `toolOutput`'s `guard()`/`reply()` and
+  "Keyless caveat" list). Also check the _error-message_ side: a 403 on a
+  keyless endpoint is never the key's fault, which `call()` (`lib/endpoint.ts`)
+  knows only from the endpoint's `keyless: true` in `clients/endpoints.ts` —
+  so diff that flag against the Keyless caveat list for every endpoint, not
+  just a new one. History: when this was a per-call-site `hasCredentials:
+false` override, a past pass fixed one method of five and missed four, and a
+  second client kept the bug a whole release past the first fix.
+- Tool failures that don't go through the `tool()` registrar (`toolRegistrar`
+  in `tools/guard.ts`, over `toolOutput`'s `guard()`/`reply()`) and
   `toProblem()` — AGENTS.md requires every tool failure return
   `{ isError: true }` with the Problem in `_meta`, never a raw throw.
 - An `ApiError` whose `code` doesn't say what happened, or agent-facing text
