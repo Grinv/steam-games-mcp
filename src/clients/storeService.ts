@@ -10,9 +10,10 @@
 // Shares the parent's HttpClient (via the `get` passed in) rather than owning
 // its own — both clients hit the same api.steampowered.com host and must honor
 // one rate limiter and one cache, not one each.
-import { ApiError, withFallbackOn } from "../lib/errors.ts";
+import { ApiError } from "../lib/errors.ts";
+import type { Answered, CallOptions, Endpoint, Query } from "../lib/endpoint.ts";
+import { Steam } from "./endpoints.ts";
 import { noteDegraded, optionalParts } from "../lib/call.ts";
-import type { RequestOptions } from "../lib/http.ts";
 import { notFound } from "../format/shared.ts";
 import {
   computeFavoriteTagWeights,
@@ -23,41 +24,30 @@ import {
   summarizeSearchSuggestions,
   summarizeWishlistDetailed,
   type PurchasePrices,
-  type SearchSuggestionsResponse,
   WISHLIST_DETAIL_MAX,
-  type StoreQueryResponse,
-  type WishlistDetailedResponse,
 } from "../format/store.ts";
 import {
   summarizeConcurrentPlayers,
   summarizeMostPlayed,
   summarizeMostPlayedDeck,
   summarizeTopSellers,
-  type ConcurrentPlayersResponse,
-  type DeckMostPlayedResponse,
-  type MostPlayedResponse,
-  type TopSellersResponse,
 } from "../format/charts.ts";
 import type { ChartName } from "../format/charts.ts";
 import {
   summarizeTagList,
   type CompatFilters,
-  type GetTagListResponse,
   type StoreItemsResponse,
   type TagMap,
   TAG_LIMIT,
 } from "../format/storeCard.ts";
-import type { WishlistResponse } from "../format/web.ts";
 
-type Query = Record<string, string | number | boolean | undefined>;
-// The parent's authenticated `#get` (bakes in the key, sent when present per
-// AGENTS.md's keyless caveat — these endpoints answer without one too).
-/** The per-request options a Steam client passes through to HttpClient. */
-export type SteamGetOptions = Pick<
-  RequestOptions,
-  "hasCredentials" | "cache" | "staleOn" | "validate"
->;
-type Get = <T>(path: string, query: Query, opts?: SteamGetOptions) => Promise<T>;
+// The parent's `#call` (bakes in the key, sent when present per AGENTS.md's
+// keyless caveat — these endpoints answer without one too).
+type Call = <T, A extends string>(
+  ep: Endpoint<T, A>,
+  query: Query,
+  opts?: CallOptions,
+) => Promise<Answered<T, A>>;
 
 // The include_* flags every store-service card call needs (reviews, release,
 // native platforms + compat, popular tags). Not include_basic_info: no card
@@ -192,12 +182,12 @@ const BASED_ON_TAGS_LIMIT = 6;
 export const RECOMMENDATION_POOL_SIZE = 300;
 
 export class StoreServiceClient {
-  readonly #get: Get;
+  readonly #call: Call;
   readonly #l: string;
   readonly #country: string;
 
-  constructor(opts: { get: Get; language: string; country: string }) {
-    this.#get = opts.get;
+  constructor(opts: { call: Call; language: string; country: string }) {
+    this.#call = opts.call;
     this.#l = opts.language;
     this.#country = opts.country;
   }
@@ -212,39 +202,10 @@ export class StoreServiceClient {
   // empty dictionary would make every tag filter reject every item,
   // indistinguishable from "no games matched"), via #tagsUnavailable.
   async #tagNames(language: string): Promise<TagMap | ApiError> {
+    // Not optional(): the filter path must fail loudly (#tagsUnavailable),
+    // the display path degrades — so the failure is handed back to decide.
     try {
-      return summarizeTagList(
-        await this.#get<GetTagListResponse>(
-          "IStoreService/GetTagList/v1/",
-          { language },
-          {
-            hasCredentials: false,
-            cache: true,
-            // GetTagList answers an unrecognized `language` (an ISO code like
-            // "ru" instead of Steam's "russian") with 200 and an empty body
-            // rather than an error — no language legitimately has zero tags.
-            // A request problem, which is what makes the filter path fail
-            // loudly instead of matching nothing; never cached over a good
-            // dictionary, and if one is cached (a language that does exist),
-            // an empty answer is a hiccup and the cached one stands in.
-            validate: (body) => {
-              if (Object.keys(summarizeTagList(body as GetTagListResponse)).length > 0) return;
-              // The hint lives on the error itself, so every path that reports
-              // it — a tags filter, recommendations, or a "Game tags" note on
-              // a card — tells the model how to fix its input.
-              throw new ApiError({
-                code: "bad_request",
-                message: `Steam returned an empty tag dictionary for language "${language}"`,
-                detail:
-                  `Steam has no tag dictionary for language "${language}": use one of Steam's ` +
-                  "full language names (english, russian, schinese — not an ISO code like " +
-                  "en/ru/zh).",
-              });
-            },
-            staleOn: ["bad_request"],
-          },
-        ),
-      );
+      return summarizeTagList(await this.#call(Steam.GetTagList, { language }, { cache: true }));
     } catch (e) {
       if (!(e instanceof ApiError)) throw e;
       return e;
@@ -305,16 +266,13 @@ export class StoreServiceClient {
   // store-service page alongside the (cached) tag dictionary in parallel, then
   // resolve/guard the tag map through the same rule every caller needs.
   // tagsBeingFiltered is omitted by getItems, which never filters by tags.
-  async #fetchWithTags<T>(
-    path: string,
+  async #fetchWithTags<T, A extends string>(
+    ep: Endpoint<T, A>,
     query: Query,
     language: string,
     tagsBeingFiltered?: string[],
-  ): Promise<{ res: T; tagMap: TagMap | undefined }> {
-    const [res, tagMap] = await Promise.all([
-      this.#get<T>(path, query, { hasCredentials: false }),
-      this.#tagNames(language),
-    ]);
+  ): Promise<{ res: Answered<T, A>; tagMap: TagMap | undefined }> {
+    const [res, tagMap] = await Promise.all([this.#call(ep, query), this.#tagNames(language)]);
     return { res, tagMap: this.#requireTagMapIfFiltering(tagsBeingFiltered, tagMap, language) };
   }
 
@@ -338,34 +296,28 @@ export class StoreServiceClient {
       namesOnly?: boolean;
     } = {},
   ): Promise<Record<string, unknown>> {
-    const res = await this.#get<SearchSuggestionsResponse>(
-      "IStoreQueryService/SearchSuggestions/v1/",
-      {
-        input_json: JSON.stringify({
-          search_term: term,
-          max_results: opts.limit ?? 10,
-          // Games only unless told otherwise (a title search is nearly always for
-          // the game, and DLC/soundtracks otherwise crowd it out). Server-side, so
-          // `limit` is filled with games rather than shrunk by dropped items, and
-          // `total` counts games only (verified live).
-          ...((opts.gamesOnly ?? true)
-            ? { filters: { type_filters: { include_games: true } } }
-            : {}),
-          context: {
-            language: opts.language ?? this.#l,
-            country_code: opts.country ?? this.#country,
-          },
-          data_request: opts.namesOnly
-            ? {}
-            : {
-                include_platforms: true,
-                include_all_purchase_options: true,
-                include_extra_details: true,
-              },
-        }),
-      },
-      { hasCredentials: false },
-    );
+    const res = await this.#call(Steam.SearchSuggestions, {
+      input_json: JSON.stringify({
+        search_term: term,
+        max_results: opts.limit ?? 10,
+        // Games only unless told otherwise (a title search is nearly always for
+        // the game, and DLC/soundtracks otherwise crowd it out). Server-side, so
+        // `limit` is filled with games rather than shrunk by dropped items, and
+        // `total` counts games only (verified live).
+        ...((opts.gamesOnly ?? true) ? { filters: { type_filters: { include_games: true } } } : {}),
+        context: {
+          language: opts.language ?? this.#l,
+          country_code: opts.country ?? this.#country,
+        },
+        data_request: opts.namesOnly
+          ? {}
+          : {
+              include_platforms: true,
+              include_all_purchase_options: true,
+              include_extra_details: true,
+            },
+      }),
+    });
     return summarizeSearchSuggestions(res);
   }
 
@@ -375,18 +327,14 @@ export class StoreServiceClient {
   // (verified live: games-only turned "shadow of the erdtree" into Shadow of the
   // Tomb Raider). Returns null when nothing matches.
   async resolveAppId(term: string, country?: string, language?: string): Promise<number | null> {
-    const res = await this.#get<SearchSuggestionsResponse>(
-      "IStoreQueryService/SearchSuggestions/v1/",
-      {
-        input_json: JSON.stringify({
-          search_term: term,
-          max_results: 1,
-          context: { language: language ?? this.#l, country_code: country ?? this.#country },
-          data_request: {},
-        }),
-      },
-      { hasCredentials: false },
-    );
+    const res = await this.#call(Steam.SearchSuggestions, {
+      input_json: JSON.stringify({
+        search_term: term,
+        max_results: 1,
+        context: { language: language ?? this.#l, country_code: country ?? this.#country },
+        data_request: {},
+      }),
+    });
     return res.response?.store_items?.find((it) => typeof it.appid === "number")?.appid ?? null;
   }
 
@@ -407,8 +355,8 @@ export class StoreServiceClient {
     };
     // get_items never filters by tags — a failed dictionary just means the
     // `tags` display field comes back empty, which resolveTags already handles.
-    const { res, tagMap } = await this.#fetchWithTags<StoreItemsResponse>(
-      "IStoreBrowseService/GetItems/v1/",
+    const { res, tagMap } = await this.#fetchWithTags(
+      Steam.GetItems,
       { input_json: JSON.stringify(input) },
       l,
     );
@@ -432,8 +380,8 @@ export class StoreServiceClient {
       // start_date is snapped by Steam to the week containing it (weeks start
       // Tuesday 00:00 UTC; history reaches back 10+ years, verified live).
       const { country, weekOf } = opts;
-      const res = await this.#get<TopSellersResponse>(
-        "IStoreTopSellersService/GetWeeklyTopSellers/v1/",
+      const res = await this.#call(
+        Steam.GetWeeklyTopSellers,
         {
           input_json: JSON.stringify({
             ...(country ? { country_code: country } : {}),
@@ -442,7 +390,7 @@ export class StoreServiceClient {
             page_count: limit,
           }),
         },
-        { hasCredentials: false, cache: true },
+        { cache: true },
       );
       return summarizeTopSellers(res, limit);
     }
@@ -454,8 +402,8 @@ export class StoreServiceClient {
       // names ride along on `item`, localized, hence the language. `limit` goes
       // upstream as `count`, like top_sellers' page_count: every entry carries a
       // full store item, so count 100 is ~80 KB vs ~8 KB for 10 (measured live).
-      const res = await this.#get<DeckMostPlayedResponse>(
-        "ISteamChartsService/GetMostPlayedSteamDeckGames/v1/",
+      const res = await this.#call(
+        Steam.GetMostPlayedSteamDeckGames,
         {
           input_json: JSON.stringify({
             context: { country_code: this.#country, language: this.#l },
@@ -464,7 +412,7 @@ export class StoreServiceClient {
             count: limit,
           }),
         },
-        { hasCredentials: false, cache: true },
+        { cache: true },
       );
       return summarizeMostPlayedDeck(res, limit);
     }
@@ -474,17 +422,21 @@ export class StoreServiceClient {
     // per language, serving every `limit` from that one entry — cheaper than
     // the separate, uncached GetItems name lookup per call it replaces.
     const concurrent = chart === "concurrent_players";
-    const res = await this.#get<MostPlayedResponse & ConcurrentPlayersResponse>(
-      `ISteamChartsService/${concurrent ? "GetGamesByConcurrentPlayers" : "GetMostPlayedGames"}/v1/`,
-      {
-        input_json: JSON.stringify({
-          context: { country_code: this.#country, language: this.#l },
-          data_request: {},
-        }),
-      },
-      { hasCredentials: false, cache: true },
-    );
-    return concurrent ? summarizeConcurrentPlayers(res, limit) : summarizeMostPlayed(res, limit);
+    const query = {
+      input_json: JSON.stringify({
+        context: { country_code: this.#country, language: this.#l },
+        data_request: {},
+      }),
+    };
+    return concurrent
+      ? summarizeConcurrentPlayers(
+          await this.#call(Steam.GetGamesByConcurrentPlayers, query, { cache: true }),
+          limit,
+        )
+      : summarizeMostPlayed(
+          await this.#call(Steam.GetMostPlayedGames, query, { cache: true }),
+          limit,
+        );
   }
 
   // The base-game purchase price of each appid, for correcting the Storefront
@@ -524,8 +476,8 @@ export class StoreServiceClient {
     const shape = (body: unknown) => summarizePurchasePrices(body as StoreItemsResponse);
     const load = async (chunk: number[]) =>
       shape(
-        await this.#get<StoreItemsResponse>(
-          "IStoreBrowseService/GetItems/v1/",
+        await this.#call(
+          Steam.GetItems,
           {
             input_json: JSON.stringify({
               ids: chunk.map((appid) => ({ appid })),
@@ -534,7 +486,7 @@ export class StoreServiceClient {
             }),
           },
           // Validated before caching, so an unusable payload is never cached.
-          { hasCredentials: false, cache: opts.cache, validate: shape },
+          { cache: opts.cache, validate: shape },
         ),
       );
     const settled = await Promise.allSettled(chunks.map(load));
@@ -582,17 +534,13 @@ export class StoreServiceClient {
       .slice()
       .sort((a, b) => b.playtimeMinutes - a.playtimeMinutes)
       .slice(0, FAVORITE_TAG_SAMPLE_SIZE);
-    const samplePromise = this.#get<StoreItemsResponse>(
-      "IStoreBrowseService/GetItems/v1/",
-      {
-        input_json: JSON.stringify({
-          ids: sample.map((g) => ({ appid: g.appid })),
-          context: { language: l, country_code: cc },
-          data_request: storeCardDataRequest(),
-        }),
-      },
-      { hasCredentials: false },
-    );
+    const samplePromise = this.#call(Steam.GetItems, {
+      input_json: JSON.stringify({
+        ids: sample.map((g) => ({ appid: g.appid })),
+        context: { language: l, country_code: cc },
+        data_request: storeCardDataRequest(),
+      }),
+    });
     samplePromise.catch(() => {});
     const tagMap = await tagMapPromise;
     if (tagMap instanceof ApiError) {
@@ -635,17 +583,13 @@ export class StoreServiceClient {
     // The tool schema's own min(1).max(25) already bounds this — no need to
     // re-clamp here, just fall back for direct (non-tool) callers.
     const count = opts.count ?? 10;
-    const poolRes = await this.#get<StoreQueryResponse>(
-      "IStoreQueryService/Query/v1/",
-      {
-        input_json: JSON.stringify({
-          query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
-          context: { language: l, country_code: cc, steam_realm: 1 },
-          data_request: storeCardDataRequest(),
-        }),
-      },
-      { hasCredentials: false },
-    );
+    const poolRes = await this.#call(Steam.Query, {
+      input_json: JSON.stringify({
+        query: { start: 0, count: RECOMMENDATION_POOL_SIZE, sort: 10, filters },
+        context: { language: l, country_code: cc, steam_realm: 1 },
+        data_request: storeCardDataRequest(),
+      }),
+    });
     const ownedAppids = new Set(ownedGames.map((g) => g.appid));
     return summarizeRecommendations(
       poolRes.response?.store_items ?? [],
@@ -707,8 +651,8 @@ export class StoreServiceClient {
     };
     // Fetch the tag dictionary alongside the page (cached, so ~free after the
     // first call) — every card surfaces resolved tag names.
-    const { res, tagMap } = await this.#fetchWithTags<StoreQueryResponse>(
-      "IStoreQueryService/Query/v1/",
+    const { res, tagMap } = await this.#fetchWithTags(
+      Steam.Query,
       { input_json: JSON.stringify(input) },
       l,
       p.tags,
@@ -814,21 +758,15 @@ export class StoreServiceClient {
     // server-filtered response alone can't), and the filtered cards.
     const [total, filtered] = await Promise.all([
       this.#wishlistSize(steamid),
-      // Some malformed/out-of-range steamids (e.g. accountid 0) make Steam
-      // answer a raw HTTP 400 instead of its usual empty-wishlist response; the
-      // plain list then reads as empty (total 0) and this result is unused.
-      withFallbackOn(
-        "bad_request",
-        () =>
-          this.#fetchWithTags<WishlistDetailedResponse>(
-            "IWishlistService/GetWishlistSortedFiltered/v1/",
-            { input_json: JSON.stringify(input) },
-            l,
-          ),
-        null,
+      // Steam's "invalid steamid" answer (accountid 0) comes with an empty
+      // plain list too (total 0), so the answer alone means nothing matched.
+      this.#fetchWithTags(
+        Steam.GetWishlistSortedFiltered,
+        { input_json: JSON.stringify(input) },
+        l,
       ),
     ]);
-    if (total > 0 && filtered === null)
+    if (total > 0 && filtered.res.answer)
       // The id list exists but the filtered call was refused: say so rather
       // than reporting that nothing matched.
       throw new ApiError({
@@ -839,7 +777,7 @@ export class StoreServiceClient {
           "Steam refused the filtered wishlist request, though the wishlist itself is readable. " +
           "Drop some filters.",
       });
-    return summarizeWishlistDetailed(filtered?.res ?? {}, filtered?.tagMap, filters(), {
+    return summarizeWishlistDetailed(filtered.res.data ?? {}, filtered.tagMap, filters(), {
       total,
       exact: !checksHere,
     });
@@ -848,17 +786,7 @@ export class StoreServiceClient {
   // The wishlist's size from the plain GetWishlist id list; 0 for an empty or
   // private wishlist, and for a malformed steamid Steam answers with a 400.
   async #wishlistSize(steamid: string): Promise<number> {
-    return withFallbackOn(
-      "bad_request",
-      async () =>
-        (
-          await this.#get<WishlistResponse>(
-            "IWishlistService/GetWishlist/v1/",
-            { steamid },
-            { hasCredentials: false },
-          )
-        ).response?.items?.length ?? 0,
-      0,
-    );
+    const res = await this.#call(Steam.GetWishlist, { steamid });
+    return res.data?.response?.items?.length ?? 0;
   }
 }

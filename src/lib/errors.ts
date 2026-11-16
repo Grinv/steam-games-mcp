@@ -58,25 +58,6 @@ export class ApiError extends Error {
   }
 }
 
-/** Run `fn`; if it rejects with an ApiError of the given `code`, resolve to
- *  `fallback` instead of propagating. Several Steam endpoints answer a raw
- *  HTTP error for some malformed/out-of-range input (e.g. a SteamID64 outside
- *  the valid 64-bit range) instead of their usual "nothing here" response —
- *  callers normalize that case to the same shape their usual empty response
- *  gets, rather than leaking the raw upstream error. */
-export async function withFallbackOn<T>(
-  code: ApiErrorCode,
-  fn: () => Promise<T>,
-  fallback: T,
-): Promise<T> {
-  try {
-    return await fn();
-  } catch (e) {
-    if (e instanceof ApiError && e.code === code) return fallback;
-    throw e;
-  }
-}
-
 /** Map an HTTP status code to an ApiErrorCode and whether a retry may help. */
 export function classifyStatus(status: number): { code: ApiErrorCode; retryable: boolean } {
   if (status === 401) return { code: "unauthorized", retryable: false };

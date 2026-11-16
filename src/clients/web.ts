@@ -8,7 +8,15 @@
 // Reference: https://developer.valvesoftware.com/wiki/Steam_Web_API
 import { HttpClient } from "../lib/http.ts";
 import { RateLimiter } from "../lib/rateLimit.ts";
-import { ApiError, type ApiErrorCode, withFallbackOn } from "../lib/errors.ts";
+import { ApiError } from "../lib/errors.ts";
+import {
+  call,
+  type Answered,
+  type CallOptions,
+  type Endpoint,
+  type Query,
+} from "../lib/endpoint.ts";
+import { Steam } from "./endpoints.ts";
 import { noteDegraded, optional, optionalParts } from "../lib/call.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
 import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.ts";
@@ -36,29 +44,18 @@ import {
   type FollowedGamesCountResponse,
   type FollowedGamesResponse,
   type FriendListResponse,
-  type NewsResponse,
   type OwnedGamesResponse,
-  type PlayerBansResponse,
   type PlayerSummariesResponse,
-  type RecentlyPlayedResponse,
-  type SteamLevelResponse,
-  type VanityResponse,
-  type WishlistResponse,
-  type ReviewsResponse,
 } from "../format/web.ts";
 import {
   summarizeGameSchema,
   summarizeGlobalAchievements,
   summarizePlayerAchievements,
   type GameSchemaResponse,
-  type GlobalAchievementsResponse,
-  type PlayerAchievementsResponse,
 } from "../format/webAchievements.ts";
-import { StoreServiceClient, type SteamGetOptions } from "./storeService.ts";
+import { StoreServiceClient } from "./storeService.ts";
 import type { Logger } from "../lib/logger.ts";
 import type { Config } from "../config.ts";
-
-type Query = Record<string, string | number | boolean | undefined>;
 
 // The community site, used for exactly one thing: resolving a vanity STEAM_ID
 // without a key (see #vanityViaCommunity). Not a config knob — it isn't an API
@@ -76,28 +73,34 @@ const PRIVATE_FRIENDS_REASON =
   "(resolve a vanity name with resolve_vanity_url), or ask the owner to set Steam → Privacy → " +
   "Friends List = Public.";
 
-// The codes Steam answers for an appid that simply has no achievement data.
-const APPID_SPECIFIC_CODES: readonly ApiErrorCode[] = ["forbidden", "bad_request", "not_found"];
-function isAppidSpecific(err: unknown): err is ApiError {
-  return err instanceof ApiError && APPID_SPECIFIC_CODES.includes(err.code);
-}
 const hasAchievements = (schema: GameSchemaResponse) =>
   (schema.game?.availableGameStats?.achievements?.length ?? 0) > 0;
-// Of those, only the 403 is also what Steam's edge answers under load
-// (live-audit), so it alone is ambiguous: a cached list is preferred to it.
-// A 400/404 is Steam's current answer about the appid, and wins.
-const ACHIEVEMENTS_STALE_ON: readonly ApiErrorCode[] = ["forbidden"];
 
-// A bad/revoked key gets a 403 on every key-gated endpoint with this HTML page
-// ("Access is denied. Retrying will not help. Please verify your <pre>key=</pre>
-// parameter.", verified live) — the same status a private profile gets, but
-// never its JSON body. Classified as its own code where the response is read
-// (HttpClient's `classify`), before retries and the cache act on it, so no
-// caller reading a 403 as "private" or "no data for this appid" — nor a
-// stale-copy fallback declared for 403 — can mistake a key problem for one.
-// (Keyless endpoints ignore a bad key and answer 200, also verified live.)
+// GetGlobalAchievementPercentagesForApp's 403 ("no data") for a game whose
+// schema lists achievements: the edge's passing block, not an answer.
+function rarityBlocked(appid: number): ApiError {
+  return new ApiError({
+    code: "forbidden",
+    status: 403,
+    hadCredentials: false,
+    retryable: true,
+    message: `GetGlobalAchievementPercentagesForApp 403 for appid ${appid}, whose schema lists achievements`,
+    detail:
+      "Steam refused the rarity data of a game that has achievements — most likely a passing block.",
+  });
+}
+
+// A bad/revoked key gets this HTML page on every key-gated endpoint ("Access
+// is denied. Retrying will not help. Please verify your <pre>key=</pre>
+// parameter.") — as a 403 on most, a 401 on IPlayerService (verified live
+// 2026-11-17; the 401 was missed while only 403 was checked). The same
+// statuses a private profile gets, never its JSON body. Classified as its own
+// code where the response is read (HttpClient's `classify`), before retries,
+// the cache and any endpoint answer act on it. (Keyless endpoints ignore a
+// bad key and answer 200, also verified live.)
 function classifySteamApiError(err: ApiError): ApiError {
-  if (err.code !== "forbidden" || !/verify your <pre>key=/i.test(err.message)) return err;
+  if (err.code !== "forbidden" && err.code !== "unauthorized") return err;
+  if (!/verify your <pre>key=/i.test(err.message)) return err;
   return new ApiError({
     code: "invalid_key",
     status: err.status,
@@ -159,19 +162,21 @@ export class SteamWebClient {
     // Shares this #http (one rate limiter, one cache) rather than owning its
     // own — both clients hit the same api.steampowered.com host.
     this.#store = new StoreServiceClient({
-      get: this.#get.bind(this),
+      call: this.#call.bind(this),
       language: this.#l,
       country: this.#country,
     });
   }
 
-  // `opts.hasCredentials` lets a keyless-capable call (one that attaches the
-  // key opportunistically when configured, without needing it) override the
-  // client-wide credential flag, so a 401/403 there is never misattributed to
-  // "the configured credentials are likely invalid" — see the callers under
-  // "keyless-capable (key sent when present)" below.
-  #get<T>(path: string, query: Query, opts?: SteamGetOptions): Promise<T> {
-    return this.#http.getJson<T>(path, { ...opts, query: { key: this.#key, ...query } });
+  // Every api.steampowered.com call: the key is sent whenever configured (a
+  // keyless endpoint just ignores it), and the endpoint's own facts —
+  // clients/endpoints.ts — decide what Steam's answer means.
+  #call<T, A extends string>(
+    ep: Endpoint<T, A>,
+    query: Query,
+    opts?: CallOptions,
+  ): Promise<Answered<T, A>> {
+    return call(this.#http, ep, query, opts, { key: this.#key });
   }
 
   // Resolve the SteamID64 a player tool should act on: the explicit argument
@@ -230,9 +235,7 @@ export class SteamWebClient {
   }
 
   async #vanityViaApi(vanity: string): Promise<string | undefined> {
-    const res = await this.#get<VanityResponse>("ISteamUser/ResolveVanityURL/v1/", {
-      vanityurl: vanity,
-    });
+    const res = await this.#call(Steam.ResolveVanityURL, { vanityurl: vanity });
     return res.response?.success === RESULT_OK ? res.response.steamid : undefined;
   }
 
@@ -255,14 +258,7 @@ export class SteamWebClient {
 
   async getPlayerSummary(steamid: string): Promise<Record<string, unknown>> {
     const [res, level] = await Promise.all([
-      withFallbackOn(
-        "bad_request",
-        () =>
-          this.#get<PlayerSummariesResponse>("ISteamUser/GetPlayerSummaries/v2/", {
-            steamids: steamid,
-          }),
-        {},
-      ),
+      this.#call(Steam.GetPlayerSummaries, { steamids: steamid }),
       this.#steamLevel(steamid),
     ]);
     return summarizePlayer(res, level);
@@ -276,37 +272,21 @@ export class SteamWebClient {
   async #steamLevel(steamid: string): Promise<number | null> {
     const res = await optional(
       "Steam level",
-      this.#get<SteamLevelResponse>(
-        "IPlayerService/GetSteamLevel/v1/",
-        { steamid },
-        { cache: true },
-      ),
+      this.#call(Steam.GetSteamLevel, { steamid }, { cache: true }),
     );
-    return res?.response?.player_level ?? null;
+    return res?.data?.response?.player_level ?? null;
   }
 
   async getPlayerBans(steamid: string): Promise<Record<string, unknown>> {
-    const res = await withFallbackOn(
-      "bad_request",
-      () => this.#get<PlayerBansResponse>("ISteamUser/GetPlayerBans/v1/", { steamids: steamid }),
-      {},
-    );
-    return summarizePlayerBans(res);
+    return summarizePlayerBans(await this.#call(Steam.GetPlayerBans, { steamids: steamid }));
   }
 
-  // GetOwnedGames, wrapped so a handful of malformed/out-of-range steamids (e.g.
-  // accountid 0 — 17 digits, passes the schema, but never a real account) that
-  // make Steam answer a raw HTTP 400 instead of its usual "empty response"
-  // private/not-found shape get normalized the same way as that usual shape,
-  // rather than leaking the raw upstream body to the agent. Shared by
-  // getOwnedGames, getRecommendedGames, comparePlayers and #ownedPlaytimes.
-  #ownedGamesRaw(steamid: string, query: Query): Promise<OwnedGamesResponse> {
-    return withFallbackOn(
-      "bad_request",
-      () =>
-        this.#get<OwnedGamesResponse>("IPlayerService/GetOwnedGames/v1/", { steamid, ...query }),
-      {},
-    );
+  // GetOwnedGames, with Steam's "no such steamid" answer (accountid 0) read
+  // like its usual empty private/not-found shape. Shared by getOwnedGames,
+  // getRecommendedGames, comparePlayers and #ownedPlaytimes.
+  async #ownedGamesRaw(steamid: string, query: Query): Promise<OwnedGamesResponse> {
+    const res = await this.#call(Steam.GetOwnedGames, { steamid, ...query });
+    return res.answer ? {} : res.data;
   }
 
   async getOwnedGames(
@@ -325,16 +305,11 @@ export class SteamWebClient {
   }
 
   async getRecentlyPlayed(steamid: string): Promise<Record<string, unknown>> {
-    const res = await withFallbackOn(
-      "bad_request",
-      () =>
-        this.#get<RecentlyPlayedResponse>("IPlayerService/GetRecentlyPlayedGames/v1/", {
-          steamid,
-          count: RECENTLY_PLAYED_MAX,
-        }),
-      {},
-    );
-    return summarizeRecentlyPlayed(res);
+    const res = await this.#call(Steam.GetRecentlyPlayedGames, {
+      steamid,
+      count: RECENTLY_PLAYED_MAX,
+    });
+    return summarizeRecentlyPlayed(res.answer ? {} : res.data);
   }
 
   // Personalized recommendations derived from the player's own library: tags
@@ -386,26 +361,15 @@ export class SteamWebClient {
     language?: string,
   ): Promise<Record<string, unknown>> {
     const l = language ?? this.#l;
-    try {
-      const res = await this.#get<PlayerAchievementsResponse>(
-        "ISteamUserStats/GetPlayerAchievements/v1/",
-        { steamid, appid, l },
-      );
-      if (res.playerstats?.success) return summarizePlayerAchievements(res);
-      // 200 but success:false — disambiguate private vs no-achievements.
-      return this.#explainNoPlayerAchievements(appid, l, res.playerstats?.error);
-    } catch (e) {
-      // Steam answers 403 for a private profile, 400 for an app with no stats /
-      // not owned. Turn both into a clear, actionable reason (a bad key is its
-      // own invalid_key code — see #get — so it never lands here).
-      if (e instanceof ApiError && (e.code === "forbidden" || e.code === "unauthorized")) {
-        return notFound(PRIVATE_PROFILE_REASON);
-      }
-      if (e instanceof ApiError && (e.code === "bad_request" || e.code === "not_found")) {
-        return this.#explainNoPlayerAchievements(appid, l);
-      }
-      throw e;
+    const res = await this.#call(Steam.GetPlayerAchievements, { steamid, appid, l });
+    if (res.answer) {
+      return res.answer === "private"
+        ? notFound(PRIVATE_PROFILE_REASON)
+        : this.#explainNoPlayerAchievements(appid, l);
     }
+    if (res.data.playerstats?.success) return summarizePlayerAchievements(res.data);
+    // 200 but success:false — disambiguate private vs no-achievements.
+    return this.#explainNoPlayerAchievements(appid, l, res.data.playerstats?.error);
   }
 
   // On failure, check the game's schema: if it HAS achievements the player data
@@ -419,37 +383,25 @@ export class SteamWebClient {
     if (apiError && /not public|private/i.test(apiError)) {
       return notFound(PRIVATE_PROFILE_REASON);
     }
-    try {
-      // The same cached request get_game_achievements makes.
-      const schema = await this.#get<GameSchemaResponse>(
-        "ISteamUserStats/GetSchemaForGame/v2/",
-        { appid, l },
-        { cache: true, staleOn: ACHIEVEMENTS_STALE_ON },
-      );
-      return notFound(
-        hasAchievements(schema)
-          ? "This game has achievements, but the player's data is hidden (private game-details, or they don't own it)."
-          : "This game has no achievements.",
-      );
-    } catch (e) {
-      // Only Steam's appid-level answer ("no schema for this appid") reads as
-      // a definitive "no achievements here". Anything else — a transient
-      // failure, a bad key, a bug, a cancel — is not an answer about the game,
-      // and propagates for the agent (or the log) to see.
-      if (!isAppidSpecific(e)) throw e;
+    // The same cached request get_game_achievements makes. Only Steam's
+    // answer reads as a verdict; a failure (or a bug, a cancel) propagates.
+    const schema = await this.#call(Steam.GetSchemaForGame, { appid, l }, { cache: true });
+    if (schema.answer) {
       // Steam's own error text only classifies (above), never reaches the agent.
       return notFound(
         "No achievement data for this appid: the game has no achievements or stats, or the " +
           "appid doesn't exist.",
       );
     }
+    return notFound(
+      hasAchievements(schema.data)
+        ? "This game has achievements, but the player's data is hidden (private game-details, or they don't own it)."
+        : "This game has no achievements.",
+    );
   }
 
   async resolveVanityUrl(vanity: string): Promise<Record<string, unknown>> {
-    const res = await this.#get<VanityResponse>("ISteamUser/ResolveVanityURL/v1/", {
-      vanityurl: vanity,
-    });
-    return summarizeVanity(res);
+    return summarizeVanity(await this.#call(Steam.ResolveVanityURL, { vanityurl: vanity }));
   }
 
   // Batch GetPlayerSummaries for an arbitrary id list, chunked to its
@@ -466,11 +418,7 @@ export class SteamWebClient {
     const chunks: string[][] = [];
     for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
     const settled = await Promise.allSettled(
-      chunks.map((chunk) =>
-        this.#get<PlayerSummariesResponse>("ISteamUser/GetPlayerSummaries/v2/", {
-          steamids: chunk.join(","),
-        }),
-      ),
+      chunks.map((chunk) => this.#call(Steam.GetPlayerSummaries, { steamids: chunk.join(",") })),
     );
     const players = optionalParts(settled, (i) => `Names of ${chunks[i]!.length} players`).flatMap(
       (r) => r.response?.players ?? [],
@@ -478,34 +426,11 @@ export class SteamWebClient {
     return { response: { players } };
   }
 
-  // Codes GetFriendList answers with instead of its usual private-friends-list
-  // shape: forbidden/unauthorized for a private list (401 + empty JSON verified
-  // live; a bad key is its own invalid_key code), bad_request for some
-  // malformed/out-of-range steamids (e.g. accountid 0), and not_found for a
-  // syntactically valid but nonexistent account (confirmed live: this was
-  // leaking as a raw tool error instead of found:false, unlike every sibling
-  // tool). Local to #friendsRaw — the sibling code-checks elsewhere in this
-  // file each cover a different endpoint's own reasons, not this same set.
-  static readonly #FRIENDLIST_NOT_FOUND_CODES: readonly ApiErrorCode[] = [
-    "forbidden",
-    "unauthorized",
-    "bad_request",
-    "not_found",
-  ];
-
-  // Fetch the raw friend list, translating a private friends list into `null`
-  // instead of throwing. Shared by getFriendList and findFriendsWhoOwn.
+  // Fetch the raw friend list; `null` for Steam's "private or no such account"
+  // answer. Shared by getFriendList and findFriendsWhoOwn.
   async #friendsRaw(steamid: string): Promise<FriendListResponse | null> {
-    try {
-      return await this.#get<FriendListResponse>("ISteamUser/GetFriendList/v1/", {
-        steamid,
-        relationship: "friend",
-      });
-    } catch (e) {
-      if (e instanceof ApiError && SteamWebClient.#FRIENDLIST_NOT_FOUND_CODES.includes(e.code))
-        return null;
-      throw e;
-    }
+    const res = await this.#call(Steam.GetFriendList, { steamid, relationship: "friend" });
+    return res.answer ? null : res.data;
   }
 
   // A player's friend list (needs the friends list to be public). GetFriendList
@@ -629,21 +554,17 @@ export class SteamWebClient {
     order: "helpful" | "recent" | "updated" = "helpful",
     withinDays?: number,
   ): Promise<Record<string, unknown>> {
-    const res = await this.#get<{ response?: ReviewsResponse }>(
-      "IUserReviewsService/GetAppReviews/v1/",
-      {
-        input_json: JSON.stringify({
-          appid,
-          num_per_page: max,
-          languages: [reviewLanguage],
-          review_type: { all: 0, positive: 1, negative: 2 }[reviewType],
-          purchase_type: 1,
-          filter: { helpful: 0, recent: 1, updated: 2 }[order],
-          ...(order === "helpful" && withinDays !== undefined ? { day_range: withinDays } : {}),
-        }),
-      },
-      { hasCredentials: false },
-    );
+    const res = await this.#call(Steam.GetAppReviews, {
+      input_json: JSON.stringify({
+        appid,
+        num_per_page: max,
+        languages: [reviewLanguage],
+        review_type: { all: 0, positive: 1, negative: 2 }[reviewType],
+        purchase_type: 1,
+        filter: { helpful: 0, recent: 1, updated: 2 }[order],
+        ...(order === "helpful" && withinDays !== undefined ? { day_range: withinDays } : {}),
+      }),
+    });
     return summarizeReviews(res, max);
   }
 
@@ -656,92 +577,44 @@ export class SteamWebClient {
     count: number,
     kind: "all" | "official" | "patch_notes" = "all",
   ): Promise<Record<string, unknown>> {
-    try {
-      const res = await this.#get<NewsResponse>(
-        "ISteamNews/GetNewsForApp/v2/",
-        {
-          appid,
-          count,
-          maxlength: 400,
-          ...(kind === "official" ? { feeds: "steam_community_announcements" } : {}),
-          ...(kind === "patch_notes" ? { tags: "patchnotes" } : {}),
-        },
-        { hasCredentials: false },
-      );
-      return summarizeNews(res);
-    } catch (e) {
-      // Same keyless-appid quirk as getGlobalAchievements below: Steam answers
-      // 403 for a large/unassigned appid — verified live — never because of
-      // credentials, so degrade to a clean empty result instead of surfacing
-      // the generic "resembles an injection attempt" 403 message for what's
-      // actually the single most likely trigger (a nonexistent appid).
-      if (e instanceof ApiError && e.code === "forbidden") {
-        return summarizeNews({});
-      }
-      throw e;
-    }
+    const res = await this.#call(Steam.GetNewsForApp, {
+      appid,
+      count,
+      maxlength: 400,
+      ...(kind === "official" ? { feeds: "steam_community_announcements" } : {}),
+      ...(kind === "patch_notes" ? { tags: "patchnotes" } : {}),
+    });
+    // A nonexistent appid's answer: a clean empty result.
+    return summarizeNews(res.answer ? {} : res.data);
   }
 
   async getGlobalAchievements(appid: number): Promise<Record<string, unknown>> {
-    try {
-      return summarizeGlobalAchievements(
-        await this.#get<GlobalAchievementsResponse>(
-          "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
-          { gameid: appid },
-          { hasCredentials: false, cache: true, staleOn: ACHIEVEMENTS_STALE_ON },
-        ),
+    const res = await this.#call(
+      Steam.GetGlobalAchievementPercentagesForApp,
+      { gameid: appid },
+      { cache: true },
+    );
+    if (!res.answer) return summarizeGlobalAchievements(res.data);
+    // "No data" is also the edge's passing 403 (clients/endpoints.ts). With a
+    // key, the (cached) schema tells them apart: a game that lists
+    // achievements has rarity data, so the answer was a failure. Keyless,
+    // "no data" is the verified common reading.
+    if (this.configured) {
+      const schema = await optional(
+        "Achievement schema (to tell 'no data' from a passing 403)",
+        this.#call(Steam.GetSchemaForGame, { appid, l: this.#l }, { cache: true }),
       );
-    } catch (e) {
-      // This endpoint is keyless by design (docs/architecture.md's "Keyless
-      // caveat"), so a 403/400/404 here can never genuinely be a credentials
-      // problem even though a key happens to be attached when configured —
-      // verified live: Steam answers this way for an appid with no
-      // achievement schema (e.g. a DLC/soundtrack), not for an invalid key.
-      if (!isAppidSpecific(e)) throw e;
-      // A 403 is also the edge's passing block (ACHIEVEMENTS_STALE_ON). With a
-      // key, the (cached) schema tells the two apart: a game that lists
-      // achievements has rarity data, so the 403 is a failure, not "none".
-      // Keyless, "no achievement data" is the verified common reading.
-      if (e.code === "forbidden" && this.configured) {
-        const schema = await optional(
-          "Achievement schema (to tell 'no data' from a passing 403)",
-          this.#get<GameSchemaResponse>(
-            "ISteamUserStats/GetSchemaForGame/v2/",
-            { appid, l: this.#l },
-            { cache: true, staleOn: ACHIEVEMENTS_STALE_ON },
-          ),
-        );
-        if (schema && hasAchievements(schema)) throw e;
-      }
-      return summarizeGlobalAchievements({});
+      if (schema?.data && hasAchievements(schema.data)) throw rarityBlocked(appid);
     }
+    return summarizeGlobalAchievements({});
   }
 
   // Current concurrent player count for a game. Not cached — it's a live number.
   // `result` is Steam's own success flag: 1 = ok, anything else means the appid
-  // wasn't found. Verified live: a bogus/unknown appid answers HTTP 404 (not
-  // 200) with `{result:42}` and no `player_count` — the 404 is caught below so
-  // the generic "not found" from the HTTP layer doesn't shadow this appid-
-  // specific message; a plain 200 with a bad `result` is still handled directly.
+  // wasn't found — as a 200, or as the endpoint's "no_app" answer (a 404).
   async getCurrentPlayers(appid: number): Promise<Record<string, unknown>> {
-    let res: CurrentPlayersResponse;
-    try {
-      res = await this.#get<CurrentPlayersResponse>(
-        "ISteamUserStats/GetNumberOfCurrentPlayers/v1/",
-        { appid },
-        { hasCredentials: false },
-      );
-    } catch (err) {
-      if (err instanceof ApiError && err.code === "not_found") {
-        throw new ApiError({
-          code: "not_found",
-          message: `GetNumberOfCurrentPlayers 404 for appid ${appid}`,
-          detail: `No Steam app with id ${appid}.`,
-          cause: err,
-        });
-      }
-      throw err;
-    }
+    const answered = await this.#call(Steam.GetNumberOfCurrentPlayers, { appid });
+    const res: CurrentPlayersResponse = answered.answer ? {} : answered.data;
     if (res.response?.result !== 1) {
       throw new ApiError({
         code: "not_found",
@@ -763,17 +636,8 @@ export class SteamWebClient {
 
   // A player's wishlist (needs the wishlist/profile to be public). Keyless.
   async #getWishlistLight(steamid: string): Promise<Record<string, unknown>> {
-    const res = await withFallbackOn(
-      "bad_request",
-      () =>
-        this.#get<WishlistResponse>(
-          "IWishlistService/GetWishlist/v1/",
-          { steamid },
-          { hasCredentials: false },
-        ),
-      {},
-    );
-    return summarizeWishlist(res);
+    const res = await this.#call(Steam.GetWishlist, { steamid });
+    return summarizeWishlist(res.answer ? {} : res.data);
   }
 
   // A player's followed games (needs the profile to be public). Keyless — a
@@ -787,17 +651,9 @@ export class SteamWebClient {
     return summarizeFollowedGames(list, count);
   }
 
-  #followedGamesRaw(steamid: string): Promise<FollowedGamesResponse> {
-    return withFallbackOn(
-      "bad_request",
-      () =>
-        this.#get<FollowedGamesResponse>(
-          "IStoreService/GetGamesFollowed/v1/",
-          { steamid },
-          { hasCredentials: false },
-        ),
-      {},
-    );
+  async #followedGamesRaw(steamid: string): Promise<FollowedGamesResponse> {
+    const res = await this.#call(Steam.GetGamesFollowed, { steamid });
+    return res.answer ? {} : res.data;
   }
 
   // Optional: summarizeFollowedGames falls back to appids.length. Steam's own
@@ -806,13 +662,9 @@ export class SteamWebClient {
   async #followedGamesCount(steamid: string): Promise<FollowedGamesCountResponse> {
     const res = await optional(
       "Steam's own followed-games count (total is the listed games)",
-      this.#get<FollowedGamesCountResponse>(
-        "IStoreService/GetGamesFollowedCount/v1/",
-        { steamid },
-        { hasCredentials: false },
-      ),
+      this.#call(Steam.GetGamesFollowedCount, { steamid }),
     );
-    return res ?? {};
+    return res?.data ?? {};
   }
 
   #getWishlistDetailed(
@@ -848,50 +700,22 @@ export class SteamWebClient {
   // missing rarity costs only this answer — it is never cached as the schema.
   async getGameAchievements(appid: number, language?: string): Promise<Record<string, unknown>> {
     const l = language ?? this.#l;
-    const [schemaResult, globalResult] = await Promise.allSettled([
-      this.#get<GameSchemaResponse>(
-        "ISteamUserStats/GetSchemaForGame/v2/",
-        { appid, l },
-        { cache: true, staleOn: ACHIEVEMENTS_STALE_ON },
-      ),
-      // hasCredentials:false like every other keyless-by-design call site
-      // (lib/http.ts fixes hasCredentials per client instance, not per
-      // request, so a 403 here would otherwise be blamed on the configured key).
-      this.#get<GlobalAchievementsResponse>(
-        "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
-        { gameid: appid },
-        { hasCredentials: false, cache: true, staleOn: ACHIEVEMENTS_STALE_ON },
+    const [schema, rarity] = await Promise.all([
+      this.#call(Steam.GetSchemaForGame, { appid, l }, { cache: true }),
+      // Optional: the list stands without rarity. A failure is noted there.
+      optional(
+        "Achievement rarity (global unlock %)",
+        this.#call(Steam.GetGlobalAchievementPercentagesForApp, { gameid: appid }, { cache: true }),
       ),
     ]);
-    if (schemaResult.status === "fulfilled") {
-      if (globalResult.status === "fulfilled") {
-        return summarizeGameSchema(schemaResult.value, globalResult.value);
-      }
-      const reason: unknown = globalResult.reason;
-      if (!(reason instanceof ApiError)) throw reason;
-      // An appid-specific answer is Steam saying it has no rarity data —
-      // unless the schema we just got lists achievements: then that 403 is
-      // the edge's passing block (ACHIEVEMENTS_STALE_ON), and the gap is noted.
-      if (!isAppidSpecific(reason) || hasAchievements(schemaResult.value)) {
-        noteDegraded("Achievement rarity (global unlock %)", reason);
-      }
-      return summarizeGameSchema(schemaResult.value, {});
+    // Steam's answer for the appid itself (a nonexistent one).
+    if (schema.answer) return summarizeGameSchema({}, {});
+    if (rarity?.data) return summarizeGameSchema(schema.data, rarity.data);
+    // Rarity's "no data" contradicts a schema that lists achievements: the
+    // edge's passing 403, a gap to note — not Steam saying there's none.
+    if (rarity?.answer && hasAchievements(schema.data)) {
+      noteDegraded("Achievement rarity (global unlock %)", rarityBlocked(appid));
     }
-    const err: unknown = schemaResult.reason;
-    // GetGlobalAchievementPercentagesForApp is keyless — if it ALSO rejects
-    // for this same appid with an appid-specific code, the block is
-    // appid-specific (no achievement schema, e.g. a DLC/soundtrack —
-    // verified live), not a credentials problem specific to the schema
-    // call. If the keyless call succeeded or failed only transiently
-    // (429/timeout), the schema-only failure is genuinely ambiguous, so it's
-    // left to throw and surface its own message.
-    if (
-      isAppidSpecific(err) &&
-      globalResult.status === "rejected" &&
-      isAppidSpecific(globalResult.reason)
-    ) {
-      return summarizeGameSchema({}, {});
-    }
-    throw err;
+    return summarizeGameSchema(schema.data, {});
   }
 }

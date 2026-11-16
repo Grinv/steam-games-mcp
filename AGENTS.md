@@ -34,7 +34,9 @@ src/
   lib/            # GENERIC carcass: http, rateLimit, cache, concurrency, errors,
                   #   logger, result, call (the tool call's scope: cancellation,
                   #   optional()/optionalParts(), CallCancelled)
-  clients/        # storefront.ts (keyless store; takes storeService as a
+  clients/        # endpoints.ts (every Steam endpoint and what its answers
+                  #   mean, with live probes — see "What Steam means"),
+                  #   storefront.ts (keyless store; takes storeService as a
                   #   PurchasePriceSource, because Storefront prices are wrong —
                   #   see docs/architecture.md), web.ts (official Web API; key
                   #   optional; builds storeService.ts, exposed via `.store` for
@@ -147,6 +149,17 @@ npm run inspector      # run under the MCP Inspector
     Problem rides in `_meta["io.github.Grinv/problem"]`. A partial failure
     inside a successful result (e.g. `find_friends_who_own`'s per-friend
     reason) uses `toProblem(...).detail` too.
+- **What Steam means is stated once per endpoint**, in `clients/endpoints.ts`
+  (`lib/endpoint.ts` defines the shape): path, host, keyless or not, the plain
+  answers Steam sends as HTTP errors (`answers`: e.g. GetFriendList's 401 →
+  "private_or_missing"), codes that are also a passing failure (`ambiguous`:
+  a cached copy wins over them), and the body rule (`validate`). A client
+  calls through `call(...)`/`#call(...)` and gets data, or `{ answer }` typed
+  by the endpoint, so the compiler makes it handle every answer — there is no
+  `catch` reading Steam in a client. Each stated fact has `probes`: live calls
+  that show it, run by `npm run check:api`. Add a fact only with a probe that
+  passes against live Steam today — a fact from memory is how the bad-key 401
+  went unclassified while every test passed on a 403 fixture.
 - **A tool's answer is a required core plus optional parts** (a price
   correction, rarity, a Steam level, names, tags). A required part is a plain
   `await`: its failure is the tool's error. An optional one goes through
@@ -154,8 +167,7 @@ npm run inspector      # run under the MCP Inspector
   for the chunks of a batch: Steam failing becomes `undefined` plus a note,
   a bug or the call's cancellation still propagates. Never a hand-written
   `try/catch` that degrades; every `allSettled`/`catch` around a Steam call is
-  either that, or a code-based reading of a known answer (`withFallbackOn`,
-  "403 → private"). A formatter renders `undefined` as unknown (`null`/empty),
+  either that, or the endpoint's declared `answers`. A formatter renders `undefined` as unknown (`null`/empty),
   never as a negative fact. `guard` turns the call's notes (and any stale
   fallback) into `structuredContent.notes` — the only place the model looks
   (verified: Claude Code feeds it structuredContent alone, not other content
@@ -168,11 +180,11 @@ npm run inspector      # run under the MCP Inspector
   answer is never stored as a whole one. `getJson<T>` returns a JSON object or
   fails: an empty body, `null` or any non-object is `bad_response` (retryable),
   never data a caller would dereference. Two hooks run before the cache, so it acts
-  on what actually happened: the client's `classify` (Steam's bad-key page →
-  `invalid_key`) and the call's `validate` (a body this call can't use, e.g. an
+  on what actually happened: the host client's `classify` (Steam's bad-key page →
+  `invalid_key`) and the endpoint's `validate` (a body it can't use, e.g. an
   empty tag dictionary, fails like a request and is never cached). A stale copy answers only a
-  `retryable` failure (or a code the call site declares ambiguous with
-  `staleOn`), without retries when one exists; it is collected per call via
+  `retryable` failure (or a code the endpoint declares `ambiguous`), without
+  retries when one exists; it is collected per call via
   `callScope` and flags `_meta["io.github.Grinv/stale"]`. `_meta` keys use `META_PREFIX`
   (`src/version.ts`), the reverse-DNS namespace of `mcpName`.
 - **Cancellation** reaches Steam without being threaded through clients: a

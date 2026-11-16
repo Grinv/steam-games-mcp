@@ -593,16 +593,20 @@ describe("get_player_achievements", () => {
     "<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>Access is denied. " +
     "Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>";
 
-  for (const [tool, endpoint, args] of [
-    ["get_player_achievements", "GetPlayerAchievements", { appid: 620 }],
-    ["get_friend_list", "GetFriendList", {}],
-    ["get_owned_games", "GetOwnedGames", {}],
-    ["get_player_summary", "GetPlayerSummaries", {}],
-    ["find_friends_who_own", "GetFriendList", { appids: [620] }],
+  // The page comes as a 403 on most endpoints and a 401 on IPlayerService
+  // (probed live 2026-11-17 — the 401 went unclassified while only 403 was
+  // checked, and this fixture said 403 for GetOwnedGames too).
+  for (const [tool, endpoint, args, status] of [
+    ["get_player_achievements", "GetPlayerAchievements", { appid: 620 }, 403],
+    ["get_friend_list", "GetFriendList", {}, 403],
+    ["get_owned_games", "GetOwnedGames", {}, 401],
+    ["get_recently_played", "GetRecentlyPlayedGames", {}, 401],
+    ["get_player_summary", "GetPlayerSummaries", {}, 403],
+    ["find_friends_who_own", "GetFriendList", { appids: [620] }, 403],
   ] as const) {
-    test(`${tool}: a bad key's 403 reports invalid_key, not a private profile`, async (t) => {
+    test(`${tool}: a bad key's ${status} reports invalid_key, not a private profile`, async (t) => {
       const { client } = await setupServer(t, ENV, (url) =>
-        url.includes(endpoint) ? htmlResponse(BAD_KEY_403, { status: 403 }) : jsonResponse({}),
+        url.includes(endpoint) ? htmlResponse(BAD_KEY_403, { status }) : jsonResponse({}),
       );
       const res = await client.callTool({
         name: tool,
@@ -791,12 +795,12 @@ describe("get_player_achievements", () => {
   });
 
   test("get_player_achievements: a non-transient schema-lookup failure still gives the fallback reason", async (t) => {
-    // The other half of the same branch: a 403 is about this appid/key, not a
-    // blip, so it stays a found:false answer rather than a retryable error.
+    // The other half of the same branch: Steam's own "no such app" answer for
+    // the schema (a 400, probed live) is a verdict, so a found:false answer.
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       if (url.includes("GetPlayerAchievements"))
         return jsonResponse({ playerstats: { success: false } });
-      if (url.includes("GetSchemaForGame")) return jsonResponse({}, { status: 403 });
+      if (url.includes("GetSchemaForGame")) return jsonResponse({}, { status: 400 });
       return jsonResponse({});
     });
     const res = await client.callTool({
@@ -1183,9 +1187,10 @@ describe("find_friends_who_own", () => {
     assert.ok(peak > 1, "the fan-out should still be concurrent, not serial");
   });
 
-  test("find_friends_who_own reports found:false for a private friends list (403)", async (t) => {
+  test("find_friends_who_own reports found:false for a private friends list (401)", async (t) => {
+    // A friends-only list is a 401 (probed live); a 403 there is the bad-key page.
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetFriendList") ? jsonResponse({}, { status: 403 }) : jsonResponse({}),
+      url.includes("GetFriendList") ? jsonResponse({}, { status: 401 }) : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "find_friends_who_own",
@@ -1473,15 +1478,15 @@ describe("get_game_achievements", () => {
   });
 
   test("degrades to a clean empty result for a schema-less appid (e.g. a DLC/soundtrack) instead of a misleading credentials error", async (t) => {
-    // Regression: Steam answers 403 on GetSchemaForGame for an appid with no
-    // achievement schema — verified live. GetGlobalAchievementPercentagesForApp
-    // (keyless) rejecting the same way for the same appid is the appid-specific
-    // signal that distinguishes this from a genuinely bad key.
-    const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetSchemaForGame") || url.includes("GetGlobalAchievementPercentagesForApp")
-        ? jsonResponse({}, { status: 403 })
-        : router(url),
-    );
+    // As Steam answers it (clients/endpoints.ts, probed live): GetSchemaForGame
+    // gives a schema-less DLC an empty `game` (200), the keyless rarity call a
+    // 403 "no data". Neither is a credentials problem.
+    const { client } = await setupServer(t, ENV, (url) => {
+      if (url.includes("GetSchemaForGame")) return jsonResponse({ game: {} });
+      if (url.includes("GetGlobalAchievementPercentagesForApp"))
+        return jsonResponse({}, { status: 403 });
+      return router(url);
+    });
     const res = await client.callTool({
       name: "get_game_achievements",
       arguments: { appid: 1206340 },
@@ -1497,36 +1502,34 @@ describe("get_game_achievements", () => {
     assert.deepEqual(s.achievements, []);
   });
 
-  test("never caches that degraded empty result", async (t) => {
-    // Same guard as get_global_achievements': the cache holds Steam's responses,
-    // never a degraded result built from them (lib/cache.ts). Both calls 403ing at once is usually an
-    // appid-specific signal, but under load it can just be transient — and a
-    // cached "this game has no achievements" then outlives the blip by a full
-    // TTL. The real list on the retry proves the empty one was never stored.
-    let calls = 0;
-    const { client } = await setupServer(t, ENV, (url) => {
-      if (!url.includes("GetSchemaForGame")) {
-        return url.includes("GetGlobalAchievementPercentagesForApp") && calls === 1
-          ? jsonResponse({}, { status: 403 })
-          : router(url);
-      }
-      calls++;
-      return calls === 1 ? jsonResponse({}, { status: 403 }) : router(url);
+  test("a list missing its rarity is never cached as the list", async (t) => {
+    // The cache holds Steam's responses, never a result built from them
+    // (lib/cache.ts): a passing rarity failure costs this answer only, noted,
+    // and the next call has rarity again.
+    let rarityCalls = 0;
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetGlobalAchievementPercentagesForApp") && ++rarityCalls === 1)
+        return jsonResponse({}, { status: 503 });
+      return router(url);
     });
     const degraded = await client.callTool({
       name: "get_game_achievements",
       arguments: { appid: 620 },
     });
-    assert.equal((degraded.structuredContent as { total: number }).total, 0);
+    const d = degraded.structuredContent as { total: number; notes: string[] };
+    assert.equal(d.total, 2);
+    assert.match(d.notes[0]!, /^Achievement rarity/);
 
     const retried = await client.callTool({
       name: "get_game_achievements",
       arguments: { appid: 620 },
     });
-    assert.equal(retried.isError, undefined);
-    const s = retried.structuredContent as { total: number; achievements: { name: string }[] };
-    assert.equal(s.total, 2, "the retry must reach Steam, not a cached empty schema");
-    assert.equal(s.achievements[0]!.name, "Wake Up Call");
+    const s = retried.structuredContent as {
+      achievements: { name: string; percent: number | null }[];
+      notes?: string[];
+    };
+    assert.equal(s.notes, undefined);
+    assert.notEqual(s.achievements[0]!.percent, null, "rarity is back, not a cached gap");
   });
 
   test("returns the schema without rarity on a transient rarity failure, but never caches it", async (t) => {
@@ -1719,12 +1722,11 @@ test("get_player_summary still succeeds (level:null) when GetSteamLevel itself f
   assert.equal(s.level, null);
 });
 
-test("get_player_summary: a raw HTTP 400 from GetPlayerSummaries reports found:false, not a raw error", async (t) => {
-  // Defensive parity with every other steamid-taking client method (getOwnedGames,
-  // getRecentlyPlayed, getWishlist, getFollowedGames) — none of them are known
-  // to actually 400 live, but if Steam ever does, it must degrade the same way.
+test("get_player_summary: no such account (an empty 200, probed live) reports found:false", async (t) => {
+  // Unlike the per-player IPlayerService endpoints, GetPlayerSummaries never
+  // 400s for a bad id (not even accountid 0): no account is an empty list.
   const { client } = await setupServer(t, ENV, (url) =>
-    url.includes("GetPlayerSummaries") ? jsonResponse({}, { status: 400 }) : router(url),
+    url.includes("GetPlayerSummaries") ? jsonResponse({ response: { players: [] } }) : router(url),
   );
   const res = await client.callTool({
     name: "get_player_summary",
@@ -1735,9 +1737,9 @@ test("get_player_summary: a raw HTTP 400 from GetPlayerSummaries reports found:f
   assert.equal(s.found, false);
 });
 
-test("get_player_bans: a raw HTTP 400 from GetPlayerBans reports found:false, not a raw error", async (t) => {
+test("get_player_bans: no such account (an empty 200, probed live) reports found:false", async (t) => {
   const { client } = await setupServer(t, ENV, (url) =>
-    url.includes("GetPlayerBans") ? jsonResponse({}, { status: 400 }) : router(url),
+    url.includes("GetPlayerBans") ? jsonResponse({ players: [] }) : router(url),
   );
   const res = await client.callTool({
     name: "get_player_bans",

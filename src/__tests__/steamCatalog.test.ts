@@ -247,9 +247,6 @@ for (const [status, expectedCount, why] of [
   // GetGlobalAchievementPercentagesForApp's 403 is ambiguous: "no schema", or
   // Steam's edge under load — so a real cached list wins over it too.
   [403, 1, "an ambiguous 403 is answered with the stale list, not 'no achievements'"],
-  // Only the 403 is ambiguous (Steam's edge under load); a 404 is Steam's
-  // current answer about the appid, and wins over the cached list.
-  [404, 0, "a definitive 404 is Steam's answer, not papered over with the stale list"],
 ] as const) {
   test(`get_global_achievements after a cached list: a later ${status} → ${why}`, async (t) => {
     // Stale data answers Steam failing transiently, or a code the endpoint

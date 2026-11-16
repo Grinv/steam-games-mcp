@@ -20,7 +20,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Report a server bug as "Internal error in steam-games-mcp" and log its stack, instead of showing the agent the raw exception text.
 - Keep a Steam failure's own cause in a tool error: a rate-limited or failed tag dictionary now says so and whether to retry, and an unrecognized `language` is named as the cause instead of advising a retry.
 - Drop the made-up "(404)" from not-found errors that had no HTTP 404 behind them.
-- Report a rejected `STEAM_API_KEY` as its own error ("Steam rejected the configured STEAM_API_KEY … retrying won't help") on every key-gated tool.
+- Report a rejected `STEAM_API_KEY` as its own error ("Steam rejected the configured STEAM_API_KEY … retrying won't help") on every key-gated tool. This includes the library tools (`get_owned_games`, `get_recently_played`), where Steam sends that page as a 401, not the 403 elsewhere.
 - Word `resolve_vanity_url`'s and `get_player_achievements`' `found: false` reasons ourselves instead of passing on Steam's own text (e.g. a bare "No match").
 
 ### Fixed
@@ -36,6 +36,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Cache Steam's "no such app" answer for `get_game` too, instead of asking again on every call.
 - Stop a system clock stepped back (NTP, a restored VM) from stalling every store request for as long as the step, or keeping cached data fresh that long.
 - Keep a good cached tag dictionary or price correction when Steam briefly answers with one it can't use, instead of caching that answer.
+- Report an unexpected HTTP 400 from `get_player_summary` or `get_player_bans` as an invalid request instead of "no such account": Steam answers no account with an empty list there, never a 400 (checked live).
 - Log upstream failures the server answers around (missing player names, price corrections, achievement rarity, stale cache), which used to leave no trace.
 
 ## [0.17.2] - 2026-11-05

@@ -7,6 +7,8 @@ import { HttpClient } from "../lib/http.ts";
 import { RateLimiter } from "../lib/rateLimit.ts";
 import { ApiError } from "../lib/errors.ts";
 import { optionalParts } from "../lib/call.ts";
+import { call } from "../lib/endpoint.ts";
+import { Steam } from "./endpoints.ts";
 import {
   detailApp,
   summarizeFeatured,
@@ -15,14 +17,10 @@ import {
   summarizeSpecials,
   type FeaturedResponse,
   type PriceDetailsResponse,
-  type ReviewHistogramResponse,
-  type StoreApp,
 } from "../format/storefront.ts";
 import type { PurchasePrices } from "../format/store.ts";
 import type { Logger } from "../lib/logger.ts";
 import type { Config } from "../config.ts";
-
-type AppDetailsResponse = Record<string, { success?: boolean; data?: StoreApp }>;
 
 // appdetails sections detailApp reads ("basic" carries name/type/description/
 // is_free/required_age/dlc/requirements/languages/website/controller support).
@@ -62,25 +60,6 @@ export interface PurchasePriceSource {
   ): Promise<PurchasePrices>;
 }
 
-// appdetails answers every appid it's asked about, a nonexistent one too
-// ({success:false}; verified live 2026-11-16 on 100 mixed ids — the only
-// omission was appid 0, which no tool schema accepts). So a body without an
-// entry for each requested appid is unusable: it fails
-// like the request did — never cached, a stale copy stands in, the gap is
-// noted — instead of reading as "not available" or crashing on a lookup.
-function answersEvery(appids: number[]): (body: unknown) => void {
-  return (body) => {
-    // getJson already rejects a body that isn't an object.
-    const missing = appids.filter((id) => !(String(id) in (body as object)));
-    if (missing.length === 0) return;
-    throw new ApiError({
-      code: "bad_response",
-      message: `appdetails answered without an entry for ${missing.length} of ${appids.length} appids`,
-      retryable: true,
-    });
-  };
-}
-
 export class StorefrontClient {
   readonly #http: HttpClient;
   readonly #cc: string;
@@ -118,15 +97,16 @@ export class StorefrontClient {
     // on its own (lib/cache.ts), so a failed correction never taints the
     // cached details, and a warm hit makes no upstream call at all.
     const [res, prices] = await Promise.all([
-      this.#http.getJson<AppDetailsResponse>("api/appdetails", {
-        query: { appids: appid, cc, l, filters: APPDETAILS_FILTERS },
-        cache: true,
-        validate: answersEvery([appid]),
-      }),
+      call(
+        this.#http,
+        Steam.AppDetails,
+        { appids: appid, cc, l, filters: APPDETAILS_FILTERS },
+        { cache: true },
+      ),
       this.#pricing.getPurchasePrices([appid], cc, l, { cache: true }),
     ]);
     const entry = res[String(appid)];
-    if (!entry?.success || !entry.data) {
+    if (!entry?.success || !entry.data || Array.isArray(entry.data)) {
       // appdetails answers {success:false} both for "no such app" and for "not
       // sold in this country", so naming only the first sends the agent off to
       // re-search a perfectly good appid. Confirmed live: appid 1174180 (Red
@@ -170,9 +150,10 @@ export class StorefrontClient {
     const [settled, overrides] = await Promise.all([
       Promise.allSettled(
         chunks.map((chunk) =>
-          this.#http.getJson<PriceDetailsResponse>("api/appdetails", {
-            query: { appids: chunk.join(","), cc, filters: "price_overview" },
-            validate: answersEvery(chunk),
+          call(this.#http, Steam.AppDetails, {
+            appids: chunk.join(","),
+            cc,
+            filters: "price_overview",
           }),
         ),
       ),
@@ -200,10 +181,12 @@ export class StorefrontClient {
 
   // Review trend over time (monthly history + recent daily). Cached briefly.
   async getReviewHistogram(appid: number): Promise<Record<string, unknown>> {
-    const res = await this.#http.getJson<ReviewHistogramResponse>(`appreviewhistogram/${appid}`, {
-      query: { l: this.#l },
-      cache: true,
-    });
+    const res = await call(
+      this.#http,
+      Steam.ReviewHistogram,
+      { appid, l: this.#l },
+      { cache: true },
+    );
     return summarizeReviewHistogram(res);
   }
 
@@ -211,10 +194,7 @@ export class StorefrontClient {
   // the specials slice): one cached request per cc/l, so calling either — or
   // both — hits the store at most once; each shapes the payload itself.
   #featured(cc: string, l: string): Promise<FeaturedResponse> {
-    return this.#http.getJson<FeaturedResponse>("api/featuredcategories", {
-      query: { cc, l },
-      cache: true,
-    });
+    return call(this.#http, Steam.FeaturedCategories, { cc, l }, { cache: true });
   }
 
   async getFeatured(country?: string, language?: string): Promise<Record<string, unknown>> {
