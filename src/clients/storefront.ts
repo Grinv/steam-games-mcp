@@ -130,10 +130,10 @@ export class StorefrontClient {
   // with filters=price_overview; we chunk to keep URLs/responses bounded and
   // merge. Not cached — prices change and the appid set varies per call.
   //
-  // Promise.allSettled, not a sequential await: summarizePrices already emits
-  // `available:false` for any appid missing from the merged map, and this tool's
-  // contract is "one row per id, never dropped" — so one chunk's transient
-  // failure should cost that chunk's prices, not the whole call. Awaiting in a
+  // Promise.allSettled, not a sequential await: summarizePrices emits
+  // `available:null` (unknown) for any appid missing from the merged map, and
+  // this tool's contract is "one row per id, never dropped" — so one chunk's
+  // transient failure should cost that chunk's prices, not the whole call. Awaiting in a
   // bare loop threw the successful chunks away too. (Mirrors web.ts's
   // #playerSummaries, whose chunk loop was converted for the same reason.)
   async getPrices(appids: number[], country?: string): Promise<Record<string, unknown>> {

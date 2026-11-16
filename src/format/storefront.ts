@@ -230,9 +230,13 @@ export function summarizePrices(
 ): z.infer<typeof getPricesOutput> {
   const prices = appids.map((id) => {
     const entry = merged[String(id)];
-    const data = entry?.data;
+    // appdetails answers every appid it's asked about, a bad one too
+    // ({success:false}, verified live 2026-11-16) — so no entry at all means
+    // the chunk holding it failed: unknown, never "not available".
+    if (!entry) return { appid: id, available: null };
+    const data = entry.data;
     const po = data && !Array.isArray(data) ? data.price_overview : undefined;
-    if (!entry?.success) return { appid: id, available: false as const };
+    if (!entry.success) return { appid: id, available: false as const };
     if (!po) return { appid: id, available: true as const, priced: false as const };
     return {
       appid: id,

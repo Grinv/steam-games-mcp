@@ -424,8 +424,15 @@ describe("get_prices", () => {
     const appids = Array.from({ length: 150 }, (_, i) => i + 1);
     const res = await client.callTool({ name: "get_prices", arguments: { appids } });
     assert.equal(res.isError, undefined);
-    const s = res.structuredContent as { count: number; notes: string[] };
+    const s = res.structuredContent as {
+      count: number;
+      prices: { appid: number; available: boolean | null }[];
+      notes: string[];
+    };
     assert.equal(s.count, 150);
+    // The failed chunk's rows are unknown (null), not "not available" (false).
+    assert.ok(s.prices.slice(0, 100).every((p) => p.available === true));
+    assert.ok(s.prices.slice(100).every((p) => p.available === null));
     assert.deepEqual(s.notes.length, 1);
     assert.match(s.notes[0]!, /^Prices of 50 appids unavailable: .*\(503\)/);
   });
@@ -454,8 +461,8 @@ describe("get_prices", () => {
   test("get_prices keeps the successful chunks when one chunk fails", async (t) => {
     // The chunk loop used to await sequentially, so one chunk's 5xx threw out of
     // the loop and discarded the chunks that had already succeeded — even though
-    // summarizePrices marks any missing appid available:false and the tool
-    // promises "one row per id, never dropped".
+    // summarizePrices keeps a row for every missing appid and the tool promises
+    // "one row per id, never dropped".
     const { client } = await setupServer(
       t,
       { STEAM_STORE_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
@@ -473,15 +480,15 @@ describe("get_prices", () => {
     const res = await client.callTool({ name: "get_prices", arguments: { appids } });
     const s = res.structuredContent as {
       count: number;
-      prices: { appid: number; available: boolean }[];
+      prices: { appid: number; available: boolean | null }[];
     };
     assert.notEqual(res.isError, true);
     assert.equal(s.count, 150);
-    // First chunk survived; the failed chunk's ids degrade to available:false.
+    // First chunk survived; the failed chunk's ids are unknown, not unavailable.
     assert.equal(s.prices.find((p) => p.appid === 1)!.available, true);
     assert.equal(s.prices.find((p) => p.appid === 100)!.available, true);
-    assert.equal(s.prices.find((p) => p.appid === 101)!.available, false);
-    assert.equal(s.prices.find((p) => p.appid === 150)!.available, false);
+    assert.equal(s.prices.find((p) => p.appid === 101)!.available, null);
+    assert.equal(s.prices.find((p) => p.appid === 150)!.available, null);
   });
 
   test("get_prices surfaces an error when every chunk fails (not 150 available:false rows)", async (t) => {
@@ -498,15 +505,17 @@ describe("get_prices", () => {
     assert.equal(res.isError, true);
   });
 
-  test("get_prices reports unavailable when an appid's key is entirely absent from the response", async (t) => {
-    // Distinct from an explicit {success:false} entry — Steam can just omit
-    // the key altogether for some appids in a batch response.
+  test("get_prices reports unknown (null), not unavailable, when an appid's key is absent", async (t) => {
+    // Distinct from an explicit {success:false} entry. appdetails answers every
+    // appid it's asked about, a nonexistent one too (verified live 2026-11-16:
+    // 99 of 100 mixed ids, the omitted one appid 0, which the schema rejects),
+    // so an absent key means we don't know — never "not sold".
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("/api/appdetails") ? jsonResponse({}) : jsonResponse({}),
     );
     const res = await client.callTool({ name: "get_prices", arguments: { appids: [999] } });
-    const s = res.structuredContent as { prices: { appid: number; available: boolean }[] };
-    assert.equal(s.prices[0]!.available, false);
+    const s = res.structuredContent as { prices: { appid: number; available: boolean | null }[] };
+    assert.equal(s.prices[0]!.available, null);
   });
 
   test(`get_prices rejects appids outside the 1-${PRICES_MAX} bound before calling the upstream`, async (t) => {

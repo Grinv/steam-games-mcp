@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking:** mark a `get_prices` row whose price Steam failed to return as `available: null` (unknown, explained in `notes`) instead of `available: false`, which now only means the appid doesn't exist or isn't sold in that country.
 - Stop Steam requests for a tool call the client cancels, instead of letting them run on (including the retry backoff and the store rate-limit wait).
 - Build the bundle with tsdown instead of tsup, shrinking `dist/index.js` from 890 kB to 527 kB.
 - Report a server bug as "Internal error in steam-games-mcp" and log its stack, instead of showing the agent the raw exception text.
