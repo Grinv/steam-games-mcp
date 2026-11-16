@@ -20,12 +20,12 @@ export default defineConfig({
     // new transitive dep after an SDK bump), so it gets a supply-chain look.
     onlyBundle: bundledDeps,
   },
-  // Minify to shrink the shipped bundle (npm + .mcpb), but keep identifiers:
-  // an internal error is logged with its stack and the agent is told to
-  // report it, so the stack must name real functions (toProblem,
-  // SteamWebClient…). Mangling saved ~29 KB gzipped (143 vs 172 KB) at the
-  // cost of every stack frame reading `a`/`b` — no sourcemap ships with it.
-  minify: { compress: true, mangle: false, codegen: { removeWhitespace: true } },
+  // Minify to shrink the shipped bundle (npm + .mcpb). A reported internal
+  // error's stack still resolves to source: the build is reproducible and a
+  // sourcemap doesn't move the code, so rebuilding the release tag with
+  // `--sourcemap` maps its positions back (AGENTS.md, "Reading a reported
+  // stack"). Keeping names instead cost ~29 KB gzipped (143 → 172 KB).
+  minify: true,
   banner: { js: "#!/usr/bin/env node" },
   // Keep dist/index.js (not .mjs) so manifest entry_point and bin resolve.
   fixedExtension: false,

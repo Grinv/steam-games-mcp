@@ -239,6 +239,20 @@ specific sub-request's failure on cue, so bugs in that exact path (an
 unsanitized error message, an outer `Promise.all` quietly defeating the fix)
 need the code read, not called.
 
+## Reading a reported stack
+
+An internal error is logged with its stack (stderr), from a minified bundle
+whose frames read `dist/index.js:<line>:<col>`. The build is reproducible and
+`--sourcemap` doesn't move the code, so map it back: check out the release
+tag, `npm ci && npx tsdown --sourcemap`, then resolve each frame with
+`node:module`'s `SourceMap` (`new SourceMap(JSON.parse(readFileSync(
+"dist/index.js.map"))).findEntry(line - 1, col - 1)` → `originalSource`,
+`originalLine + 1`). No sourcemap ships: the `.mcpb` excludes it anyway.
+This holds because `release.yml` builds and publishes from the tag in CI
+(`npm ci`, `npm run build`, `npm publish --provenance`) — verified: the
+published 0.17.2 `dist/index.js` and a rebuild of tag `v0.17.2` are
+byte-identical. Never publish a hand-built `dist/`.
+
 ## Before opening a PR
 
 Run `npm run build && npm test && npm run lint && npm run format:check`.
