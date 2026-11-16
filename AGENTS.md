@@ -140,8 +140,21 @@ npm run inspector      # run under the MCP Inspector
     Problem rides in `_meta["io.github.Grinv/problem"]`. A partial failure
     inside a successful result (e.g. `find_friends_who_own`'s per-friend
     reason) uses `toProblem(...).detail` too.
-  - A degradation (enrichment or chunk failure answered around) catches only
-    `ApiError` — a bug must propagate — and logs it at `warn`.
+- **A tool's answer is a required core plus optional parts** (a price
+  correction, rarity, a Steam level, names, tags). A required part is a plain
+  `await`: its failure is the tool's error. An optional one goes through
+  `optional(what, promise)` (`lib/call.ts`), or `noteDegraded(what, err)` for
+  one failed chunk of a batch: Steam failing becomes `undefined` plus a note,
+  a bug or the call's cancellation still propagates. Never a hand-written
+  `try/catch` that degrades; every `allSettled`/`catch` around a Steam call is
+  either that, or a code-based reading of a known answer (`withFallbackOn`,
+  "403 → private"). A formatter renders `undefined` as unknown (`null`/empty),
+  never as a negative fact. `guard` turns the call's notes (and any stale
+  fallback) into `structuredContent.notes` — the only place the model looks
+  (verified: Claude Code feeds it structuredContent alone, not other content
+  blocks or `_meta`) — logs them at `warn`, and every outputSchema carries
+  the optional field via `withNotes`. `degradation.test.ts` fails every tool's
+  every endpoint in turn and requires an error or a note, never silence.
 - **Caching is per request**, in `HttpClient` (`getJson(..., { cache: true })`,
   `lib/cache.ts`): one entry is one Steam response body, keyed by URL, so
   shaping and combining requests always run after the cache and a partial

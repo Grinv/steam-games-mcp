@@ -28,8 +28,16 @@ shared with the sibling servers (tmdb-mcp).
 The text never includes Steam's raw response body (it's an HTML page) or an
 error's internal message; those go to the server log on stderr.
 
-A successful result served from a stale cache entry, because Steam failed and
-an earlier answer was on hand, carries `_meta["io.github.Grinv/stale"]: true`.
+## Partial answers: `notes`
+
+A successful result may still be missing a part Steam failed to provide (a
+price check, achievement rarity, a Steam level, player names, game tags, one
+chunk of a batch), or include an older cached copy of something Steam failed
+to answer just now. Such a result carries `notes` in its structured content —
+one sentence per gap, saying what and why — because that is the part of a
+result the model reads. A missing part is then null or empty because it is
+unknown, not because Steam has none. A result with a cached copy also carries
+`_meta["io.github.Grinv/stale"]: true` for the client application.
 
 ## invalid_key
 

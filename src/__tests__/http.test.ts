@@ -1,6 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { HttpClient, callScope } from "../lib/http.ts";
+import { HttpClient } from "../lib/http.ts";
+import { callScope, type CallState } from "../lib/call.ts";
 import { ApiError } from "../lib/errors.ts";
 import { silentLogger, jsonResponse, htmlResponse, mockFetch, installFetch } from "./helpers.ts";
 import { USER_AGENT } from "../version.ts";
@@ -188,13 +189,13 @@ describe("response cache (cache: true)", () => {
     const c = client({ cacheTtlMs: 1, retries: 2 });
     await warmThenExpire(c);
     fail = true;
-    const scope = { staleErrors: [] as unknown[] };
+    const scope: CallState = { degraded: [], stale: [] };
     const v = await callScope.run(scope, () => c.getJson("thing", { cache: true }));
     assert.deepEqual(v, { v: 1 });
     // One request, not three: with a stale copy to fall back on, retrying
     // would only have delayed the same answer.
     assert.equal(mock.calls.length, 2);
-    assert.equal(scope.staleErrors.length, 1);
+    assert.equal(scope.stale.length, 1);
   });
 
   test("a definitive answer (4xx) is never papered over with a stale copy", async (t) => {
@@ -306,7 +307,10 @@ describe("response cache (cache: true)", () => {
     const c = client({ cacheTtlMs: 1 });
     await warmThenExpire(c);
     fail = true;
-    const scopes = [{ staleErrors: [] as unknown[] }, { staleErrors: [] as unknown[] }];
+    const scopes: CallState[] = [
+      { degraded: [], stale: [] },
+      { degraded: [], stale: [] },
+    ];
     const [a, b] = await Promise.all(
       scopes.map((s) => callScope.run(s, () => c.getJson("thing", { cache: true }))),
     );
@@ -314,7 +318,7 @@ describe("response cache (cache: true)", () => {
     assert.equal(mock.calls.length, 2); // warm-up + one shared failing request
     // Each caller's own tool call is flagged, not just the first one's.
     assert.deepEqual(
-      scopes.map((s) => s.staleErrors.length),
+      scopes.map((s) => s.stale.length),
       [1, 1],
     );
   });
@@ -337,7 +341,7 @@ describe("cancellation (the call's signal, via callScope)", () => {
     return { mock, seen };
   }
   const inCall = <T>(signal: AbortSignal, fn: () => Promise<T>) =>
-    callScope.run({ signal, staleErrors: [] }, fn);
+    callScope.run({ signal, degraded: [], stale: [] }, fn);
 
   test("aborts the fetch itself and fails as cancelled, not a timeout or network error", async (t) => {
     const { mock, seen } = hangingFetch();

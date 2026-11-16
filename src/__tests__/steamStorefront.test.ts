@@ -410,6 +410,26 @@ describe("get_prices", () => {
     assert.equal(priceCalls.length, 2);
   });
 
+  test("get_prices: one chunk failing costs only its rows, and says so in notes", async (t) => {
+    // The degradation test (degradation.test.ts) fails a whole endpoint; this
+    // is the partial case it can't reach — one of two appdetails chunks.
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      const ids = new URL(url).searchParams.get("appids")?.split(",") ?? [];
+      if (url.includes("/api/appdetails") && ids.includes("150"))
+        return jsonResponse({}, { status: 503 });
+      const body: Record<string, unknown> = {};
+      for (const id of ids) body[id] = { success: true, data: [] };
+      return jsonResponse(body);
+    });
+    const appids = Array.from({ length: 150 }, (_, i) => i + 1);
+    const res = await client.callTool({ name: "get_prices", arguments: { appids } });
+    assert.equal(res.isError, undefined);
+    const s = res.structuredContent as { count: number; notes: string[] };
+    assert.equal(s.count, 150);
+    assert.deepEqual(s.notes.length, 1);
+    assert.match(s.notes[0]!, /^Prices of 50 appids unavailable: .*\(503\)/);
+  });
+
   test("get_prices chunks exactly on the 100-appid boundary (100 → 1 call, 101 → 2)", async (t) => {
     const { client, mock } = await setupServer(t, ENV, (url) => {
       const ids = new URL(url).searchParams.get("appids")?.split(",") ?? [];

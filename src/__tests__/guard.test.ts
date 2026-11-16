@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ApiError } from "../lib/errors.ts";
-import { callScope } from "../lib/http.ts";
+import { callScope, optional } from "../lib/call.ts";
 import { createLogger, type LogLevel } from "../lib/logger.ts";
 import { PROBLEM_META_KEY, STALE_META_KEY, jsonResult, type Problem } from "../lib/result.ts";
 import { toolOutput, type CallContext } from "../tools/guard.ts";
@@ -61,28 +61,60 @@ test("guard converts a thrown non-Error value without crashing", async () => {
   }
 });
 
-test("a stale-cache fallback during the call flags _meta and logs the upstream failure", async () => {
+test("a stale-cache fallback is told to the model in notes, flagged in _meta, and logged", async () => {
   const { out, lines, restore } = setup();
   try {
     const r = await out.reply(async () => {
       // What lib/http.ts does when it answers a failed request from cache.
-      callScope
-        .getStore()
-        ?.staleErrors.push(
-          new ApiError({ code: "server_error", status: 503, message: "HTTP 503" }),
-        );
+      callScope.getStore()?.stale.push({
+        err: new ApiError({ code: "server_error", status: 503, message: "HTTP 503" }),
+        storedAt: Date.UTC(2026, 10, 16, 14, 3),
+      });
       return { v: 1 };
     }, ctx());
     assert.equal(r.isError, undefined);
-    assert.deepEqual(r.structuredContent, { v: 1 });
+    const sc = r.structuredContent as { v: number; notes: string[] };
+    assert.equal(sc.v, 1);
+    assert.equal(sc.notes.length, 1);
+    assert.match(
+      sc.notes[0]!,
+      /cached copy from 2026-11-16T14:03:00\.000Z.*returned an error \(503\)/,
+    );
+    assert.deepEqual(JSON.parse(r.content[0]!.text), sc); // the text mirror says the same
     assert.equal((r._meta as Record<string, unknown>)[STALE_META_KEY], true);
     assert.ok(
       lines.some((l) => l.level === "warn" && /stale cache data after:.*HTTP 503/s.test(l.text)),
     );
 
-    // A fresh answer carries no flag.
+    // A complete, fresh answer carries neither.
     const fresh = await out.guard(async () => jsonResult({ v: 2 }), ctx());
     assert.equal(fresh._meta, undefined);
+    assert.equal("notes" in (fresh.structuredContent ?? {}), false);
+  } finally {
+    restore();
+  }
+});
+
+test("an optional part Steam failed to provide becomes undefined plus a note; a bug propagates", async () => {
+  const { out, lines, restore } = setup();
+  try {
+    const r = await out.reply(async () => {
+      const level = await optional(
+        "Steam level",
+        Promise.reject(new ApiError({ code: "rate_limited", status: 429, message: "HTTP 429" })),
+      );
+      return { level: level ?? null };
+    }, ctx());
+    const sc = r.structuredContent as { level: null; notes: string[] };
+    assert.equal(sc.level, null);
+    assert.match(sc.notes[0]!, /^Steam level unavailable: .*rate-limiting.*\(429\)/);
+    assert.ok(lines.some((l) => l.level === "warn" && /Steam level unavailable/.test(l.text)));
+
+    const bug = await out.reply(async () => {
+      await optional("Steam level", Promise.reject(new TypeError("boom")));
+      return {};
+    }, ctx());
+    assert.match(bug.content[0]!.text, /^Internal error/);
   } finally {
     restore();
   }

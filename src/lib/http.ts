@@ -1,26 +1,14 @@
 // Thin fetch wrapper shared by both API clients: timeouts, bounded retries
 // with exponential backoff (honoring Retry-After), a default User-Agent,
 // uniform mapping of failures to ApiError, and the response cache.
-import { AsyncLocalStorage } from "node:async_hooks";
 // A namespace import, not a destructured one: node:test's mocked timers only
 // replace what's looked up on the module at call time.
 import * as timers from "node:timers/promises";
 import { ApiError, classifyStatus, type ApiErrorCode } from "./errors.ts";
 import { TtlCache } from "./cache.ts";
+import { callScope } from "./call.ts";
 import type { Logger } from "./logger.ts";
 import { USER_AGENT } from "../version.ts";
-
-/** One tool call, as the requests made on its behalf see it: the call's
- *  cancellation `signal`, and the upstream failures it was answered around
- *  with stale cache data (`staleErrors`, logged and flagged in the result's
- *  _meta by tools/guard.ts, which runs each call inside one scope). Outside a
- *  scope (e.g. prompt completions) both are no-ops. Async context rather than
- *  parameters threaded through every client method: a request can sit many
- *  calls deep. */
-export const callScope = new AsyncLocalStorage<{
-  signal?: AbortSignal;
-  staleErrors: unknown[];
-}>();
 
 export interface RequestOptions {
   query?: Record<string, string | number | boolean | undefined>;
@@ -124,8 +112,8 @@ export class HttpClient {
       const staleWins =
         err instanceof ApiError && (err.retryable || options.staleOn?.includes(err.code));
       if (stale === undefined || !staleWins) throw err;
-      callScope.getStore()?.staleErrors.push(err);
-      return stale;
+      callScope.getStore()?.stale.push({ err: err as ApiError, storedAt: stale.storedAt });
+      return stale.value;
     }
   }
 

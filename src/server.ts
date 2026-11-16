@@ -25,7 +25,9 @@ const INSTRUCTIONS =
   "get_recently_played and get_player_achievements take a 17-digit SteamID64 — use resolve_vanity_url " +
   "to convert a custom profile name first, and note the target profile must be public. For " +
   "personalized picks based on a player's own library (not manual filters), use get_recommended_games. " +
-  "Tools that need the key report clearly when it is unset.";
+  "Tools that need the key report clearly when it is unset. When a result carries `notes`, read " +
+  "them first: part of the answer is missing or comes from an older cached copy because Steam " +
+  "failed, and a missing part is null/empty because it is unknown, not because Steam has none.";
 
 // Tools/prompts are registered once here and never change for the life of
 // the process (no dynamic add/remove) and carry no per-session variation, so

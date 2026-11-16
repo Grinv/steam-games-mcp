@@ -6,6 +6,7 @@
 import { HttpClient } from "../lib/http.ts";
 import { RateLimiter } from "../lib/rateLimit.ts";
 import { ApiError } from "../lib/errors.ts";
+import { noteDegraded } from "../lib/call.ts";
 import {
   detailApp,
   summarizeFeatured,
@@ -69,10 +70,8 @@ export class StorefrontClient {
   // format/storefront.ts's overridePrice() for what's wrong with the numbers
   // the Storefront API itself returns.
   readonly #pricing: PurchasePriceSource;
-  readonly #logger: Logger;
 
   constructor(config: Config, logger: Logger, pricing: PurchasePriceSource) {
-    this.#logger = logger;
     this.#cc = config.country;
     this.#l = config.language;
     this.#pricing = pricing;
@@ -170,11 +169,11 @@ export class StorefrontClient {
     if (chunks.length > 0 && fulfilled.length === 0) {
       throw (settled[0] as PromiseRejectedResult).reason;
     }
-    for (const r of settled) {
-      if (r.status === "fulfilled") continue;
+    settled.forEach((r, i) => {
+      if (r.status === "fulfilled") return;
       if (!(r.reason instanceof ApiError)) throw r.reason;
-      this.#logger.warn("prices unavailable for a chunk of appids:", r.reason);
-    }
+      noteDegraded(`Prices of ${chunks[i]!.length} appids`, r.reason);
+    });
     const merged: PriceDetailsResponse = {};
     for (const r of fulfilled) Object.assign(merged, r.value);
     return summarizePrices(merged, appids, overrides);

@@ -8,7 +8,7 @@ import type { StorefrontClient } from "../clients/storefront.ts";
 import type { StoreServiceClient } from "../clients/storeService.ts";
 import { ApiError } from "../lib/errors.ts";
 import { jsonResult } from "../lib/result.ts";
-import type { ToolOutput } from "./guard.ts";
+import { withNotes, type ToolOutput } from "./guard.ts";
 import { ITEMS_MAX, PRICES_MAX, READ_ONLY, appid, country, language } from "./common.ts";
 import {
   getFeaturedOutput,
@@ -62,7 +62,7 @@ export function registerStorefrontTools(
         .refine((input) => input.appid !== undefined || input.name !== undefined, {
           message: "Provide either appid or name.",
         }),
-      outputSchema: getGameOutput,
+      outputSchema: withNotes(getGameOutput),
       annotations: READ_ONLY,
     },
     ({ appid: id, name, country: cc, language: l }, ctx) =>
@@ -100,7 +100,7 @@ export function registerStorefrontTools(
         "example review text instead of a trend, use get_game_reviews. Get the appid from " +
         "search_games. No API key required.",
       inputSchema: z.strictObject({ appid }),
-      outputSchema: getReviewHistogramOutput,
+      outputSchema: withNotes(getReviewHistogramOutput),
       annotations: READ_ONLY,
     },
     ({ appid: id }, ctx) => reply(() => store.getReviewHistogram(id), ctx),
@@ -131,7 +131,7 @@ export function registerStorefrontTools(
           .describe(`Steam appids to price (1-${PRICES_MAX}). Split a longer list across calls.`),
         country,
       }),
-      outputSchema: getPricesOutput,
+      outputSchema: withNotes(getPricesOutput),
       annotations: READ_ONLY,
     },
     ({ appids, country: cc }, ctx) => reply(() => store.getPrices(appids, cc), ctx),
@@ -146,7 +146,7 @@ export function registerStorefrontTools(
         "discount % and original/final price. For ALL catalog discounts (not just the front page), " +
         "use discover_games with min_discount. No API key required.",
       inputSchema: z.strictObject({ country, language }),
-      outputSchema: getSpecialsOutput,
+      outputSchema: withNotes(getSpecialsOutput),
       annotations: READ_ONLY,
     },
     ({ country: cc, language: l }, ctx) => reply(() => store.getSpecials(cc, l), ctx),
@@ -162,7 +162,7 @@ export function registerStorefrontTools(
         "on the store front page' overview. For just current discounts use get_specials (lighter), " +
         "or discover_games for catalog-wide deals with filters. No API key required.",
       inputSchema: z.strictObject({ country, language }),
-      outputSchema: getFeaturedOutput,
+      outputSchema: withNotes(getFeaturedOutput),
       annotations: READ_ONLY,
     },
     ({ country: cc, language: l }, ctx) => reply(() => store.getFeatured(cc, l), ctx),

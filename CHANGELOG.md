@@ -10,6 +10,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Attach every tool error to its result as an RFC 9457 problem in `_meta["io.github.Grinv/problem"]` (type, title, detail, `retryable`, Steam's status), alongside the text the model reads; see [docs/errors.md](docs/errors.md).
 - Flag a result served from stale cache after a Steam failure with `_meta["io.github.Grinv/stale"]`.
+- Tell the model in a result's `notes` what part of the answer is missing or comes from an older cached copy because Steam failed (a price check, achievement rarity, Steam level, player names, game tags, one chunk of a batch), instead of returning those gaps as if they were Steam's answer.
 
 ### Changed
 

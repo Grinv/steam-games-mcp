@@ -14,6 +14,9 @@
 interface Entry {
   value: string;
   expires: number;
+  /** Wall-clock time it was stored, for telling a reader how old a stale copy
+   *  is — display only; freshness is judged on `expires` (monotonic). */
+  storedAt: number;
 }
 
 export class TtlCache {
@@ -41,9 +44,11 @@ export class TtlCache {
     return hit.expires > performance.now() ? hit.value : undefined;
   }
 
-  /** Any cached value regardless of freshness — used for stale fallback. */
-  getStale(key: string): string | undefined {
-    return this.#map.get(key)?.value;
+  /** Any cached value regardless of freshness, and when it was stored — used
+   *  for stale fallback. */
+  getStale(key: string): { value: string; storedAt: number } | undefined {
+    const hit = this.#map.get(key);
+    return hit && { value: hit.value, storedAt: hit.storedAt };
   }
 
   set(key: string, value: string): void {
@@ -52,7 +57,7 @@ export class TtlCache {
     // position, so a key refreshed every TTL (the tag dictionary) would
     // otherwise be the first evicted and lose its stale fallback.
     this.#delete(key);
-    this.#map.set(key, { value, expires: performance.now() + this.#ttlMs });
+    this.#map.set(key, { value, expires: performance.now() + this.#ttlMs, storedAt: Date.now() });
     this.#size += value.length;
     for (const oldest of this.#map.keys()) {
       if (this.#size <= this.#maxSize) break;

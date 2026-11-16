@@ -12,7 +12,7 @@
 // one rate limiter and one cache, not one each.
 import { ZodError } from "zod";
 import { ApiError, withFallbackOn } from "../lib/errors.ts";
-import type { Logger } from "../lib/logger.ts";
+import { noteDegraded } from "../lib/call.ts";
 import type { RequestOptions } from "../lib/http.ts";
 import { notFound } from "../format/shared.ts";
 import {
@@ -196,11 +196,9 @@ export class StoreServiceClient {
   readonly #get: Get;
   readonly #l: string;
   readonly #country: string;
-  readonly #logger: Logger;
 
-  constructor(opts: { get: Get; language: string; country: string; logger: Logger }) {
+  constructor(opts: { get: Get; language: string; country: string }) {
     this.#get = opts.get;
-    this.#logger = opts.logger;
     this.#l = opts.language;
     this.#country = opts.country;
   }
@@ -296,7 +294,7 @@ export class StoreServiceClient {
         language,
       );
     }
-    this.#logger.warn("tag names unavailable; cards list no tags:", tagMap);
+    noteDegraded("Game tags", tagMap);
     return undefined;
   }
 
@@ -555,11 +553,16 @@ export class StoreServiceClient {
     // getGame would otherwise turn an enrichment's upstream failure into a
     // failed tool call.
     const merged: PurchasePrices = {};
-    for (const r of settled) {
+    settled.forEach((r, i) => {
       if (r.status === "fulfilled") Object.assign(merged, r.value);
       else if (!(r.reason instanceof ApiError)) throw r.reason;
-      else this.#logger.warn("purchase-price correction unavailable for a chunk:", r.reason);
-    }
+      else
+        noteDegraded(
+          `Price check of ${chunks[i]!.length} appids against the store's purchase options ` +
+            "(the price shown may be an upgrade or bundle SKU's, not the game's)",
+          r.reason,
+        );
+    });
     return merged;
   }
 

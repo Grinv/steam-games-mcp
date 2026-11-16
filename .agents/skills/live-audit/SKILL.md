@@ -347,6 +347,15 @@ there) for:
 price_overview`), so the suite agrees with the bug instead of catching it.
   Same family as 0.13.0's `get_featured` "0.00 USD" fix — which is exactly why
   it needs the whole-codebase sweep §6 asks for, not a one-site patch.
+- **A gap the model can't see.** An optional part of an answer (enrichment,
+  one chunk of a batch) that Steam failed to provide must go through
+  `optional()`/`noteDegraded()` (`lib/call.ts`) so it lands in the result's
+  `notes`; a hand-written `catch` that degrades, a `logger.warn` as the only
+  trace, or a formatter turning "unknown" into a negative fact (`available:
+false`, an uncorrected price shown as checked) is this bug. Run
+  `degradation.test.ts` after adding a tool or a request — it covers both
+  automatically — and add a targeted test for a partial-batch path it can't
+  reach (one chunk of several failing).
 - **A cache that stores a meaning instead of a response.** The cache is
   per request (`HttpClient`, `cache: true`): one entry is one Steam body,
   and shaping, validation and combining requests run after it. Check that no

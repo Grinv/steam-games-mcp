@@ -47,7 +47,7 @@ test("ages entries on a monotonic clock: a wall clock stepped back keeps nothing
   t.mock.timers.setTime(Date.now() - 3_600_000);
   await tick(30);
   assert.equal(cache.get("k"), undefined);
-  assert.equal(cache.getStale("k"), "v"); // stale fallback still sees it
+  assert.equal(cache.getStale("k")?.value, "v"); // stale fallback still sees it
 });
 
 describe("wrap", () => {

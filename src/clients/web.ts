@@ -10,6 +10,7 @@ import { HttpClient } from "../lib/http.ts";
 import { RateLimiter } from "../lib/rateLimit.ts";
 import { ApiError, type ApiErrorCode, withFallbackOn } from "../lib/errors.ts";
 import { toProblem } from "../lib/result.ts";
+import { noteDegraded, optional } from "../lib/call.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
 import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.ts";
 import {
@@ -159,7 +160,6 @@ export class SteamWebClient {
       get: this.#get.bind(this),
       language: this.#l,
       country: this.#country,
-      logger,
     });
   }
 
@@ -272,18 +272,15 @@ export class SteamWebClient {
   // getGlobalAchievements), so a transient failure falls back to the
   // last-known level instead of degrading to null every time.
   async #steamLevel(steamid: string): Promise<number | null> {
-    try {
-      const res = await this.#get<SteamLevelResponse>(
+    const res = await optional(
+      "Steam level",
+      this.#get<SteamLevelResponse>(
         "IPlayerService/GetSteamLevel/v1/",
         { steamid },
         { cache: true },
-      );
-      return res.response?.player_level ?? null;
-    } catch (e) {
-      if (!(e instanceof ApiError)) throw e;
-      this.#logger.warn("Steam level unavailable:", e);
-      return null;
-    }
+      ),
+    );
+    return res?.response?.player_level ?? null;
   }
 
   async getPlayerBans(steamid: string): Promise<Record<string, unknown>> {
@@ -472,11 +469,11 @@ export class SteamWebClient {
         }),
       ),
     );
-    for (const r of settled) {
-      if (r.status === "fulfilled") continue;
+    settled.forEach((r, i) => {
+      if (r.status === "fulfilled") return;
       if (!(r.reason instanceof ApiError)) throw r.reason;
-      this.#logger.warn("player names unavailable for a chunk of steamids:", r.reason);
-    }
+      noteDegraded(`Names of ${chunks[i]!.length} players`, r.reason);
+    });
     const players = settled.flatMap((r) =>
       r.status === "fulfilled" ? (r.value.response?.players ?? []) : [],
     );
@@ -570,14 +567,22 @@ export class SteamWebClient {
         this.#ownedPlaytimes(id, appids),
       ),
     ]);
+    const failed: ApiError[] = [];
     const ownership = settled.map((r) => {
       if (r.status === "fulfilled") return r.value;
       // One friend's upstream failure is theirs alone; a bug fails the call.
       if (!(r.reason instanceof ApiError)) throw r.reason;
+      failed.push(r.reason);
       // The same translation as a failed tool call, never the raw rejection
       // message (diagnostics, possibly an upstream HTML body).
       return { error: toProblem(r.reason, this.#logger).detail };
     });
+    if (failed.length > 0) {
+      noteDegraded(
+        `Game ownership of ${failed.length} friends (see unavailable_friends)`,
+        failed[0]!,
+      );
+    }
     return summarizeFriendsWhoOwn(appids, ids, ownership, players, {
       totalFriends: allIds.length,
     });
@@ -789,20 +794,19 @@ export class SteamWebClient {
     );
   }
 
-  // The count is a best-effort cross-check (summarizeFollowedGames falls back to
-  // appids.length) — never let it turn a working getFollowedGames call into an error.
+  // Optional: summarizeFollowedGames falls back to appids.length. Steam's own
+  // count can exceed the list (32 listed, 33 counted on one profile, live
+  // 2026-11-16), so a missing count is said, not hidden.
   async #followedGamesCount(steamid: string): Promise<FollowedGamesCountResponse> {
-    try {
-      return await this.#get<FollowedGamesCountResponse>(
+    const res = await optional(
+      "Steam's own followed-games count (total is the listed games)",
+      this.#get<FollowedGamesCountResponse>(
         "IStoreService/GetGamesFollowedCount/v1/",
         { steamid },
         { hasCredentials: false },
-      );
-    } catch (e) {
-      if (!(e instanceof ApiError)) throw e;
-      this.#logger.warn("followed-games count unavailable:", e);
-      return {};
-    }
+      ),
+    );
+    return res ?? {};
   }
 
   #getWishlistDetailed(
@@ -859,9 +863,8 @@ export class SteamWebClient {
       }
       const reason: unknown = globalResult.reason;
       if (!(reason instanceof ApiError)) throw reason;
-      if (!isAppidSpecific(reason)) {
-        this.#logger.warn(`achievement rarity unavailable for appid ${appid}:`, reason);
-      }
+      // An appid-specific answer is Steam saying it has no rarity data.
+      if (!isAppidSpecific(reason)) noteDegraded("Achievement rarity (global unlock %)", reason);
       return summarizeGameSchema(schemaResult.value, {});
     }
     const err: unknown = schemaResult.reason;

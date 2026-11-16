@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.ts";
 import type { StoreServiceClient } from "../clients/storeService.ts";
-import type { ToolOutput } from "./guard.ts";
+import { withNotes, type ToolOutput } from "./guard.ts";
 import {
   COUNTRY_UNKNOWN_WARNING,
   LANGUAGE_ISO_WARNING,
@@ -94,7 +94,7 @@ export function registerStoreWebTools(
         country,
         language,
       }),
-      outputSchema: searchGamesOutput,
+      outputSchema: withNotes(searchGamesOutput),
       annotations: READ_ONLY,
     },
     ({ term, limit, games_only: gamesOnly, country: cc, language: l }, ctx) =>
@@ -131,7 +131,7 @@ export function registerStoreWebTools(
           )
           .default("all"),
       }),
-      outputSchema: getGameNewsOutput,
+      outputSchema: withNotes(getGameNewsOutput),
       annotations: READ_ONLY,
     },
     ({ appid: id, limit, kind }, ctx) => reply(() => web.getNews(id, limit, kind), ctx),
@@ -202,7 +202,7 @@ export function registerStoreWebTools(
         .refine((a) => a.within_days === undefined || a.order === "helpful", {
           message: "within_days only applies to order='helpful'.",
         }),
-      outputSchema: getGameReviewsOutput,
+      outputSchema: withNotes(getGameReviewsOutput),
       annotations: READ_ONLY,
     },
     ({ appid: id, limit, review_language, type, order, within_days }, ctx) =>
@@ -223,7 +223,7 @@ export function registerStoreWebTools(
         "error, the same as get_game_news. " +
         "Get the appid from search_games. No API key required.",
       inputSchema: z.strictObject({ appid }),
-      outputSchema: getGlobalAchievementsOutput,
+      outputSchema: withNotes(getGlobalAchievementsOutput),
       annotations: READ_ONLY,
     },
     ({ appid: id }, ctx) => reply(() => web.getGlobalAchievements(id), ctx),
@@ -259,7 +259,7 @@ export function registerStoreWebTools(
         country,
         language,
       }),
-      outputSchema: getItemsOutput,
+      outputSchema: withNotes(getItemsOutput),
       annotations: READ_ONLY,
     },
     ({ appids, country, language }, ctx) =>
@@ -392,7 +392,7 @@ export function registerStoreWebTools(
         country,
         language,
       }),
-      outputSchema: discoverGamesOutput,
+      outputSchema: withNotes(discoverGamesOutput),
       annotations: READ_ONLY,
     },
     (input, ctx) => {
@@ -443,7 +443,7 @@ export function registerStoreWebTools(
         "Get the appid from search_games. No API key required. Errors clearly if the appid is " +
         "unknown/invalid rather than returning a null count.",
       inputSchema: z.strictObject({ appid }),
-      outputSchema: getCurrentPlayersOutput,
+      outputSchema: withNotes(getCurrentPlayersOutput),
       annotations: READ_ONLY,
     },
     ({ appid: id }, ctx) => reply(() => web.getCurrentPlayers(id), ctx),
@@ -503,7 +503,7 @@ export function registerStoreWebTools(
           message:
             "country and week apply to top_sellers only; the other charts are global and current.",
         }),
-      outputSchema: getChartsOutput,
+      outputSchema: withNotes(getChartsOutput),
       annotations: READ_ONLY,
     },
     ({ chart, limit, country: cc, week }, ctx) =>
@@ -534,7 +534,7 @@ export function registerStoreWebTools(
         "price, review % and compat. Convert a vanity name with resolve_vanity_url " +
         "first (that conversion itself needs STEAM_API_KEY, even though this tool doesn't).",
       inputSchema: z.strictObject({ steamid }),
-      outputSchema: getFollowedGamesOutput,
+      outputSchema: withNotes(getFollowedGamesOutput),
       annotations: READ_ONLY,
     },
     steamIdTool(web, reply, (sid) => web.getFollowedGames(sid)),
@@ -617,7 +617,7 @@ export function registerStoreWebTools(
           `Store language; overrides STEAM_LANGUAGE. Implies include_details. ${LANGUAGE_ISO_WARNING}`,
         ),
       }),
-      outputSchema: getWishlistOutput,
+      outputSchema: withNotes(getWishlistOutput),
       annotations: READ_ONLY,
     },
     steamIdTool(web, reply, (sid, input) =>
