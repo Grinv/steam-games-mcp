@@ -205,6 +205,19 @@ npm run inspector      # run under the MCP Inspector
   establishes why (`notShown()` in `format/shared.ts`); a cause is stated
   only when the server established it (the schema says a game has no
   achievements; GetPlayerSummaries' empty list says no account exists).
+- **Refuse an input Steam would misread, against the set where it lives.**
+  Steam rarely rejects a value it doesn't know; it reads it as something
+  else and answers plausibly: an appid past 32 bits wraps to another game,
+  an unknown language gets English text and an empty tag dictionary, an
+  unknown tag name matches nothing. Every guess built on such an answer
+  downstream ("empty means a bad language") was a bug. So a fixed, published
+  set is checked in the schema, with one definition per concept shared by
+  tool and config (`z.uint32()` appids, `STEAM_LANGUAGES`, `isSteamId64`); a
+  set Steam serves is checked where the client already holds it (an unknown
+  tag name is a `bad_request` naming it, read off the live dictionary). Don't
+  copy a large or changing set into the code: `country` stays a shape check
+  (Steam publishes no list of store regions), its trap stated in the
+  description.
 - **A tool's answer is a required core plus optional parts** (a price
   correction, rarity, a Steam level, names, tags). A required part is a plain
   `await`: its failure is the tool's error. An optional one goes through

@@ -336,8 +336,8 @@ export function registerStoreWebTools(
           .nonempty()
           .describe(
             "Keep only games carrying ALL of these user tags (case-insensitive), e.g. " +
-              "['Roguelike','Deckbuilding']. Use exact Steam tag names — a misspelled/unrecognized " +
-              "one isn't an error, it just matches nothing. Filtered by Steam across the whole catalog.",
+              "['Roguelike','Deckbuilding']. Steam's own tag names, in the call's language; one Steam " +
+              "doesn't have is refused with an error naming it. Filtered by Steam across the whole catalog.",
           )
           .optional(),
         min_review: z
@@ -573,8 +573,8 @@ export function registerStoreWebTools(
           .nonempty()
           .describe(
             "Keep only wishlist items carrying ALL of these user tags (case-insensitive), e.g. " +
-              "['Metroidvania']. Use exact Steam tag names — a misspelled/unrecognized one isn't " +
-              "an error, it just matches nothing. Implies include_details.",
+              "['Metroidvania']. Steam's own tag names, in the call's language; one Steam doesn't " +
+              "have is refused with an error naming it. Implies include_details.",
           )
           .optional(),
         min_review: z

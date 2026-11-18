@@ -421,17 +421,26 @@ describe("get_recommended_games", () => {
     const { client, mock } = await setupServer(t, ENV, recoRouter);
     await client.callTool({
       name: "get_recommended_games",
-      arguments: { steamid: "76561197960287930", exclude_tags: ["souls-like", "Not A Tag"] },
+      arguments: { steamid: "76561197960287930", exclude_tags: ["souls-like"] },
     });
     const queryCall = mock.calls.find((c) => c.url.includes("IStoreQueryService/Query"))!;
     const input = JSON.parse(new URL(queryCall.url).searchParams.get("input_json")!);
     assert.deepEqual(input.query.filters.type_filters, { include_games: true });
-    // An unknown name excludes nothing, so only the resolved id goes upstream.
     assert.deepEqual(input.query.filters.tagids_exclude, [3]);
     // The pool is narrowed to games carrying ANY favorite tag: one group, ORed.
     const groups = input.query.filters.tagids_must_match as { tagids: number[] }[];
     assert.equal(groups.length, 1);
     assert.ok(groups[0]!.tagids.length > 0);
+  });
+
+  test("get_recommended_games: an exclude tag Steam doesn't have is refused, naming it", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, recoRouter);
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930", exclude_tags: ["souls-like", "Not A Tag"] },
+    });
+    assertToolError(res, /Not a Steam tag in english: "Not A Tag"\./);
+    assert.ok(!mock.calls.some((c) => c.url.includes("IStoreQueryService/Query")));
   });
 
   test("get_recommended_games reports found:false for a private profile", async (t) => {

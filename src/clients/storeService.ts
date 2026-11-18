@@ -113,11 +113,22 @@ function tagIdLookup(tagMap: TagMap): (name: string) => number | undefined {
   return (name) => byName.get(name.toLowerCase());
 }
 
-// Required tags → tagids, or null when any isn't a Steam tag (it can't match
-// anything, so there's no point querying).
-function tagIdsFor(names: string[], tagMap: TagMap): number[] | null {
-  const ids = names.map(tagIdLookup(tagMap));
-  return ids.every((id): id is number => id !== undefined) ? ids : null;
+// Tag names → tagids. Steam would take a name it doesn't have without a word
+// (it matches or excludes nothing), and the dictionary is in hand, so such a
+// name is refused here, naming it.
+function tagIdsFor(names: string[], tagMap: TagMap, language: string): number[] {
+  const idOf = tagIdLookup(tagMap);
+  const unknown = names.filter((n) => idOf(n) === undefined);
+  if (unknown.length) {
+    throw new ApiError({
+      code: "bad_request",
+      message: `not Steam tags in ${language}: ${unknown.join(", ")}`,
+      detail:
+        `Not a Steam tag in ${language}: ${unknown.map((n) => `"${n}"`).join(", ")}. Tag names ` +
+        "are Steam's own, in the call's language; get_items shows a game's tags.",
+    });
+  }
+  return names.map((n) => idOf(n)!);
 }
 
 // Query's price_filters for a discount floor. Steam ignores min_discount_percent
@@ -226,15 +237,15 @@ export class StoreServiceClient {
   }
 
   // Tag names → ids for a server-side tag filter, which needs the dictionary
-  // BEFORE the query (cached per language, so usually free). tagIds is null
-  // when a name isn't a Steam tag (nothing can match), undefined with no tags.
+  // BEFORE the query (cached per language, so usually free). tagIds is
+  // undefined with no tags.
   async #resolveTagFilter(
     tags: string[] | undefined,
     language: string,
-  ): Promise<{ tagMap: TagMap | undefined; tagIds: number[] | null | undefined }> {
+  ): Promise<{ tagMap: TagMap | undefined; tagIds: number[] | undefined }> {
     if (!tags?.length) return { tagMap: undefined, tagIds: undefined };
     const tagMap = this.#requireTagMapIfFiltering(tags, await this.#tagNames(language), language)!;
-    return { tagMap, tagIds: tagIdsFor(tags, tagMap) };
+    return { tagMap, tagIds: tagIdsFor(tags, tagMap, language) };
   }
 
   // Throws when a tags filter was requested but the tag dictionary is
@@ -562,17 +573,15 @@ export class StoreServiceClient {
     // (verified live — a niche visual-novel/puzzle taste went from 84 to 163
     // relevant candidates of 300). Plus, as #queryCatalog: games only, the
     // price floor and exclude_tags, all server-side; summarizeRecommendations
-    // still scores and re-checks every candidate. An unknown exclude name
-    // excludes nothing, here and client-side alike.
-    const idOf = tagIdLookup(tagMap);
-    const ids = (names: string[]) => names.map(idOf).filter((id): id is number => id !== undefined);
+    // still scores and re-checks every candidate. basedOnTags come from the
+    // dictionary itself, so each has an id.
     const filters: Record<string, unknown> = {
       type_filters: { include_games: true },
-      tagids_must_match: [{ tagids: ids(basedOnTags) }],
+      tagids_must_match: [{ tagids: tagIdsFor(basedOnTags, tagMap, l) }],
     };
     if (typeof opts.minDiscount === "number")
       filters.price_filters = queryDiscountFilter(opts.minDiscount);
-    const excludeIds = ids(opts.excludeTags ?? []);
+    const excludeIds = tagIdsFor(opts.excludeTags ?? [], tagMap, l);
     if (excludeIds.length) filters.tagids_exclude = excludeIds;
     // The tool schema's own min(1).max(25) already bounds this — no need to
     // re-clamp here, just fall back for direct (non-tool) callers.
@@ -632,7 +641,6 @@ export class StoreServiceClient {
       steamFrame: p.steamFrame,
       platform: p.platform,
     };
-    if (tagIds === null) return summarizeDiscover({}, { ...post, tagMap: filterTagMap });
     const filters = catalogFilters(p, tagIds);
     const input = {
       query: { start: p.start ?? 0, count: p.count ?? 50, sort: 10, filters },
@@ -731,11 +739,6 @@ export class StoreServiceClient {
         steamMachine: opts.steamMachine,
         steamFrame: opts.steamFrame,
       };
-    }
-    if (tagIds === null) {
-      // An unknown tag matches nothing; only the wishlist's size is needed.
-      const total = await this.#wishlistSize(steamid);
-      return summarizeWishlistDetailed({}, filterTagMap, filters(), { total, exact: true });
     }
     const input = {
       steamid,

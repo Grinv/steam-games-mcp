@@ -1049,16 +1049,18 @@ describe("discover_games", () => {
     assert.deepEqual(queryFilters(mock).price_filters, { min_discount_percent: 50 });
   });
 
-  test("discover_games: an unknown tag matches nothing without querying the catalog", async (t) => {
-    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
-    const res = await client.callTool({
-      name: "discover_games",
-      arguments: { tags: ["Puzzle", "Not A Real Tag"] },
+  // Steam would take it and match nothing, which reads as "no such games".
+  for (const [tool, args] of [
+    ["discover_games", { tags: ["Puzzle", "Not A Real Tag"] }],
+    ["get_wishlist", { steamid: "76561198028121353", tags: ["Not A Real Tag"] }],
+  ] as const) {
+    test(`${tool}: a tag Steam doesn't have is refused, naming it`, async (t) => {
+      const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+      const res = await client.callTool({ name: tool, arguments: args });
+      assertToolError(res, /Not a Steam tag in english: "Not A Real Tag"\./);
+      assert.ok(!mock.calls.some((c) => /Query|GetWishlist/.test(c.url)));
     });
-    assert.equal(res.isError, undefined);
-    assert.equal((res.structuredContent as { matched: number }).matched, 0);
-    assert.ok(!mock.calls.some((c) => c.url.includes("IStoreQueryService/Query")));
-  });
+  }
 
   test("discover_games: tags filter errors clearly when GetTagList is unavailable (no silent empty result)", async (t) => {
     const { client } = await setupServer(
@@ -1115,7 +1117,7 @@ test("an appid past 32 bits is refused before any call", async (t) => {
     ["get_game_reviews", { appid: 4294967916 }],
   ] as const) {
     const res = await client.callTool({ name: tool, arguments: args });
-    assertToolError(res, /at most 4294967295/);
+    assertToolError(res, /<=4294967295/);
   }
   assert.equal(mock.calls.length, 0);
 });

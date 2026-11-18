@@ -29,6 +29,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Stop swallowing server bugs as "upstream unavailable" in the Steam level, followed-games count, tag dictionary and vanity `STEAM_ID` lookups.
 - Report an unreadable achievement-schema answer from Steam as a retryable error, not as "this game has no achievements".
 - Report an empty or non-object answer from Steam (e.g. `null`) as a retryable error, or a noted gap when it was an optional part, instead of an internal error.
+- Refuse a `tags`/`exclude_tags` name that isn't in Steam's tag dictionary for the call's language, naming it, instead of answering "nothing matched" (or excluding nothing): `Puzzle` with `language: russian` used to return no games.
 - Refuse an appid past 32 bits before calling Steam, which wraps it: `4294967916` came back as Portal 2 (620) under the asked-for id.
 - Refuse a SteamID64 that can't name an account (accountid 0, or past the 32-bit account range) with a clear validation error before calling Steam, whether passed as `steamid` or configured as `STEAM_ID`, instead of reading Steam's 400 as "no such account" — a reading that also turned any other 400 (e.g. a missing key) into an empty result.
 - Report `get_game_achievements` for an appid with no achievement schema as an error that says so, instead of a list of zero achievements.
