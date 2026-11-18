@@ -192,7 +192,12 @@ npm run inspector      # run under the MCP Inspector
   code reads off a 200 body (Steam's `visible` flag, a 0-100 review score, the
   own package among purchase options) is asserted there too, on the request
   the server actually sends (e.g. `storeCardDataRequest()`): a "verified live"
-  comment is checked once, a check:api assertion every run. Hand-written error bodies stay only in tests of the
+  comment is checked once, a check:api assertion every run. A field a
+  verdict is read from (`visible`, `communityvisibilitystate`, current
+  players' `result`, the schema's `game`) is a body rule on its endpoint
+  (`requireField` in `validate`): every type field is optional, and an absent
+  one would otherwise default into "available", "private", "no such app" or
+  "no achievements". Without it the answer is unusable, never a verdict. Hand-written error bodies stay only in tests of the
   generic pipeline (`lib/` behaviour on any status), never as "what Steam
   answers here": that is how the 403 fixture above, a bad key "401 on all of
   IPlayerService" (only GetOwnedGames is) and an invented accountid-0 page

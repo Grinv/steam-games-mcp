@@ -390,7 +390,8 @@ export function registerPlayerWebTools(
           .describe(
             "Drop any candidate carrying ANY of these tags (case-insensitive), e.g. " +
               "['Souls-like'] for 'recommend me something except Souls-like'. Steam's own tag " +
-              "names, in the call's language; one Steam doesn't have is refused with an error naming it.",
+              "names in the server's STEAM_LANGUAGE (this tool takes no language); one Steam " +
+              "doesn't have is refused with an error naming it and that language.",
           )
           .optional(),
         min_discount: z

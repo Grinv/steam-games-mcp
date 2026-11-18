@@ -112,7 +112,8 @@ export interface GlobalAchievementsResponse {
 // (which is typeof "number"), throwing the whole summarizer. Coerce, then fall
 // back to null (unknown) when the result isn't a finite number.
 function finitePercent(v: number | string | undefined): number | null {
-  const n = typeof v === "string" ? Number(v) : v;
+  // Number("") is 0: a blank string is no value, not 0%.
+  const n = typeof v === "string" ? (v.trim() ? Number(v) : undefined) : v;
   return typeof n === "number" && Number.isFinite(n) ? n : null;
 }
 

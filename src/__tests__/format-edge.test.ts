@@ -830,3 +830,11 @@ describe("a game with no reviews", () => {
     );
   });
 });
+
+// Number("") is 0: a blank percent is no value, not "nobody unlocked it".
+test("a blank achievement percent is unknown, not 0%", () => {
+  const s = summarizeGlobalAchievements({
+    achievementpercentages: { achievements: [{ name: "A", percent: "" }] },
+  }) as { achievements: { percent: number | null }[] };
+  assert.equal(s.achievements[0]!.percent, null);
+});

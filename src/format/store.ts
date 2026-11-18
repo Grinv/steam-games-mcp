@@ -176,10 +176,9 @@ export function summarizeItems(
       // it won't show here is `visible:false` (success 15) — RDR2 1174180 under
       // cc=RU carries its name plus `unvailable_for_country_restriction`, and a
       // nonexistent or removed appid comes back as appid 0 (all seen live
-      // 2026-11-19). A shown one is `visible:true` (success 1); an absent flag
-      // isn't read as a verdict either way, as in the other card summarizers
-      // (check:api asserts Steam still sends it).
-      if (!it || it.visible === false) return { appid, available: false };
+      // 2026-11-19). A shown one is `visible:true` (success 1); the flag is
+      // on every item (GetItems' body rule, clients/endpoints.ts).
+      if (!it?.visible) return { appid, available: false };
       const bp = ownPurchaseOption(it);
       return {
         ...baseCard(it, tagMap),

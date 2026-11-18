@@ -19,7 +19,7 @@ import {
 import { Steam, classifySteamApiError } from "./endpoints.ts";
 import { noteDegraded, optional, optionalParts, orFailure } from "../lib/call.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
-import { isSteamId64, STEAMID64_RANGE, STEAMID64_RE } from "../steam.ts";
+import { STEAMID64_RE } from "../steam.ts";
 import {
   FRIENDS_CHECKED_MAX,
   friendIdsToEnrich,
@@ -147,14 +147,8 @@ export class SteamWebClient {
           "STEAM_ID (a SteamID64 or vanity name) in the server config.",
       });
     }
-    if (STEAMID64_RE.test(raw)) {
-      if (isSteamId64(raw)) return raw;
-      throw new ApiError({
-        code: "bad_request",
-        message: "STEAM_ID is 17 digits but names no account",
-        detail: `STEAM_ID in the server config can't name an account. ${STEAMID64_RANGE}`,
-      });
-    }
+    // A 17-digit STEAM_ID was checked as a SteamID64 at startup (config.ts).
+    if (STEAMID64_RE.test(raw)) return raw;
     if (this.#resolvedDefault) return this.#resolvedDefault;
     // The official lookup when a key is set, the keyless community profile
     // otherwise — and as a backstop when the keyed attempt fails, since a
@@ -545,6 +539,7 @@ export class SteamWebClient {
   // wasn't found — as a 200, or as the endpoint's "no_app" answer (a 404).
   async getCurrentPlayers(appid: number): Promise<Record<string, unknown>> {
     const res = await this.#call(Steam.GetNumberOfCurrentPlayers, { appid });
+    // `result` is in every body (the endpoint's rule); 1 is the app's count.
     if (res.answer || res.data.response?.result !== 1) {
       throw new ApiError({
         code: "not_found",

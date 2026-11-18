@@ -295,6 +295,8 @@ describe("get_game", () => {
     ["half life", "Half-Life"],
     // A Japanese mark is part of the letter: ガンダム is not カンタム.
     ["ガンダム", "ガンダム"],
+    // ™ is a symbol, not the letters TM.
+    ["mirrors edge", "Mirror's Edge™"],
   ] as const) {
     test(`get_game by name: "${typed}" is ${title}`, async (t) => {
       const { client, mock } = await setupServer(t, ENV, (url) =>

@@ -60,6 +60,15 @@ const ACCOUNT_0 = "76561197960265728";
 const json = (o: unknown) => JSON.stringify(o);
 const ctx = { language: "english", country_code: "US" };
 
+// A field a verdict is read from must be in the body: absent, it would turn
+// into one by default ("no such app", "no achievements", "private",
+// "available"). Each is sent on every answer seen live (2026-11-19); a body
+// without it is unusable, never a verdict.
+function requireField(present: boolean, what: string): void {
+  if (present) return;
+  throw new ApiError({ code: "bad_response", message: `the body has no ${what}`, retryable: true });
+}
+
 // accountid 0 names no account: Steam answers it with a 400 HTML page on
 // every player endpoint keyed on one SteamID64. The tools refuse it before
 // any call (tools/webShared.ts), so the 400 stays an error, never an answer —
@@ -138,6 +147,11 @@ export const Steam = {
     path: "ISteamUser/GetPlayerSummaries/v2/",
     host: "api",
     keyless: false,
+    validate: (body) =>
+      requireField(
+        (body.response?.players ?? []).every((p) => typeof p.communityvisibilitystate === "number"),
+        "communityvisibilitystate on every player",
+      ),
     probes: [
       { query: { steamids: PUBLIC }, expect: "data", shows: "a public profile" },
       badKeyProbe({ steamids: PUBLIC }),
@@ -268,6 +282,9 @@ export const Steam = {
     host: "api",
     keyless: false,
     answers: { 400: "no_schema" },
+    // `game` is {} for an app without a schema ({"game":{}}, recorded); absent,
+    // "no achievements" would be a guess.
+    validate: (body) => requireField(typeof body.game === "object" && body.game !== null, "game"),
     probes: [
       {
         query: { appid: 1206340 },
@@ -316,6 +333,7 @@ export const Steam = {
     host: "api",
     keyless: true,
     answers: { 404: "no_app" },
+    validate: (body) => requireField(typeof body.response?.result === "number", "response.result"),
     probes: [
       { query: { appid: 620 }, expect: "data", shows: "a live count" },
       {
@@ -408,6 +426,12 @@ export const Steam = {
     path: "IStoreBrowseService/GetItems/v1/",
     host: "api",
     keyless: true,
+    // Steam's own "shown here" verdict (get_items' available), on every item.
+    validate: (body) =>
+      requireField(
+        (body.response?.store_items ?? []).every((i) => typeof i.visible === "boolean"),
+        "visible on every store item",
+      ),
     probes: [
       {
         query: { input_json: json({ ids: [{ appid: 620 }], context: ctx }) },

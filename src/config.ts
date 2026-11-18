@@ -6,7 +6,7 @@
 // error at call time when it is missing. Empty strings AND unsubstituted .mcpb
 // placeholders (e.g. "${user_config.steam_id}") are treated as unset.
 import { z } from "zod";
-import { steamLanguage } from "./steam.ts";
+import { isSteamId64, STEAMID64_RANGE, STEAMID64_RE, steamLanguage } from "./steam.ts";
 import type { LogLevel } from "./lib/logger.ts";
 
 const EnvSchema = z.object({
@@ -21,7 +21,14 @@ const EnvSchema = z.object({
   // independence.
   // .trim(): resolve_vanity_url does an exact-match lookup, so stray whitespace
   // here would silently resolve to "not found" instead of the intended profile.
-  STEAM_ID: z.string().trim().min(2).optional(),
+  // A 17-digit value is a SteamID64 and must name an account (the same
+  // isSteamId64 the steamid tool input uses); anything else is a vanity name.
+  STEAM_ID: z
+    .string()
+    .trim()
+    .min(2)
+    .refine((s) => !STEAMID64_RE.test(s) || isSteamId64(s), `STEAM_ID: ${STEAMID64_RANGE}`)
+    .optional(),
   // --- Steam Storefront API: no key; game/store data. ---
   STEAM_STORE_BASE_URL: z.httpUrl().trim().default("https://store.steampowered.com"),
 

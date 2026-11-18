@@ -4,6 +4,7 @@
 // steamStorefront.test.ts (Storefront tools) and steamCatalog.test.ts
 // (keyless-capable Web API store tools).
 import { describe, test } from "node:test";
+import { loadConfig } from "../config.ts";
 import assert from "node:assert/strict";
 import {
   setupServer,
@@ -317,8 +318,8 @@ describe("get_recommended_games", () => {
       return jsonResponse({
         response: {
           store_items: [
-            { appid: 10, tags: [{ tagid: 1, weight: 900 }] },
-            { appid: 20, tags: [{ tagid: 2, weight: 900 }] },
+            { appid: 10, visible: true, tags: [{ tagid: 1, weight: 900 }] },
+            { appid: 20, visible: true, tags: [{ tagid: 2, weight: 900 }] },
           ],
         },
       });
@@ -543,7 +544,7 @@ describe("get_recommended_games", () => {
         return jsonResponse({ response: { tags: [{ tagid: 1, name: "Roguelike" }] } });
       }
       if (url.includes("IStoreBrowseService/GetItems")) {
-        return jsonResponse({ response: { store_items: [{ appid: 10 }] } }); // no tags
+        return jsonResponse({ response: { store_items: [{ appid: 10, visible: true }] } }); // no tags
       }
       return jsonResponse({});
     });
@@ -1100,7 +1101,11 @@ describe("find_friends_who_own", () => {
           response: {
             players: manyFriends
               .filter((f) => url.includes(f.steamid))
-              .map((f) => ({ steamid: f.steamid, personaname: `Friend ${f.steamid}` })),
+              .map((f) => ({
+                steamid: f.steamid,
+                personaname: `Friend ${f.steamid}`,
+                communityvisibilitystate: 3,
+              })),
           },
         });
       }
@@ -1902,14 +1907,16 @@ describe("a SteamID64 that can't name an account is refused before any call", ()
     assert.equal(mock.calls.length, 0);
   });
 
-  test("so is a configured STEAM_ID default", async (t) => {
-    const { client, mock } = await setupServer(t, { ...ENV, STEAM_ID: "76561197960265728" });
-    const res = await client.callTool({
-      name: "get_player_achievements",
-      arguments: { appid: 620 },
-    });
-    assertToolError(res, /STEAM_ID .*from 76561197960265729 to 76561202255233023/);
-    assert.equal(mock.calls.length, 0);
+  // The same check, once, at startup: like a bad STEAM_LANGUAGE.
+  test("so is a configured STEAM_ID default, when the config loads", () => {
+    assert.throws(
+      () => loadConfig({ ...ENV, STEAM_ID: "76561197960265728" }),
+      /STEAM_ID: A SteamID64 is a 17-digit number from 76561197960265729/,
+    );
+    assert.equal(
+      loadConfig({ ...ENV, STEAM_ID: "gabelogannewell" }).defaultSteamId,
+      "gabelogannewell",
+    );
   });
 
   test("the account range's own ends are accepted", async (t) => {
@@ -1919,4 +1926,38 @@ describe("a SteamID64 that can't name an account is refused before any call", ()
       assert.equal(res.isError, undefined, id);
     }
   });
+});
+
+// A field a verdict is read from must be in the body; absent, the answer is
+// unusable (retryable), never "no such app", "no achievements", "private" or
+// "available" by default.
+describe("a body missing the field a verdict rests on is unusable, not a verdict", () => {
+  for (const [tool, args, endpoint, body] of [
+    ["get_current_players", { appid: 620 }, "GetNumberOfCurrentPlayers", { response: {} }],
+    ["get_game_achievements", { appid: 620 }, "GetSchemaForGame", {}],
+    [
+      "get_player_summary",
+      { steamid: "76561197960287930" },
+      "GetPlayerSummaries",
+      {
+        response: { players: [{ steamid: "76561197960287930", personaname: "x" }] },
+      },
+    ],
+    [
+      "get_items",
+      { appids: [620] },
+      "IStoreBrowseService/GetItems",
+      {
+        response: { store_items: [{ appid: 620, name: "Portal 2" }] },
+      },
+    ],
+  ] as const) {
+    test(`${tool}: ${endpoint} without it`, async (t) => {
+      const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+        url.includes(endpoint) ? jsonResponse(body) : router(url),
+      );
+      const res = await client.callTool({ name: tool, arguments: args });
+      assertToolError(res, /unusable/);
+    });
+  }
 });

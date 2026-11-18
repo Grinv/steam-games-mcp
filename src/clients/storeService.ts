@@ -112,11 +112,13 @@ function reviewScoreFloor(threshold: number): number {
 // A title as matched by name: only its letters and digits count, Latin
 // accents folded — "half life" is Half-Life, "dont starve" Don't Starve,
 // "stalker" S.T.A.L.K.E.R., "pokemon" Pokémon, "civilization vi"
-// Civilization® VI. Only Latin: elsewhere a mark is part of the letter
-// (Japanese ガ is カ plus dakuten), so it's kept, composed back (NFC).
+// Civilization® VI, "mirrors edge" Mirror's Edge™. Only Latin: elsewhere a
+// mark is part of the letter (Japanese ガ is カ plus dakuten), so it's kept,
+// composed back (NFC). NFD, not NFKD: compatibility forms would spell ™ as
+// "TM" and ½ as "12".
 function titleKey(s: string): string {
   return s
-    .normalize("NFKD")
+    .normalize("NFD")
     .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
     .normalize("NFC")
     .toLowerCase()
