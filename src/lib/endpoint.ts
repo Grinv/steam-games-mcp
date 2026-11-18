@@ -92,7 +92,10 @@ export async function call<T, A extends string>(
   try {
     data = await http.getJson<T>(path, request);
   } catch (err) {
-    const answer = err instanceof ApiError ? ep.answers[err.code] : undefined;
+    // Only the method's own answer (a JSON body) is one: the same status as a
+    // gateway's HTML page — a retired route, a proxy, an edge block — is a
+    // failure. Every recorded answer is JSON, every route/key page HTML.
+    const answer = err instanceof ApiError && err.jsonBody ? ep.answers[err.code] : undefined;
     if (answer === undefined) throw err;
     return { answer } as Answered<T, A>;
   }

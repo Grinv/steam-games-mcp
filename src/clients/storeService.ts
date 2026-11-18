@@ -7,7 +7,7 @@
 // builder. The basic (light) get_wishlist and get_followed_games stay on
 // SteamWebClient, matching format/web.ts's ownership of their formatters.
 //
-// Shares the parent's HttpClient (via the `get` passed in) rather than owning
+// Shares the parent's HttpClient (via the `call` passed in) rather than owning
 // its own — both clients hit the same api.steampowered.com host and must honor
 // one rate limiter and one cache, not one each.
 import { ApiError } from "../lib/errors.ts";

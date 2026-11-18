@@ -203,13 +203,14 @@ export function summarizeComparePlayers(
   max = COMPARE_SHARED_MAX,
 ): z.infer<typeof notFoundReason> | z.infer<typeof comparePlayersFound> {
   if (ownedGamesNotShown(a) || ownedGamesNotShown(b)) {
+    // By parameter: `steamid` may have been the STEAM_ID default, never typed.
     const missing =
       [a, b].filter(ownedGamesNotShown).length === 2
-        ? "either"
+        ? "either player (`steamid` or `other_steamid`)"
         : ownedGamesNotShown(a)
-          ? "the first"
-          : "the second";
-    return notFound(notShown(`a game library for ${missing} SteamID64`));
+          ? "`steamid`"
+          : "`other_steamid`";
+    return notFound(notShown(`a game library for ${missing}`));
   }
   const gamesA = new Map((a.response?.games ?? []).map((g) => [g.appid, g]));
   const gamesB = new Map((b.response?.games ?? []).map((g) => [g.appid, g]));

@@ -41,8 +41,8 @@ unknown, not because Steam has none. A result with a cached copy also carries
 
 ## invalid_key
 
-Steam rejected the configured `STEAM_API_KEY` (its 403 page asking to verify
-the `key=` parameter): the key is mistyped or revoked. Retrying won't help;
+Steam rejected the configured `STEAM_API_KEY` (its page asking to verify the
+`key=` parameter, sent as a 403, or a 401 on `GetOwnedGames`): the key is mistyped or revoked. Retrying won't help;
 fix the key. Keyless tools are unaffected — Steam ignores a bad key there.
 
 ## unauthorized

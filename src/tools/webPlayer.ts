@@ -369,7 +369,8 @@ export function registerPlayerWebTools(
         "the same filter discover_games applies. Note: taste is weighted from only the player's " +
         `${FAVORITE_TAG_SAMPLE_SIZE} most-played owned games, and candidates come from a fixed ` +
         `${RECOMMENDATION_POOL_SIZE}-entry catalog scan, so a heavy exclude_tags/min_discount ` +
-        "combination can return fewer than `limit` — there's no larger scan to fall back to. " +
+        "combination can return fewer than `limit` — there's no larger scan to fall back to; a " +
+        "candidate without a review score (no reviews yet) is left out too. " +
         "Requires STEAM_API_KEY and a public profile with game-details visible (same requirement as " +
         "get_owned_games) — found:false is also returned for a SteamID64 with no account behind it, if " +
         "the player owns no games at all, or if too " +

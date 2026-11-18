@@ -208,7 +208,7 @@ export type PurchasePrices = z.infer<typeof purchasePricesSchema>;
 
 export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
   const input = purchaseItemsInput.safeParse(r);
-  if (!input.success) throw unusablePrices(input.error.message, input.error);
+  if (!input.success) throw unusablePrices(input.error);
   const out: Record<string, z.infer<typeof purchasePricesSchema>[string]> = {};
   for (const it of r.response?.store_items ?? []) {
     if (typeof it.appid !== "number") continue;
@@ -242,19 +242,21 @@ export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
   // (it only feeds a price correction), not our tool output: classified as
   // an unusable answer, so it costs the correction instead of the call.
   const parsed = purchasePricesSchema.safeParse(out);
-  if (!parsed.success) throw unusablePrices(parsed.error.message, parsed.error);
+  if (!parsed.success) throw unusablePrices(parsed.error);
   return parsed.data;
 }
 
 // Retryable like every unusable body: it states nothing about the game, so a
 // good cached correction stands in for it (a stale copy answers only a
 // retryable failure), and "retry later" advice holds.
-function unusablePrices(why: string, cause?: unknown): ApiError {
+function unusablePrices(error: z.ZodError): ApiError {
+  // One line (the log shows a message's first line): where and what, per issue.
+  const why = error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
   return new ApiError({
     code: "bad_response",
     message: `GetItems purchase options don't fit the price shape: ${why}`,
     retryable: true,
-    cause,
+    cause: error,
   });
 }
 

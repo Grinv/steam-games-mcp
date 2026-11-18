@@ -5,7 +5,7 @@
 // `message` is diagnostics for logs (it may hold a raw response body).
 
 export type ApiErrorCode =
-  | "invalid_key" // Steam rejected the configured API key (its 403 "verify your key=" page)
+  | "invalid_key" // Steam rejected the configured API key (its "verify your key=" page, 403 or 401)
   | "unauthorized" // 401 — token missing/expired/invalid
   | "forbidden" // 403 — insufficient permissions/scope
   | "not_found" // 404 — no such resource
@@ -28,6 +28,9 @@ interface ApiErrorOptions {
   retryable?: boolean;
   /** Retry-After hint, in ms, for the retry backoff. */
   retryAfterMs?: number;
+  /** An HTTP error whose body is a JSON object: the API method's own answer,
+   *  not a page from the gateway in front of it (a route, key or edge error). */
+  jsonBody?: boolean;
   /** The underlying error this one wraps (a fetch/JSON.parse failure, or the
    *  upstream ApiError a domain error explains). */
   cause?: unknown;
@@ -39,6 +42,7 @@ export class ApiError extends Error {
   readonly retryable: boolean;
   readonly detail: string | undefined;
   readonly retryAfterMs: number | undefined;
+  readonly jsonBody: boolean;
 
   constructor(opts: ApiErrorOptions) {
     super(opts.message, opts.cause === undefined ? undefined : { cause: opts.cause });
@@ -48,6 +52,7 @@ export class ApiError extends Error {
     this.retryable = opts.retryable ?? false;
     this.detail = opts.detail;
     this.retryAfterMs = opts.retryAfterMs;
+    this.jsonBody = opts.jsonBody ?? false;
   }
 }
 

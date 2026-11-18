@@ -887,6 +887,22 @@ describe("get_friend_list", () => {
     assert.match(s.reason, /friends list/i);
   });
 
+  // The answer is the method's JSON {} with that status; the same status as a
+  // gateway's HTML page (a retired route, a proxy, an edge block) says
+  // nothing about the player.
+  test("get_friend_list: a 404 that is a gateway page, not Steam's {}, is an error", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetFriendList")
+        ? htmlResponse("<html>Not Found</html>", { status: 404 })
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_friend_list",
+      arguments: { steamid: "76561199999999999" },
+    });
+    assertToolError(res, /No matching resource was found/);
+  });
+
   test("get_friend_list: a genuine 500 propagates as a tool error, not found:false", async (t) => {
     // #friendsRaw only swallows 403/401 into null (→ found:false); every
     // other failure code must still surface as a real error.

@@ -515,7 +515,7 @@ export function registerStoreWebTools(
         "(get sale/update notifications) that's separate from the wishlist; many players follow more " +
         "games than they wishlist. No API key required, but the follows/profile must be public — " +
         "otherwise it returns found:false, which is ALSO what a public account following nothing " +
-        "returns; read `reason` to tell those apart. Returns appids + store_url only (no price/name), " +
+        "returns: Steam answers the two alike, and neither `reason` nor any tool tells them apart. Returns appids + store_url only (no price/name), " +
         `capped at ${FOLLOWED_MAX} in whatever order Steam sends them — unlike every other capped list ` +
         "here there is no ranking, so a game past the cut is not 'less followed' (check " +
         "`returned` vs `total`); pass the appids to get_items for " +
@@ -535,7 +535,8 @@ export function registerStoreWebTools(
       description:
         "List a player's Steam wishlist by SteamID64. No API key required, but the wishlist/profile " +
         "must be public — otherwise it returns found:false, which is ALSO what an empty but public " +
-        "wishlist returns; read `reason` to tell those apart. By default returns a light list of appids " +
+        "wishlist returns: Steam answers the two alike, and neither `reason` nor any tool tells them " +
+        "apart. By default returns a light list of appids " +
         `(sorted by priority, no names), capped at the first ${WISHLIST_LIGHT_MAX} (check \`returned\` vs \`total\`). ` +
         "Set include_details for full store cards in ONE call (name, price/discount, review %, " +
         "Deck/SteamOS/Machine/Frame compat, vr_support, tags, release) — no need to follow up with " +

@@ -160,7 +160,8 @@ npm run inspector      # run under the MCP Inspector
 - **What Steam means is stated once per endpoint**, in `clients/endpoints.ts`
   (`lib/endpoint.ts` defines the shape): path, host, keyless or not, the plain
   answers Steam sends as HTTP errors (`answers`: e.g. GetFriendList's 401 →
-  "not_shown"), and the body rule (`validate`). A client
+  "not_shown"; an answer only when the body is the method's JSON, never a
+  gateway's HTML page with the same status), and the body rule (`validate`). A client
   calls through `call(...)`/`#call(...)` and gets data, or `{ answer }` typed
   by the endpoint, so the compiler makes it handle every answer — there is no
   `catch` reading Steam in a client. Each stated fact has `probes`: live calls
@@ -180,7 +181,8 @@ npm run inspector      # run under the MCP Inspector
   `src/__tests__/recorded/steam.json`, tests replay it with
   `recorded("<Endpoint>/<situation>")`, and a plain `check:api` fails when
   Steam's status for one has moved. `recorded.test.ts` keeps probes and
-  recordings one set. Hand-written error bodies stay only in tests of the
+  recordings one set, and replays every recording through the real pipeline
+  to the outcome its probe expects. Hand-written error bodies stay only in tests of the
   generic pipeline (`lib/` behaviour on any status), never as "what Steam
   answers here": that is how the 403 fixture above, a bad key "401 on all of
   IPlayerService" (only GetOwnedGames is) and an invented accountid-0 page

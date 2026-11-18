@@ -228,15 +228,26 @@ export class HttpClient {
 
 function toHttpError(res: Response, raw: string): ApiError {
   const { code, retryable } = classifyStatus(res.status);
-  // The body is log-only: Steam answers errors with HTML pages (a CDN's, or
-  // "verify your key="), never a structured reason worth showing the agent.
+  // The body is log-only text, never shown to the agent; that it is a JSON
+  // object at all (the method answered, not a gateway page) is the one fact
+  // read from it.
   return new ApiError({
     code,
     status: res.status,
     retryable,
     message: `HTTP ${res.status} ${res.statusText}${raw ? `: ${raw.slice(0, 500)}` : ""}`,
     retryAfterMs: parseRetryAfter(res.headers.get("retry-after")),
+    jsonBody: isJsonObject(raw),
   });
+}
+
+function isJsonObject(text: string): boolean {
+  try {
+    const v: unknown = JSON.parse(text);
+    return v !== null && typeof v === "object" && !Array.isArray(v);
+  } catch {
+    return false; // an HTML page, or nothing: not JSON is the answer here
+  }
 }
 
 // The parsed body, after the call's own validation: what may be cached.
