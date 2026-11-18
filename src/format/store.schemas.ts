@@ -75,8 +75,9 @@ export const getItemsOutput = z.strictObject({
       z
         .strictObject({ appid: z.number(), available: z.literal(false) })
         .describe(
-          "No store data for this appid: either it doesn't exist, or it isn't sold in the " +
-            "requested country. Never dropped from the list, so rows line up with the given appids.",
+          "Steam doesn't show this appid in the requested country: it doesn't exist, was " +
+            "removed, or isn't sold there (re-check under another `country`). Never dropped from " +
+            "the list, so rows line up with the given appids.",
         ),
       baseCardSchema.extend({
         available: z.literal(true),
@@ -93,9 +94,9 @@ export const getItemsOutput = z.strictObject({
           ])
           .nullable()
           .describe(
-            "null does NOT mean free: Steam returns no price block when the game isn't sold in " +
-              "the requested country, isn't released yet, or has no purchase option. Check is_free " +
-              "and coming_soon before concluding anything, and re-check under another `country`.",
+            "null does NOT mean free: Steam returns no price block when the game isn't released " +
+              "yet or has no purchase option. Check is_free and coming_soon before concluding " +
+              "anything.",
           ),
         coming_soon: z.boolean(),
       }),

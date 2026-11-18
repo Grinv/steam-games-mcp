@@ -75,6 +75,16 @@ export interface SteamLevelResponse {
 // distinction this server can act on.
 const VISIBILITY_PUBLIC = 3;
 
+// `personastate` 0 (offline) is all a profile that isn't public reports, per
+// Valve's Web API docs ("If the player's profile is private, this will always
+// be 0", bar the trading/playing states) and seen live on a friends-only one
+// (2026-11-19) — so there 0 is unknown, not offline.
+function personaState(p: PlayerSummary | undefined): (typeof personaStates)[number] | null {
+  if (p?.personastate === undefined) return null;
+  if (p.personastate === 0 && p.communityvisibilitystate !== VISIBILITY_PUBLIC) return null;
+  return personaStates[p.personastate] ?? null;
+}
+
 export function summarizePlayer(
   r: PlayerSummariesResponse,
   level?: number | null,
@@ -86,7 +96,7 @@ export function summarizePlayer(
     steamid: p.steamid,
     name: p.personaname ?? null,
     real_name: p.realname || null,
-    state: personaStates[p.personastate ?? 0] ?? "offline",
+    state: personaState(p),
     visibility:
       p.communityvisibilitystate === VISIBILITY_PUBLIC
         ? visibilitySchema.enum.public
@@ -570,7 +580,7 @@ export function summarizeFriendList(
       return {
         steamid: f.steamid,
         name: p?.personaname ?? null,
-        state: personaStates[p?.personastate ?? 0] ?? "offline",
+        state: personaState(p),
         in_game: p?.gameextrainfo || null,
         profile_url: p?.profileurl ?? null,
         friends_since: isoDay(f.friend_since),

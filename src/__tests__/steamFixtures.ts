@@ -49,6 +49,7 @@ export const SUGGEST = {
     store_items: [
       {
         appid: 620,
+        visible: true,
         name: "Portal 2",
         type: 0,
         platforms: { windows: true, steamos_linux: true },
@@ -269,6 +270,7 @@ export const ITEMS = {
     store_items: [
       {
         appid: 620,
+        visible: true,
         name: "Portal 2",
         is_free: false,
         best_purchase_option: {

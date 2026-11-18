@@ -254,6 +254,7 @@ describe("summarizeSearchSuggestions", () => {
         store_items: [
           {
             appid: 2186680,
+            visible: true,
             type: 0,
             best_purchase_option: { bundleid: 67187, formatted_final_price: "$48.36" },
             purchase_options: [
@@ -279,6 +280,7 @@ describe("summarizeSearchSuggestions", () => {
         store_items: [
           {
             appid: 730,
+            visible: true,
             is_free: true,
             purchase_options: [{ packageid: 54029, formatted_final_price: "$14.99" }],
           },
@@ -292,9 +294,9 @@ describe("summarizeSearchSuggestions", () => {
     const s = summarizeSearchSuggestions({
       response: {
         store_items: [
-          { appid: 1, type: 4 },
-          { appid: 2, type: 11 },
-          { appid: 3, type: 99 },
+          { appid: 1, visible: true, type: 4 },
+          { appid: 2, visible: true, type: 11 },
+          { appid: 3, visible: true, type: 99 },
           { appid: 4 },
         ],
       },
@@ -312,6 +314,7 @@ describe("summarizeSearchSuggestions", () => {
         store_items: [
           {
             appid: 684410,
+            visible: true,
             purchase_options: [
               {
                 packageid: 1,
@@ -360,6 +363,40 @@ test("summarizeWishlist puts unranked (priority 0) entries last, oldest-added fi
   );
 });
 
+// Steam reports 0 (offline) for a profile it doesn't show (Valve's docs; seen
+// live on a friends-only one), so there 0 is unknown; a public profile's 0 is.
+test("persona state: 0 is offline only on a public profile", () => {
+  const state = (vis: number, personastate: number) =>
+    (
+      summarizePlayer({
+        response: { players: [{ steamid: "1", communityvisibilitystate: vis, personastate }] },
+      }) as { state: string | null }
+    ).state;
+  assert.equal(state(3, 0), "offline");
+  assert.equal(state(2, 0), null);
+  assert.equal(state(2, 6), "looking to play");
+});
+
+// Steam's own verdict: an item it won't show in this country is visible:false
+// (RDR2 1174180 under cc=RU carries its name), not a priceless available one.
+test("get_items: an item Steam marks not visible is unavailable, name or not", () => {
+  const s = summarizeItems(
+    {
+      response: {
+        store_items: [
+          { appid: 1174180, visible: false, name: "Red Dead Redemption 2" },
+          { appid: 620, visible: true, name: "Portal 2" },
+        ],
+      },
+    },
+    [1174180, 620],
+  ) as { items: { appid: number; available: boolean }[] };
+  assert.deepEqual(
+    s.items.map((i) => i.available),
+    [false, true],
+  );
+});
+
 describe("summarizePurchasePrices", () => {
   for (const [label, store_items] of [
     ["a store_items that isn't a list", {}],
@@ -387,6 +424,7 @@ describe("summarizePurchasePrices", () => {
         store_items: [
           {
             appid: 1,
+            visible: true,
             best_purchase_option: { packageid: 7, formatted_final_price: "$9.99", discount_pct: 0 },
           },
         ],
@@ -404,6 +442,7 @@ describe("summarizePurchasePrices", () => {
         store_items: [
           {
             appid: 3717330,
+            visible: true,
             best_purchase_option: { bundleid: 63576, formatted_final_price: "$19.98" },
             purchase_options: [
               { bundleid: 63576, formatted_final_price: "$19.98" },
@@ -423,9 +462,10 @@ describe("summarizePurchasePrices", () => {
     const s = summarizePurchasePrices({
       response: {
         store_items: [
-          { appid: 1, name: "Free game", is_free: true },
+          { appid: 1, visible: true, name: "Free game", is_free: true },
           {
             appid: 2,
+            visible: true,
             best_purchase_option: { bundleid: 9, formatted_final_price: "$1.00" }, // a bundle
           },
           {
@@ -498,7 +538,7 @@ test("summarizePlayer: no players → found:false; sparse player fills nullable 
     response: { players: [{ steamid: "1", personaname: "Solo" }] },
   }) as Record<string, unknown>;
   assert.equal(p.found, true);
-  assert.equal(p.state, "offline"); // no personastate → default index 0
+  assert.equal(p.state, null); // no personastate: unknown, not offline
   assert.equal(p.visibility, "private"); // communityvisibilitystate !== 3
   assert.equal(p.country, null);
   assert.equal(p.created, null);
@@ -749,6 +789,7 @@ describe("a game with no reviews", () => {
   // Steam's own summary for one, sampled live 2026-11-17 (appid 1849290).
   const unreviewed = {
     appid: 1,
+    visible: true,
     name: "New",
     tags: [{ tagid: 1 }],
     reviews: {

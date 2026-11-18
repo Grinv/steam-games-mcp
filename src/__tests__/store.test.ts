@@ -21,6 +21,7 @@ describe("summarizeItems", () => {
         store_items: [
           {
             appid: 1,
+            visible: true,
             name: "Multi",
             best_purchase_option: {
               discount_pct: 50,
@@ -44,6 +45,7 @@ describe("summarizeItems", () => {
         store_items: [
           {
             appid: 1,
+            visible: true,
             name: "Full price",
             best_purchase_option: { discount_pct: 0, formatted_final_price: "$9.99" },
           },
@@ -63,6 +65,7 @@ describe("summarizeItems", () => {
         store_items: [
           {
             appid: 1,
+            visible: true,
             name: "ZeroEnd",
             best_purchase_option: {
               discount_pct: 0,
@@ -70,7 +73,12 @@ describe("summarizeItems", () => {
               active_discounts: [{ discount_end_date: 0 }, {}], // both filtered out
             },
           },
-          { appid: 2, name: "NoDiscounts", best_purchase_option: { formatted_final_price: "$9" } },
+          {
+            appid: 2,
+            visible: true,
+            name: "NoDiscounts",
+            best_purchase_option: { formatted_final_price: "$9" },
+          },
         ],
       },
     };
@@ -84,7 +92,7 @@ describe("summarizeItems", () => {
   test("missing appid → available:false; free game → price {is_free}", () => {
     const r = {
       response: {
-        store_items: [{ appid: 10, name: "Free Game", is_free: true }],
+        store_items: [{ appid: 10, visible: true, name: "Free Game", is_free: true }],
       },
     };
     const s = summarizeItems(r, [10, 999]) as {
@@ -103,7 +111,7 @@ describe("summarizeItems", () => {
     // set used to fall through to available:false, discarding its free-ness.
     const r = {
       response: {
-        store_items: [{ appid: 20, is_free: true }],
+        store_items: [{ appid: 20, visible: true, is_free: true }],
       },
     };
     const s = summarizeItems(r, [20]) as {
@@ -119,10 +127,16 @@ describe("summarizeItems", () => {
     const r = {
       response: {
         store_items: [
-          { appid: 1, name: "Flatscreen Only" }, // no vr_support key at all
-          { appid: 2, name: "VR Optional", platforms: { vr_support: { vrhmd: true } } },
+          { appid: 1, visible: true, name: "Flatscreen Only" }, // no vr_support key at all
+          {
+            appid: 2,
+            visible: true,
+            name: "VR Optional",
+            platforms: { vr_support: { vrhmd: true } },
+          },
           {
             appid: 3,
+            visible: true,
             name: "VR Exclusive",
             platforms: { vr_support: { vrhmd: true, vrhmd_only: true } },
           },

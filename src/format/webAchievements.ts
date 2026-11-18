@@ -106,8 +106,9 @@ export interface GlobalAchievementsResponse {
   achievementpercentages?: { achievements?: { name?: string; percent?: number | string }[] };
 }
 
-// Steam sends `percent` as a JSON float, but the string-coercion branch below
-// means a non-numeric value would become NaN — and z.number() rejects NaN
+// Steam sends `percent` as a string ("74.2", 0-100, most common first — all
+// seen live 2026-11-19 on Portal 2), so it's coerced; a non-numeric one would
+// become NaN — and z.number() rejects NaN
 // (which is typeof "number"), throwing the whole summarizer. Coerce, then fall
 // back to null (unknown) when the result isn't a finite number.
 function finitePercent(v: number | string | undefined): number | null {

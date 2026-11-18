@@ -215,9 +215,10 @@ export function registerStoreWebTools(
         "achievement is across all players. Returns each achievement's internal name and its unlock " +
         "percent (no display names/descriptions — for those, use get_game_achievements), most-common " +
         `first, capped at the first ${ACHIEVEMENTS_MAX} (check ` +
-        "`returned` vs `count` — most games have far fewer). An unknown appid, or one with no " +
-        "achievement schema (e.g. a DLC/soundtrack), comes back as an empty list rather than an " +
-        "error, the same as get_game_news. " +
+        "`returned` vs `count` — most games have far fewer). An unknown appid, one with no " +
+        "achievement schema (e.g. a DLC/soundtrack) and a game without achievements all come back " +
+        "as an empty list rather than an error (Steam answers the three alike), the same as " +
+        "get_game_news. " +
         "Get the appid from search_games. No API key required.",
       inputSchema: z.strictObject({ appid }),
       outputSchema: getGlobalAchievementsOutput,

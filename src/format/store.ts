@@ -172,12 +172,12 @@ export function summarizeItems(
     count: appids.length,
     items: appids.map((appid) => {
       const it = byId.get(appid);
-      // is_free is checked alongside name/best_purchase_option/reviews so a
-      // free game with a sparse payload (e.g. delisted/beta F2P titles) isn't
-      // misreported as unavailable — its is_free fallback below still applies.
-      if (!it || (!it.name && !it.best_purchase_option && !it.reviews && !it.is_free)) {
-        return { appid, available: false };
-      }
+      // Steam's own verdict, not a guess from which fields came back: an item
+      // it won't show here is `visible:false` (success 15) — RDR2 1174180 under
+      // cc=RU carries its name plus `unvailable_for_country_restriction`, and a
+      // nonexistent or removed appid comes back as appid 0 (all seen live
+      // 2026-11-19). A shown one is `visible:true` (success 1).
+      if (!it?.visible) return { appid, available: false };
       const bp = ownPurchaseOption(it);
       return {
         ...baseCard(it, tagMap),
@@ -185,12 +185,10 @@ export function summarizeItems(
         // get_prices' does instead of being inferable only from its absence.
         available: true,
         is_free: it.is_free ?? false,
-        // null covers three different situations that Steam's payload doesn't
-        // separate — not sold in this country (confirmed live: appid 1174180
-        // returns a name and nothing else under cc=RU, a full card under cc=US),
-        // not released yet, or simply no purchase option. is_free and
-        // coming_soon narrow it down; the schema says so rather than letting an
-        // agent read null as "free".
+        // null: not released yet, or no purchase option; is_free and
+        // coming_soon narrow it down, and the schema says so rather than
+        // letting an agent read null as "free". (Not sold in this country is
+        // visible:false, above.)
         price: bp ? priceFields(bp) : it.is_free ? { is_free: true } : null,
         coming_soon: it.release?.is_coming_soon ?? false,
       };

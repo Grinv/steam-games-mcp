@@ -24,6 +24,14 @@ export const personaStates = [
   "looking to play",
 ] as const;
 
+const personaStateSchema = z
+  .enum(personaStates)
+  .nullable()
+  .describe(
+    "Online status; null when Steam doesn't show it — a profile that isn't public reports " +
+      "0 (offline) whatever its real status — or the profile couldn't be read.",
+  );
+
 // format/web.ts's summarizePlayer maps communityvisibilitystate to one of these
 // via this same schema's .enum, so the label set lives in one place.
 export const visibilitySchema = z.enum(["public", "private"]);
@@ -39,7 +47,7 @@ export const getPlayerSummaryOutput = z.discriminatedUnion("found", [
     steamid: z.string().optional(),
     name: z.string().nullable(),
     real_name: z.string().nullable(),
-    state: z.enum(personaStates),
+    state: personaStateSchema,
     visibility: visibilitySchema,
     country: z.string().nullable(),
     level: z.number().nullable(),
@@ -196,7 +204,7 @@ export const friendListFound = z.strictObject({
     z.strictObject({
       steamid: z.string().optional(),
       name: z.string().nullable(),
-      state: z.enum(personaStates),
+      state: personaStateSchema,
       in_game: z.string().nullable(),
       profile_url: z.string().nullable(),
       friends_since: z.string().nullable(),

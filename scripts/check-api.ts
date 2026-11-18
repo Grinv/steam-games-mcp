@@ -240,7 +240,8 @@ const checks: Check[] = [
     },
   },
   {
-    // A private friends list answers 401/403 (see clients/web.ts #friendsRaw) —
+    // A hidden friends list answers 401 (404: no account; see GetFriendList in
+    // clients/endpoints.ts) —
     // that's a valid, documented outcome, not downtime, so it's accepted
     // alongside the normal 200 shape. Anything else (5xx, network, bad JSON) fails.
     name: "web GetFriendList (key)",
@@ -479,7 +480,8 @@ const checks: Check[] = [
       const body = await json<Body>(res).catch((): Body => ({}));
       if (res.status === 403 && typeof body.playerstats?.error === "string")
         return void privateOnly.push("GetPlayerAchievements");
-      if (res.status === 400 && body.playerstats?.success === false) return; // doesn't own it
+      // 400 "Requested app has no stats" (recorded: app-without-stats).
+      if (res.status === 400 && body.playerstats?.success === false) return;
       if (res.status !== 200) throw new Error(`expected 200 (or 403 private), got ${res.status}`);
       need(body.playerstats?.success === true, "playerstats.success");
     },

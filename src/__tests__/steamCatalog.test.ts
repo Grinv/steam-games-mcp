@@ -578,6 +578,7 @@ describe("bundle prices", () => {
       store_items: [
         {
           appid: 2186680,
+          visible: true,
           name: "Warhammer 40,000: Rogue Trader",
           best_purchase_option: BUNDLE_BEST,
           purchase_options,
@@ -630,6 +631,7 @@ describe("bundle prices", () => {
         store_items: [
           {
             appid: 730,
+            visible: true,
             name: "Counter-Strike 2",
             is_free: true,
             purchase_options: [
