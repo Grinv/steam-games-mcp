@@ -293,6 +293,8 @@ describe("get_game", () => {
     ["stalker", "S.T.A.L.K.E.R."],
     ["pokemon", "Pokémon"],
     ["half life", "Half-Life"],
+    // A Japanese mark is part of the letter: ガンダム is not カンタム.
+    ["ガンダム", "ガンダム"],
   ] as const) {
     test(`get_game by name: "${typed}" is ${title}`, async (t) => {
       const { client, mock } = await setupServer(t, ENV, (url) =>
@@ -311,6 +313,23 @@ describe("get_game", () => {
       assert.match(mock.calls.find((c) => c.url.includes("appdetails"))!.url, /appids=2\b/);
     });
   }
+
+  test("get_game by name: a Japanese title isn't folded into another", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, (url) =>
+      url.includes("SearchSuggestions")
+        ? jsonResponse({
+            response: {
+              store_items: [
+                { appid: 1, name: "ガンダム" },
+                { appid: 2, name: "カンタム" },
+              ],
+            },
+          })
+        : router(url),
+    );
+    await client.callTool({ name: "get_game", arguments: { name: "カンタム" } });
+    assert.match(mock.calls.find((c) => c.url.includes("appdetails"))!.url, /appids=2\b/);
+  });
 
   test("get_game reports no match when the title resolves to nothing", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>

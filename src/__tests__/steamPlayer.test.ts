@@ -445,6 +445,19 @@ describe("get_recommended_games", () => {
 
   // The dictionary failing is Steam's, not the input's: a hidden library's
   // own verdict still comes first.
+  // Deterministic: the library's failure is a value, so the input's error is
+  // the one reported, whichever answer lands first.
+  test("get_recommended_games: an unknown exclude tag wins over a failing library", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+      url.includes("GetOwnedGames") ? jsonResponse({}, { status: 503 }) : recoRouter(url),
+    );
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930", exclude_tags: ["Not A Tag"] },
+    });
+    assertToolError(res, /Not a Steam tag in english: "Not A Tag"\./);
+  });
+
   test("get_recommended_games: a hidden library is found:false even with the dictionary down", async (t) => {
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       if (url.includes("GetTagList")) return jsonResponse({}, { status: 503 });

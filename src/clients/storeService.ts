@@ -109,14 +109,18 @@ function reviewScoreFloor(threshold: number): number {
   return 1;
 }
 
-// A title as matched by name: only its letters and digits count, accents
-// folded — "half life" is Half-Life, "dont starve" Don't Starve, "stalker"
-// S.T.A.L.K.E.R., "pokemon" Pokémon, "civilization vi" Civilization® VI.
+// A title as matched by name: only its letters and digits count, Latin
+// accents folded — "half life" is Half-Life, "dont starve" Don't Starve,
+// "stalker" S.T.A.L.K.E.R., "pokemon" Pokémon, "civilization vi"
+// Civilization® VI. Only Latin: elsewhere a mark is part of the letter
+// (Japanese ガ is カ plus dakuten), so it's kept, composed back (NFC).
 function titleKey(s: string): string {
   return s
     .normalize("NFKD")
+    .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
+    .normalize("NFC")
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]/gu, "");
+    .replace(/[^\p{L}\p{N}\p{M}]/gu, "");
 }
 
 // Tag names → each name's tagids, case-insensitively. A name isn't unique: in

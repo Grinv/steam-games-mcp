@@ -64,7 +64,7 @@ export class HttpClient {
       // The check parses the body; keep that, rather than parsing it again.
       let body: object | undefined;
       const check = (text: string) => void (body = checked(text, options));
-      await this.#request(url, options, "application/json", signal, check);
+      await this.#request(url, "application/json", signal, check);
       return body as T;
     }
     return (await this.#cached(url, options, signal)) as T;
@@ -75,7 +75,7 @@ export class HttpClient {
    *  timeouts, retries and ApiError mapping as getJson. */
   async getText(path: string, options: Pick<RequestOptions, "query"> = {}): Promise<string> {
     const url = this.#buildUrl(path, options.query);
-    return (await this.#request(url, options, "*/*", callScope.getStore()?.signal)) ?? "";
+    return (await this.#request(url, "*/*", callScope.getStore()?.signal)) ?? "";
   }
 
   // A fresh cached body, else a request — shared with concurrent callers of
@@ -100,9 +100,7 @@ export class HttpClient {
         // answer it ends in (up to ~45 s of timeouts with the defaults).
         const retries = stale === undefined ? undefined : 0;
         const check = (text: string) => void (parsed = checked(text, options));
-        return (
-          (await this.#request(url, options, "application/json", undefined, check, retries)) ?? ""
-        );
+        return (await this.#request(url, "application/json", undefined, check, retries)) ?? "";
       });
       const text = await untilCancelled(shared, signal);
       return parsed ?? parseJson(text);
@@ -119,7 +117,6 @@ export class HttpClient {
   // be a hiccup (a retryable bad_response) is retried like a 5xx.
   async #request(
     url: string,
-    options: RequestOptions,
     accept: string,
     signal?: AbortSignal,
     check?: (text: string) => void,

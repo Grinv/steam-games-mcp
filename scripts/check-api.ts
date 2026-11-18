@@ -205,7 +205,7 @@ const checks: Check[] = [
     // Game-details visibility (owned games, recent playtime, level) isn't
     // guaranteed public on any profile — Steam answers 200 with an
     // empty `response: {}` in that case, which is a valid, documented shape
-    // (see clients/web.ts isPrivate()), not a broken endpoint. So this accepts
+    // (see format/web.ts ownedGamesNotShown()), not a broken endpoint. So this accepts
     // EITHER shape and only fails on a genuinely malformed/missing `response`.
     name: "web GetOwnedGames (key)",
     skip: KEY ? undefined : "STEAM_API_KEY not set",
@@ -267,10 +267,10 @@ const checks: Check[] = [
         `${API}/ISteamUser/GetFriendList/v1/?key=${KEY}&steamid=${PLAYER}&relationship=friend`,
         { headers: { Accept: "application/json" } },
       );
-      // private friends list — healthy, but nothing about the fields was seen
-      if (res.status === 401 || res.status === 403) return void privateOnly.push("GetFriendList");
-      if (res.status !== 200)
-        throw new Error(`expected 200 (or 401/403 private), got ${res.status}`);
+      // a hidden friends list (401) — healthy, but nothing about the fields was
+      // seen; a 403 is only the bad-key page (clients/endpoints.ts), so it fails
+      if (res.status === 401) return void privateOnly.push("GetFriendList");
+      if (res.status !== 200) throw new Error(`expected 200 (or 401 hidden), got ${res.status}`);
       const body = await json<{ friendslist?: unknown }>(res);
       if (typeof body.friendslist !== "object" || body.friendslist === null)
         throw new Error("missing friendslist object");

@@ -61,9 +61,11 @@ export class TtlCache {
     // even when the new value is too big to keep: an older copy would no
     // longer be Steam's latest answer.
     this.#delete(key);
-    if (value.length > this.#maxSize) return;
+    // Key and value both: a URL key can outweigh a small body (a Steam level).
+    const size = key.length + value.length;
+    if (size > this.#maxSize) return;
     this.#map.set(key, { value, expires: performance.now() + this.#ttlMs, storedAt: Date.now() });
-    this.#size += value.length;
+    this.#size += size;
     for (const oldest of this.#map.keys()) {
       if (this.#size <= this.#maxSize) break;
       this.#delete(oldest);
@@ -96,7 +98,7 @@ export class TtlCache {
   #delete(key: string): void {
     const hit = this.#map.get(key);
     if (!hit) return;
-    this.#size -= hit.value.length;
+    this.#size -= key.length + hit.value.length;
     this.#map.delete(key);
   }
 }

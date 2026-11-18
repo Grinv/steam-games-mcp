@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking:** report a non-public profile's online `state` (and a friend whose profile couldn't be read) as `null` instead of `offline`: Steam reports 0 for any profile it doesn't show.
 - **Breaking:** rename `find_friends_who_own`'s `private_friends` (and `private_friends_total`) to `not_shown_friends`: Steam returns no library for such a friend without saying why, so the field no longer names a cause.
 - **Breaking:** `language`, `review_language` and `STEAM_LANGUAGE` take only Steam's 31 language names (`english`, `russian`, `schinese`, `koreana`, …, in any case). Steam reads any other value without an error — English text, an empty tag dictionary, zero reviews — so an ISO code like `ru` is now refused before any call (and a bad `STEAM_LANGUAGE` at startup), and an empty tag dictionary is a retryable Steam failure instead of a hint to fix the language.
 - **Breaking:** mark a `get_prices` row whose price Steam failed to return as `available: null` (unknown, explained in `notes`) instead of `available: false`, which now only means the appid doesn't exist or isn't sold in that country.
@@ -35,7 +36,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Read an endpoint's plain answer (e.g. a friends-only list's 401) only from Steam's own JSON body, so a gateway's HTML error page with the same status (a retired route, a proxy, an edge block) is reported as an error instead of an empty or "not shown" result.
 - Resolve `get_game`'s `name` to the store item with exactly that title, not Steam's most popular match: "portal" returned Portal 2 and "doom" DOOM: The Dark Ages, because Steam ranks those above the games named exactly that.
 - Report a `get_items` row Steam doesn't show in the requested country (e.g. Red Dead Redemption 2 under RU) as `available: false`, read from Steam's own `visible` flag, instead of `available: true` with no price, not free and not coming soon.
-- Report a non-public profile's online `state` (and a friend whose profile couldn't be read) as `null` instead of `offline`: Steam reports 0 for any profile it doesn't show.
 - Match a tag name that two Steam tags share in the call's language (10 of Steam's 31 languages have one, e.g. French "combat") as either tag in `discover_games` and `get_recommended_games`, instead of silently keeping only one; `get_wishlist`, whose filter can only require every tag it's given, refuses such a name and says why.
 - Stop reading any steamcommunity.com page without a SteamID as "no such profile" for a vanity `STEAM_ID`; only Steam's own not-found answer says that, anything else is a retryable failure.
 - Refuse a `tags`/`exclude_tags` name that isn't in Steam's tag dictionary for the call's language, naming it, instead of answering "nothing matched" (or excluding nothing): `Puzzle` with `language: russian` used to return no games.

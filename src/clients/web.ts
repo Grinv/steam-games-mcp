@@ -281,18 +281,21 @@ export class SteamWebClient {
       minDiscount?: number;
     } = {},
   ): Promise<Record<string, unknown>> {
+    // The library's failure as a value, so the only rejection is the input's
+    // (an unknown exclude tag): refused first, whichever answer lands first.
     const [res, tags] = await Promise.all([
-      this.#ownedGamesRaw(steamid, {
-        include_appinfo: false,
-        // Without this, Steam omits free-to-play games from the owned list
-        // entirely — they'd then not only miss tag-weighting but, worse, never
-        // get excluded as "already owned" and could be recommended back.
-        include_played_free_games: true,
-      }),
-      // The input before any verdict about the library: an unknown exclude
-      // tag is refused whatever that library turns out to be.
+      orFailure(
+        this.#ownedGamesRaw(steamid, {
+          include_appinfo: false,
+          // Without this, Steam omits free-to-play games from the owned list
+          // entirely — they'd then not only miss tag-weighting but, worse, never
+          // get excluded as "already owned" and could be recommended back.
+          include_played_free_games: true,
+        }),
+      ),
       this.#store.recommendationTags(opts.excludeTags, opts.language),
     ]);
+    if (res instanceof ApiError) throw res;
     if (ownedGamesNotShown(res)) return libraryNotShown();
     const games = (res.response?.games ?? [])
       .filter((g): g is { appid: number; playtime_forever?: number } => typeof g.appid === "number")
@@ -422,22 +425,23 @@ export class SteamWebClient {
     // bad luck must not sink everyone else's results.
     const [players, settled] = await Promise.all([
       this.#playerSummaries(ids),
+      // orFailure: one friend's Steam failure is theirs alone (a value); a
+      // bug still rejects, and fails the call below.
       settledWithLimit(ids, SteamWebClient.#FRIEND_LOOKUP_CONCURRENCY, (id) =>
-        this.#ownedPlaytimes(id, appids),
+        orFailure(this.#ownedPlaytimes(id, appids)),
       ),
     ]);
     // One note per distinct cause, so a mix (a timeout here, a 429 there)
     // isn't reported as whichever came first.
     const failedByCause = new Map<string, ApiError[]>();
     const ownership = settled.map((r) => {
-      if (r.status === "fulfilled") return r.value;
-      // One friend's upstream failure is theirs alone; a bug fails the call.
-      if (!(r.reason instanceof ApiError)) throw r.reason;
-      const cause = `${r.reason.code}:${r.reason.status ?? ""}`;
+      if (r.status === "rejected") throw r.reason;
+      if (!(r.value instanceof ApiError)) return r.value;
+      const cause = `${r.value.code}:${r.value.status ?? ""}`;
       const errs = failedByCause.get(cause);
-      if (errs) errs.push(r.reason);
-      else failedByCause.set(cause, [r.reason]);
-      return r.reason;
+      if (errs) errs.push(r.value);
+      else failedByCause.set(cause, [r.value]);
+      return r.value;
     });
     for (const errs of failedByCause.values()) {
       noteDegraded(`Game ownership of ${errs.length} friends (see unavailable_friends)`, errs[0]!);
