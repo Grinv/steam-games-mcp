@@ -134,7 +134,9 @@ npm run inspector      # run under the MCP Inspector
     re-derived at a call site. A client method maps only its own endpoint's
     quirks (e.g. GetFriendList's 401 = private), and only by `code`.
   - **Exactly one place turns a non-`ApiError` into an `ApiError`**:
-    `HttpClient#once`, for `fetch`'s own rejection (network/timeout).
+    `HttpClient#once`, for `fetch`'s own rejection (network/timeout) and a
+    failed body read; a body that isn't JSON is Steam's answer, read as
+    `bad_response` where it's parsed.
     Everywhere else — a retry loop, a `validate`/`check` hook, a cache
     fallback — a non-`ApiError` is a bug and propagates unchanged; widening a
     `try` around new code must not route that code's bugs into a catch that

@@ -124,6 +124,7 @@ export class SteamWebClient {
       logger,
       timeoutMs: config.httpTimeoutMs,
       retries: config.httpRetries,
+      privatePaths: true, // id/<vanity>/
     });
     // Shares this #http (one rate limiter, one cache) rather than owning its
     // own — both clients hit the same api.steampowered.com host.
@@ -662,7 +663,6 @@ export class SteamWebClient {
       // Not "no achievements": Steam has no schema to count them from.
       throw new ApiError({
         code: "not_found",
-        status: 400,
         message: `GetSchemaForGame has no schema for appid ${appid}`,
         detail: NO_SCHEMA,
       });

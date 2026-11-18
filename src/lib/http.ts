@@ -40,6 +40,9 @@ interface HttpClientOptions {
    *  truncated log text. Applied before retries and the cache decide
    *  anything, so they act on what actually happened. */
   classify?: (err: ApiError, body: string) => ApiError;
+  /** This upstream's paths name a player (e.g. a community profile): log the
+   *  origin only. */
+  privatePaths?: boolean;
 }
 
 const MAX_BACKOFF_MS = 8000;
@@ -143,8 +146,8 @@ export class HttpClient {
         const backoff = backoffMs(attempt, apiErr);
         // Never log a player identifier (steamid/vanity), which redact()
         // (credentials-only) leaves untouched: it rides in the query string,
-        // or in a community profile path. The endpoint is enough to debug.
-        const where = url.split("?")[0]!.replace(/\/(id|profiles)\/[^/]+/, "/$1/…");
+        // or in the path where privatePaths says so.
+        const where = this.#opts.privatePaths ? new URL(url).origin : url.split("?")[0];
         this.#opts.logger.debug(
           `retrying ${where} after ${backoff}ms (attempt ${attempt + 1}/${retries}, ${apiErr.code})`,
         );

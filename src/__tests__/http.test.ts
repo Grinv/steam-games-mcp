@@ -558,9 +558,10 @@ test("a retry is logged without the player identifier", async (t) => {
     baseUrl: "https://steamcommunity.com",
     logger: { debug: log, info: log, warn: log, error: log },
     retries: 1,
+    privatePaths: true,
   });
   await c.getJson("id/someone/", { query: { xml: 1, steamid: "76561197960287930" } });
   assert.equal(lines.length, 1);
-  assert.match(lines[0]!, /retrying https:\/\/steamcommunity\.com\/id\/…\//);
+  assert.match(lines[0]!, /retrying https:\/\/steamcommunity\.com after/);
   assert.doesNotMatch(lines[0]!, /someone|7656/);
 });
