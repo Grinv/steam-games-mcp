@@ -167,12 +167,14 @@ export class StorefrontClient {
     // unreachable through get_prices today — but summarizePrices already answers
     // an empty list correctly, and a client method shouldn't depend on one
     // caller's validation to avoid crashing.
-    // optionalParts first: it rethrows a bug in any chunk, which chunk 0's
-    // upstream failure must not hide.
-    const parts = optionalParts(settled, (i) => `Prices of ${chunks[i]!.length} appids`);
-    if (chunks.length > 0 && parts.length === 0) {
-      throw (settled[0] as PromiseRejectedResult).reason;
+    // Before optionalParts, which would note (and log) each chunk as a gap
+    // in a partial answer there won't be. A bug in any chunk goes first: an
+    // upstream failure must not hide it.
+    const failed = settled.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (chunks.length > 0 && failed.length === chunks.length) {
+      throw (failed.find((r) => !(r.reason instanceof ApiError)) ?? failed[0]!).reason;
     }
+    const parts = optionalParts(settled, (i) => `Prices of ${chunks[i]!.length} appids`);
     const merged: PriceDetailsResponse = Object.assign({}, ...parts);
     return summarizePrices(merged, appids, overrides);
   }

@@ -339,7 +339,7 @@ export function registerPlayerWebTools(
         "Requires STEAM_API_KEY and a public profile with game-details visibility (same requirement " +
         "as get_owned_games). found:false means Steam returned no list, which it does for a hidden " +
         "profile, a SteamID64 with no account, and some public profiles too, without saying why; " +
-        "`reason` names the tools that tell these apart.",
+        "`reason` names what narrows it down; for a public profile, nothing does.",
       inputSchema: z.strictObject({ steamid }),
       outputSchema: getRecentlyPlayedOutput,
       annotations: READ_ONLY,

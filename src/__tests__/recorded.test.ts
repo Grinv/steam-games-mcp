@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Steam, classifySteamApiError } from "../clients/endpoints.ts";
-import { ApiError, classifyStatus } from "../lib/errors.ts";
+import { ApiError } from "../lib/errors.ts";
 import { call, type Endpoint } from "../lib/endpoint.ts";
 import { HttpClient } from "../lib/http.ts";
 import { RECORDED, installFetch, mockFetch, recorded, silentLogger } from "./helpers.ts";
@@ -65,17 +65,17 @@ test("every recorded situation, replayed, is what its probe expects", async (t) 
   assert.deepEqual(wrong, []);
 });
 
-test("every answer an endpoint declares is backed by a recorded situation with that code", () => {
+test("every answer an endpoint declares is backed by a recorded situation with that status", () => {
   // A code means what it was seen to mean: an answer with no recorded
   // situation producing it (replayed above) is a belief about Steam.
   const unbacked: string[] = [];
   for (const [name, ep] of Object.entries(Steam)) {
-    for (const [code, answer] of Object.entries(ep.answers ?? {})) {
+    for (const [status, answer] of Object.entries(ep.answers ?? {})) {
       const backed = ep.probes.some((p) => {
         const r = p.situation && RECORDED[`${name}/${p.situation}`];
-        return r && p.expect === answer && classifyStatus(r.status).code === code;
+        return r && p.expect === answer && r.status === Number(status);
       });
-      if (!backed) unbacked.push(`${name}: ${code} → ${answer}`);
+      if (!backed) unbacked.push(`${name}: ${status} → ${answer}`);
     }
   }
   assert.deepEqual(unbacked, []);

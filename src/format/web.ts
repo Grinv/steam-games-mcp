@@ -370,10 +370,11 @@ export interface VanityResponse {
   response?: { success?: number; steamid?: string; message?: string };
 }
 
-// EResult.OK. ResolveVanityURL reports EResult in `response.success`: 1 (OK) on
-// a hit, 42 (EResult.NoMatch) when the name resolves to nothing — so
-// success === RESULT_OK is the only "found" case.
+// ResolveVanityURL reports an EResult in `response.success`: 1 (OK) on a hit,
+// 42 (NoMatch) when the name resolves to nothing. The endpoint lets only these
+// two through (clients/endpoints.ts), so anything not OK here is NoMatch.
 export const RESULT_OK = 1;
+export const RESULT_NO_MATCH = 42;
 
 export function summarizeVanity(
   r: VanityResponse,
@@ -381,8 +382,8 @@ export function summarizeVanity(
   const v = r.response;
   if (v?.success === RESULT_OK && v.steamid)
     return vanityFound.parse({ found: true, steamid: v.steamid });
-  // Our own wording, never Steam's `message` ("No match"): agent-facing text
-  // is always ours (AGENTS.md, error pipeline).
+  // NoMatch, the one other answer the endpoint lets through. Our own wording,
+  // never Steam's `message` ("No match"): agent-facing text is always ours.
   return notFound(
     "No Steam profile has that vanity name. Check the spelling: it's the part after /id/ " +
       "in the profile URL (steamcommunity.com/id/<name>).",

@@ -1633,14 +1633,45 @@ describe("STEAM_ID default / vanity resolution", () => {
     assertToolError(res, /Could not resolve the STEAM_ID vanity name "nobody-such-vanity"/);
   });
 
-  test("a vanity STEAM_ID that fails to resolve errors clearly", async (t) => {
-    const { client } = await setupServer(t, { ...ENV, STEAM_ID: "nobody-such-vanity" }, (url) =>
-      url.includes("ResolveVanityURL")
-        ? jsonResponse({ response: { success: 42 } }) // no steamid — unresolvable
-        : jsonResponse({}),
+  // The API's "No match" (success 42, seen live) settles it: the community
+  // profile isn't asked, so its outage can't replace the answer.
+  test("a vanity STEAM_ID the API answers 'No match' for errors clearly", async (t) => {
+    const { client, mock } = await setupServer(
+      t,
+      { ...ENV, STEAM_ID: "nobody-such-vanity" },
+      (url) =>
+        url.includes("ResolveVanityURL")
+          ? jsonResponse({ response: { success: 42, message: "No match" } })
+          : jsonResponse({}, { status: 503 }),
     );
     const res = await client.callTool({ name: "get_followed_games", arguments: {} });
-    assertToolError(res, /could not resolve/i);
+    assertToolError(res, /Could not resolve the STEAM_ID vanity name "nobody-such-vanity"/);
+    assert.ok(!mock.calls.some((c) => c.url.includes("steamcommunity.com")));
+  });
+
+  // Only 1 and 42 are answers; another EResult says nothing about the name.
+  test("resolve_vanity_url: a result that isn't OK or No match is a failure, not 'no profile'", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+      url.includes("ResolveVanityURL")
+        ? jsonResponse({ response: { success: 2 } })
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "resolve_vanity_url",
+      arguments: { vanity: "gabe" },
+    });
+    assertToolError(res, /unusable/i);
+  });
+
+  // An answer is keyed by the status seen (400), not its code: a 405 or 422
+  // is also bad_request, and was never seen to mean "no schema".
+  test("get_game_achievements: a JSON 405 is an error, not 'no schema'", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetSchemaForGame") ? jsonResponse({}, { status: 405 }) : jsonResponse({}),
+    );
+    const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
+    assertToolError(res, /\(405\)/);
+    assert.doesNotMatch((res.content as { text: string }[])[0]!.text, /no achievement schema/);
   });
 
   test("player tools error clearly when steamid is omitted and STEAM_ID is unset", async (t) => {

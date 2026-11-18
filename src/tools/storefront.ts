@@ -1,7 +1,7 @@
 // Steam Storefront tools — game/store data that needs no API key. Descriptions
 // and per-field .describe() text are written for the calling model: when to use
-// a tool and the meaning of every parameter. Handlers wrap calls in guard() so
-// failures become actionable tool errors.
+// a tool and the meaning of every parameter. Handlers return plain data; the
+// tool() registrar (tools/guard.ts) turns failures into actionable tool errors.
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { StorefrontClient } from "../clients/storefront.ts";

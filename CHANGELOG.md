@@ -29,6 +29,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Stop swallowing server bugs as "upstream unavailable" in the Steam level, followed-games count, tag dictionary and vanity `STEAM_ID` lookups.
 - Report an unreadable achievement-schema answer from Steam as a retryable error, not as "this game has no achievements".
 - Report an empty or non-object answer from Steam (e.g. `null`) as a retryable error, or a noted gap when it was an optional part, instead of an internal error.
+- Say so when a tool error was read off a cached copy (e.g. an old "no such app" served while Steam was failing), as a successful answer already did.
+- Take `ResolveVanityURL`'s "No match" as the answer for a vanity `STEAM_ID` instead of asking the community profile anyway, whose outage then replaced it; and report any other result as Steam's failure, not as "no such profile".
 - Read an endpoint's plain answer (e.g. a friends-only list's 401) only from Steam's own JSON body, so a gateway's HTML error page with the same status (a retired route, a proxy, an edge block) is reported as an error instead of an empty or "not shown" result.
 - Refuse a `tags`/`exclude_tags` name that isn't in Steam's tag dictionary for the call's language, naming it, instead of answering "nothing matched" (or excluding nothing): `Puzzle` with `language: russian` used to return no games.
 - Refuse an appid past 32 bits before calling Steam, which wraps it: `4294967916` came back as Portal 2 (620) under the asked-for id.

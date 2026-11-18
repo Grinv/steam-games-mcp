@@ -163,3 +163,25 @@ test("a failed call is logged, with the gaps met before it failed", async () => 
     restore();
   }
 });
+
+// An error read off a cached copy (an old "no such app") is as old as the copy.
+test("a failed call that used a cached copy says so", async () => {
+  const { out, restore } = setup();
+  try {
+    const r = await out.guard(async () => {
+      callScope.getStore()!.stale.push({
+        err: new ApiError({ code: "server_error", status: 503, message: "down", retryable: true }),
+        storedAt: Date.UTC(2026, 10, 18),
+      });
+      throw new ApiError({ code: "not_found", message: "diag", detail: "No app 5." });
+    }, ctx());
+    assert.equal(r.isError, true);
+    assert.match(
+      r.content[0]!.text,
+      /^No matching resource was found\. No app 5\. Part of this answer is a cached copy from 2026-11-18T00:00:00\.000Z/,
+    );
+    assert.equal((r._meta as Record<string, unknown>)[STALE_META_KEY], true);
+  } finally {
+    restore();
+  }
+});

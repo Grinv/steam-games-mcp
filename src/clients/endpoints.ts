@@ -25,6 +25,7 @@ import type {
   VanityResponse,
   WishlistResponse,
 } from "../format/web.ts";
+import { RESULT_NO_MATCH, RESULT_OK } from "../format/web.ts";
 import type {
   GameSchemaResponse,
   GlobalAchievementsResponse,
@@ -107,12 +108,29 @@ export type AppDetailsResponse = Record<string, { success?: boolean; data?: Stor
 
 export const Steam = {
   // ---- player data (key required) ------------------------------------------
+  // `success` is an EResult: 1 with the steamid, or 42 "No match" for a name
+  // nothing has — the two answers. Any other is a failure that says nothing
+  // about the name: unusable, never read as "no such profile".
   ResolveVanityURL: endpoint<VanityResponse>({
     path: "ISteamUser/ResolveVanityURL/v1/",
     host: "api",
     keyless: false,
+    validate: (body) => {
+      const r = body.response;
+      if ((r?.success === RESULT_OK && r.steamid) || r?.success === RESULT_NO_MATCH) return;
+      throw new ApiError({
+        code: "bad_response",
+        message: `ResolveVanityURL answered success ${r?.success}`,
+        retryable: true,
+      });
+    },
     probes: [
       { query: { vanityurl: "gabelogannewell" }, expect: "data", shows: "resolves" },
+      {
+        query: { vanityurl: "zzzz-no-such-vanity-q7x" },
+        expect: "data",
+        shows: "a name nothing has is success 42",
+      },
       badKeyProbe({ vanityurl: "gabelogannewell" }),
     ],
   }),
@@ -178,8 +196,8 @@ export const Steam = {
     host: "api",
     keyless: false,
     answers: {
-      unauthorized: "not_shown",
-      not_found: "not_shown",
+      401: "not_shown",
+      404: "not_shown",
     },
     probes: [
       badKeyProbe({ steamid: PUBLIC, relationship: "friend" }),
@@ -211,7 +229,7 @@ export const Steam = {
     path: "ISteamUserStats/GetPlayerAchievements/v1/",
     host: "api",
     keyless: false,
-    answers: { forbidden: "not_shown", bad_request: "no_stats" },
+    answers: { 403: "not_shown", 400: "no_stats" },
     probes: [
       badKeyProbe({ steamid: PUBLIC, appid: 620 }),
       {
@@ -249,7 +267,7 @@ export const Steam = {
     path: "ISteamUserStats/GetSchemaForGame/v2/",
     host: "api",
     keyless: false,
-    answers: { bad_request: "no_schema" },
+    answers: { 400: "no_schema" },
     probes: [
       {
         query: { appid: 1206340 },
@@ -276,7 +294,7 @@ export const Steam = {
     path: "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
     host: "api",
     keyless: true,
-    answers: { forbidden: "no_data" },
+    answers: { 403: "no_data" },
     probes: [
       { query: { gameid: 620 }, expect: "data", shows: "a game with achievements" },
       {
@@ -297,7 +315,7 @@ export const Steam = {
     path: "ISteamUserStats/GetNumberOfCurrentPlayers/v1/",
     host: "api",
     keyless: true,
-    answers: { not_found: "no_app" },
+    answers: { 404: "no_app" },
     probes: [
       { query: { appid: 620 }, expect: "data", shows: "a live count" },
       {
@@ -312,7 +330,7 @@ export const Steam = {
     path: "ISteamNews/GetNewsForApp/v2/",
     host: "api",
     keyless: true,
-    answers: { forbidden: "unknown_appid" },
+    answers: { 403: "unknown_appid" },
     probes: [
       { query: { appid: 620, count: 1 }, expect: "data", shows: "news" },
       {

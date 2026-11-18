@@ -20,6 +20,7 @@ import {
   ownProblem,
   problemResult,
   type Problem,
+  problemDetail,
   problemSummary,
   toProblem,
   type ToolResult,
@@ -71,11 +72,10 @@ export function toolOutput(logger: Logger): ToolOutput {
   const line = (err: ApiError) =>
     `${err.code}${err.status ? ` ${err.status}` : ""}: ${err.message.split("\n")[0]}`;
 
-  // One sentence per gap, in the pipeline's own wording (toProblem), never an
-  // error's raw message.
-  function notesOf(state: CallState): string[] {
+  // One sentence per gap, in the pipeline's own wording (problemDetail), never
+  // an error's raw message.
+  function gapNotes(state: CallState): string[] {
     const notes: string[] = [];
-    const staleSeen = new Set<string>();
     // Counted, not collapsed: two chunks missing alike ("Prices of 100
     // appids") are two gaps, and the model must know both. Grouped by what is
     // missing and why (the data), never by the sentence it renders to.
@@ -88,9 +88,15 @@ export function toolOutput(logger: Logger): ToolOutput {
       else gaps.set(key, { what, err, n: 1 });
     }
     for (const { what, err, n } of gaps.values()) {
-      const gap = `${what} unavailable: ${toProblem(err, logger).detail}`;
+      const gap = `${what} unavailable: ${problemDetail(err)}`;
       notes.push(n > 1 ? `${n}× ${gap}` : gap);
     }
+    return notes;
+  }
+
+  function staleNotes(state: CallState): string[] {
+    const notes: string[] = [];
+    const staleSeen = new Set<string>();
     for (const { err, storedAt } of state.stale) {
       logger.warn(`served stale cache data after ${line(err)}`);
       // problemSummary, not the full detail: answering with a stale copy
@@ -124,12 +130,20 @@ export function toolOutput(logger: Logger): ToolOutput {
       if (err instanceof ApiError) {
         // The agent gets the error; the log gets it too, with the gaps met
         // on the way (their notes have no result to ride in).
-        notesOf(state);
+        gapNotes(state);
         logger.warn(`tool call failed: ${line(err)}`);
+        // An error read off a cached copy (an old "no such app") is as old as
+        // that copy: said so, as on a successful answer.
+        const stale = staleNotes(state);
+        if (stale.length) {
+          const problem = toProblem(err, logger);
+          const res = problemResult({ ...problem, detail: [problem.detail, ...stale].join(" ") });
+          return { ...res, _meta: { ...(res._meta ?? {}), [STALE_META_KEY]: true } };
+        }
       }
       return problemResult(toProblem(err, logger));
     }
-    const notes = notesOf(state);
+    const notes = [...gapNotes(state), ...staleNotes(state)];
     if (notes.length === 0 || !result.structuredContent) return result;
     const meta = state.stale.length ? { [STALE_META_KEY]: true } : {};
     const noted = jsonResult({ ...result.structuredContent, notes });

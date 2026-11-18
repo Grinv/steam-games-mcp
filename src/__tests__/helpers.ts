@@ -130,6 +130,6 @@ export function assertToolError(res: unknown, re: RegExp): void {
  *  tools establish why — never a cause picked for the agent ("is private"),
  *  since Steam answers alike for situations it doesn't tell apart. */
 export function assertNotShown(reason: string): void {
-  assert.match(reason, /^Steam didn't return .+ To find out why: get_player_summary/);
+  assert.match(reason, /^Steam didn't return .+ To narrow down why: get_player_summary/);
   assert.doesNotMatch(reason, /\b(is|are) private\b/i);
 }

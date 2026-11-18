@@ -21,8 +21,9 @@ export function notFound(reason: string): z.infer<typeof notFoundReason> {
 export function notShown(what: string, ...howToTell: string[]): string {
   return [
     `Steam didn't return ${what}.`,
-    "To find out why: get_player_summary shows whether the account exists and whether its " +
-      "profile is public (game details and the friends list have their own privacy settings).",
+    "To narrow down why: get_player_summary (needs STEAM_API_KEY) shows whether the account " +
+      "exists and whether its profile is public (game details, the friends list and the " +
+      "wishlist have their own privacy settings, which nothing shows).",
     ...howToTell,
   ].join(" ");
 }

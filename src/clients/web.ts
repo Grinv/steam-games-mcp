@@ -40,7 +40,6 @@ import {
   RECENTLY_PLAYED_MAX,
   summarizeVanity,
   summarizeWishlist,
-  RESULT_OK,
   type CurrentPlayersResponse,
   type OwnedGamesSort,
   type FollowedGamesCountResponse,
@@ -162,18 +161,19 @@ export class SteamWebClient {
     // otherwise — and as a backstop when the keyed attempt fails, since a
     // mistyped key 403ing here would otherwise take get_wishlist and
     // get_followed_games down with it, and neither needs a key of its own.
-    // The community profile is the last word, and only its answer — a page
-    // with no steamID64 — says the name resolves to nothing. Its failure, of
-    // any status, says nothing about the name, so it is the error.
-    let steamid: string | undefined;
+    // Either one's answer settles it: the API's "No match" (success 42), or a
+    // community page with no steamID64. A failure says nothing about the name:
+    // the API's sends us on to the community profile, the community's is the
+    // error.
+    let steamid: string | null | undefined; // null: answered "no such name"
     if (this.configured) {
       // Only an upstream failure means "ask the community profile"; a bug isn't one.
-      const res = await orFailure(this.#vanityViaApi(raw));
-      if (!(res instanceof ApiError)) steamid = res;
+      const res = await orFailure(this.#call(Steam.ResolveVanityURL, { vanityurl: raw }));
+      if (!(res instanceof ApiError)) steamid = res.response?.steamid ?? null;
       // Code and status only: never a player identifier in the log.
       else this.#logger.debug(`STEAM_ID vanity lookup failed: ${res.code} ${res.status ?? ""}`);
     }
-    steamid ??= await this.#vanityViaCommunity(raw);
+    if (steamid === undefined) steamid = (await this.#vanityViaCommunity(raw)) ?? null;
     if (!steamid) {
       throw new ApiError({
         code: "not_found",
@@ -187,11 +187,6 @@ export class SteamWebClient {
     }
     this.#resolvedDefault = steamid;
     return steamid;
-  }
-
-  async #vanityViaApi(vanity: string): Promise<string | undefined> {
-    const res = await this.#call(Steam.ResolveVanityURL, { vanityurl: vanity });
-    return res.response?.success === RESULT_OK ? res.response.steamid : undefined;
   }
 
   /** Keyless vanity resolution: a public profile's `?xml=1` view carries the

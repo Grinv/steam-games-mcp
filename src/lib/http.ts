@@ -72,7 +72,7 @@ export class HttpClient {
   /** The raw response body, for the rare upstream that doesn't speak JSON —
    *  Steam's community profile view (`?xml=1`) is the only one here. Same
    *  timeouts, retries and ApiError mapping as getJson. */
-  async getText(path: string, options: RequestOptions = {}): Promise<string> {
+  async getText(path: string, options: Pick<RequestOptions, "query"> = {}): Promise<string> {
     const url = this.#buildUrl(path, options.query);
     return (await this.#request(url, options, "*/*", callScope.getStore()?.signal)) ?? "";
   }

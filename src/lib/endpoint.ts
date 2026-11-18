@@ -14,7 +14,7 @@
 // not just remembered in a comment. An answer is backed by the situations a
 // probe recorded producing its code (recorded.test.ts): a code means what it
 // was seen to mean, never more.
-import { ApiError, type ApiErrorCode } from "./errors.ts";
+import { ApiError } from "./errors.ts";
 import type { HttpClient, RequestOptions } from "./http.ts";
 
 export type Query = Record<string, string | number | boolean | undefined>;
@@ -42,8 +42,9 @@ export interface Endpoint<T, A extends string = never> {
   /** True when the endpoint works without the key (it is still sent when
    *  configured): its probes run in check:api even with no key. */
   keyless: boolean;
-  /** Plain answers Steam sends as HTTP errors: code → answer. */
-  answers?: Partial<Record<ApiErrorCode, A>>;
+  /** Plain answers Steam sends as HTTP errors: status → answer. Keyed by the
+   *  status seen, not its code: bad_request also covers 405 and 422. */
+  answers?: Partial<Record<number, A>>;
   /** Throws an ApiError when a 200's body isn't usable data for this query.
    *  Runs before caching and inside the retry, like a failed request. */
   validate?: (body: T, query: Query) => void;
@@ -95,7 +96,10 @@ export async function call<T, A extends string>(
     // Only the method's own answer (a JSON body) is one: the same status as a
     // gateway's HTML page — a retired route, a proxy, an edge block — is a
     // failure. Every recorded answer is JSON, every route/key page HTML.
-    const answer = err instanceof ApiError && err.jsonBody ? ep.answers[err.code] : undefined;
+    const answer =
+      err instanceof ApiError && err.jsonBody && err.status !== undefined
+        ? ep.answers[err.status]
+        : undefined;
     if (answer === undefined) throw err;
     return { answer } as Answered<T, A>;
   }
