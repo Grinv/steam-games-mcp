@@ -16,6 +16,7 @@ import {
   READ_ONLY,
   SEARCH_MAX,
   appid,
+  appidValue,
   country,
   language,
   platform,
@@ -248,7 +249,7 @@ export function registerStoreWebTools(
         "get_wishlist / get_owned_games.",
       inputSchema: z.strictObject({
         appids: z
-          .array(z.int().positive())
+          .array(appidValue)
           .nonempty()
           .max(ITEMS_MAX)
           .describe(`Steam appids (1-${ITEMS_MAX}). Split a longer list across calls.`),

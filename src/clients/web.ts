@@ -184,7 +184,9 @@ export class SteamWebClient {
     const attempt = async (p: Promise<string | undefined>) => {
       const res = await orFailure(p);
       if (!(res instanceof ApiError)) return res;
-      this.#logger.debug("STEAM_ID vanity lookup failed:", res);
+      // Code and status only: the message can hold Steam's page for the
+      // profile path, i.e. the vanity.
+      this.#logger.debug(`STEAM_ID vanity lookup failed: ${res.code} ${res.status ?? ""}`);
       if (res.retryable) transient = res;
       return undefined;
     };

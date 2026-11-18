@@ -366,10 +366,13 @@ describe("summarizePurchasePrices", () => {
     ["a null item", [null]],
     ["an item whose purchase_options isn't a list", [{ appid: 1, purchase_options: "x" }]],
   ] as const) {
+    // Retryable like every unusable body: it's no fact about the game, so a
+    // good cached correction stands in for it (lib/http.ts serves a stale
+    // copy only for a retryable failure).
     test(`${label} is Steam's unusable answer, not our bug`, () => {
       assert.throws(
         () => summarizePurchasePrices({ response: { store_items: store_items as never } }),
-        (err: unknown) => err instanceof ApiError && err.code === "bad_response" && !err.retryable,
+        (err: unknown) => err instanceof ApiError && err.code === "bad_response" && err.retryable,
       );
     });
   }

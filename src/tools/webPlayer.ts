@@ -9,7 +9,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.ts";
 import { toolRegistrar, type ToolOutput } from "./guard.ts";
-import { READ_ONLY, appid, language } from "./common.ts";
+import { READ_ONLY, appid, appidValue, language } from "./common.ts";
 import { PUBLIC_PROFILE_NOTE, keyGate, otherSteamid, steamid, steamIdTool } from "./webShared.ts";
 import { notFoundReason, withNotFound } from "../format/shared.schemas.ts";
 import { recommendedGamesFound } from "../format/store.schemas.ts";
@@ -183,7 +183,7 @@ export function registerPlayerWebTools(
         "missing from all three lists as unchecked, not as a non-owner. Get appids from search_games.",
       inputSchema: z.strictObject({
         appids: z
-          .array(z.int().positive())
+          .array(appidValue)
           .nonempty()
           .max(10)
           .describe(
@@ -284,7 +284,7 @@ export function registerPlayerWebTools(
       inputSchema: z.strictObject({
         steamid,
         check_appids: z
-          .array(z.int().positive())
+          .array(appidValue)
           .nonempty()
           .max(CHECK_APPIDS_MAX)
           .describe(

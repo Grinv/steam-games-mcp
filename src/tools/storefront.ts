@@ -8,7 +8,15 @@ import type { StorefrontClient } from "../clients/storefront.ts";
 import type { StoreServiceClient } from "../clients/storeService.ts";
 import { ApiError } from "../lib/errors.ts";
 import { toolRegistrar, type ToolOutput } from "./guard.ts";
-import { ITEMS_MAX, PRICES_MAX, READ_ONLY, appid, country, language } from "./common.ts";
+import {
+  ITEMS_MAX,
+  PRICES_MAX,
+  READ_ONLY,
+  appid,
+  appidValue,
+  country,
+  language,
+} from "./common.ts";
 import {
   getFeaturedOutput,
   getGameOutput,
@@ -123,7 +131,7 @@ export function registerStorefrontTools(
         "No API key required. Get appids from search_games or get_wishlist.",
       inputSchema: z.strictObject({
         appids: z
-          .array(z.int().positive())
+          .array(appidValue)
           .nonempty()
           .max(PRICES_MAX)
           .describe(`Steam appids to price (1-${PRICES_MAX}). Split a longer list across calls.`),

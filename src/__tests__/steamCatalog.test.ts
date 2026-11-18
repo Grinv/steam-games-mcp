@@ -1106,3 +1106,16 @@ test("a tags filter reads the tag dictionary once per call, not again for the ca
   assert.equal(res.isError, undefined);
   assert.equal(mock.calls.filter((c) => c.url.includes("GetTagList")).length, 1);
 });
+
+// Steam reads an appid as 32 bits: 2^32+620 comes back as Portal 2.
+test("an appid past 32 bits is refused before any call", async (t) => {
+  const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+  for (const [tool, args] of [
+    ["get_items", { appids: [4294967916] }],
+    ["get_game_reviews", { appid: 4294967916 }],
+  ] as const) {
+    const res = await client.callTool({ name: tool, arguments: args });
+    assertToolError(res, /at most 4294967295/);
+  }
+  assert.equal(mock.calls.length, 0);
+});

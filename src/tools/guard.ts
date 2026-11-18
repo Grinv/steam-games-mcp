@@ -12,7 +12,7 @@ import type {
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { CallCancelled, callScope, type CallState } from "../lib/call.ts";
-import type { ApiError } from "../lib/errors.ts";
+import { ApiError } from "../lib/errors.ts";
 import type { Logger } from "../lib/logger.ts";
 import {
   STALE_META_KEY,
@@ -66,15 +66,16 @@ function withNotes(schema: z.ZodType): any {
 }
 
 export function toolOutput(logger: Logger): ToolOutput {
+  // One line each: an expected Steam failure, not a bug — stacks are for
+  // the internal-error path (toProblem), where they're the diagnostics.
+  const line = (err: ApiError) =>
+    `${err.code}${err.status ? ` ${err.status}` : ""}: ${err.message.split("\n")[0]}`;
+
   // One sentence per gap, in the pipeline's own wording (toProblem), never an
   // error's raw message.
   function notesOf(state: CallState): string[] {
     const notes: string[] = [];
     const staleSeen = new Set<string>();
-    // One line each: an expected Steam failure, not a bug — stacks are for
-    // the internal-error path (toProblem), where they're the diagnostics.
-    const line = (err: ApiError) =>
-      `${err.code}${err.status ? ` ${err.status}` : ""}: ${err.message.split("\n")[0]}`;
     // Counted, not collapsed: two chunks missing alike ("Prices of 100
     // appids") are two gaps, and the model must know both. Grouped by what is
     // missing and why (the data), never by the sentence it renders to.
@@ -120,6 +121,12 @@ export function toolOutput(logger: Logger): ToolOutput {
       // itself — every abort path raises it — so a bug that happens to land
       // alongside a cancel is still logged.
       if (err instanceof CallCancelled) return problemResult(ownProblem("cancelled"));
+      if (err instanceof ApiError) {
+        // The agent gets the error; the log gets it too, with the gaps met
+        // on the way (their notes have no result to ride in).
+        notesOf(state);
+        logger.warn(`tool call failed: ${line(err)}`);
+      }
       return problemResult(toProblem(err, logger));
     }
     const notes = notesOf(state);

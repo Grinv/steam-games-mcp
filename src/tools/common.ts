@@ -24,10 +24,11 @@ export const PRICES_MAX = 250;
 // budget above; the default stays 10, the old storesearch page size.
 export const SEARCH_MAX = 100;
 
-export const appid = z
-  .int()
-  .positive()
-  .describe("Steam application id (appid). Get it from search_games.");
+// Steam reads an appid as 32 bits and wraps a larger one: appdetails for
+// 2^32+620 answers Portal 2 under that id (verified live 2026-11-18).
+export const appidValue = z.int().positive().max(0xffffffff, "An appid is at most 4294967295.");
+
+export const appid = appidValue.describe("Steam application id (appid). Get it from search_games.");
 
 // Per-call overrides of the server defaults (STEAM_COUNTRY / STEAM_LANGUAGE).
 

@@ -246,13 +246,14 @@ export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
   return parsed.data;
 }
 
-// Not retryable: the same payload would fail the same way, and a retry only
-// delays get_game/get_prices by its backoff to lose the same correction.
+// Retryable like every unusable body: it states nothing about the game, so a
+// good cached correction stands in for it (a stale copy answers only a
+// retryable failure), and "retry later" advice holds.
 function unusablePrices(why: string, cause?: unknown): ApiError {
   return new ApiError({
     code: "bad_response",
     message: `GetItems purchase options don't fit the price shape: ${why}`,
-    retryable: false,
+    retryable: true,
     cause,
   });
 }

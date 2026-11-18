@@ -143,3 +143,23 @@ test("two parts missing alike are two gaps in the notes, not one", async () => {
     restore();
   }
 });
+
+test("a failed call is logged, with the gaps met before it failed", async () => {
+  const { out, lines, restore } = setup();
+  try {
+    await out.guard(async () => {
+      await optional(
+        "Names",
+        Promise.reject(new ApiError({ code: "rate_limited", status: 429, message: "slow" })),
+      );
+      throw new ApiError({ code: "server_error", status: 503, message: "down" });
+    }, ctx());
+    const warned = lines.filter((l) => l.level === "warn").map((l) => l.text);
+    assert.deepEqual(warned, [
+      "partial answer, Names unavailable: rate_limited 429: slow",
+      "tool call failed: server_error 503: down",
+    ]);
+  } finally {
+    restore();
+  }
+});
