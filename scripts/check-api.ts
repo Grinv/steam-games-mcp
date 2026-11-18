@@ -20,6 +20,9 @@
 // of the probes that pass; a plain run fails when Steam's status for a
 // recorded situation has moved, so a recording can't go stale unnoticed.
 //
+// Every JSON 200 any check sees is also walked for nulls: one at a place not
+// in KNOWN_NULLS fails the run (see there).
+//
 // Run: `npm run check:api`.
 
 import { HttpClient } from "../src/lib/http.ts";
@@ -581,6 +584,41 @@ interface Recorded {
   body: string;
 }
 const recorded: Record<string, Recorded> = JSON.parse(readFileSync(RECORDED_FILE, "utf8"));
+// Every null Steam sends in a JSON 200, by endpoint and field. Formatters
+// read Steam's payload by its TS type, and a null where the type said
+// "absent" once rendered an unreleased game's price as "0.00 USD" (fef888e),
+// found only by re-checking live. A null not in KNOWN_NULLS fails the run:
+// check the formatter reads it safely (or doesn't read it), then list it.
+const KNOWN_NULLS: Record<string, string> = {
+  "store.steampowered.com/api/appdetails .<n>.data.content_descriptors.notes":
+    "typed string | null; format/storefront.ts renders it as null",
+  "store.steampowered.com/api/featuredcategories .coming_soon.items[].original_price":
+    "typed number | null; format/storefront.ts: an unpriced item's price is null",
+  "store.steampowered.com/api/featuredcategories .new_releases.items[].original_price":
+    "same field and handling as coming_soon's",
+  "store.steampowered.com/api/featuredcategories .top_sellers.items[].large_capsule_image":
+    "not read",
+  "api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/ .game.availableGameStats.stats[].displayName":
+    "not read (only availableGameStats.achievements is)",
+};
+const nullsSeen = new Map<string, string>(); // path → the first URL it came from
+function collectNulls(url: string, body: string): void {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return; // not JSON: nothing a formatter reads by type
+  }
+  const { host, pathname } = new URL(url);
+  const walk = (v: unknown, path: string): void => {
+    if (v === null) {
+      if (!nullsSeen.has(path)) nullsSeen.set(path, url.replace(/key=[^&]*/, "key=…"));
+    } else if (Array.isArray(v)) v.forEach((e) => walk(e, `${path}[]`));
+    else if (typeof v === "object")
+      for (const [k, x] of Object.entries(v)) walk(x, `${path}.${/^\d+$/.test(k) ? "<n>" : k}`);
+  };
+  walk(parsed, `${host}${pathname} `);
+}
 // The last response fetch returned, as Steam sent it (the probe's final attempt).
 let lastResponse: Recorded | undefined;
 const realFetch = globalThis.fetch;
@@ -591,6 +629,7 @@ globalThis.fetch = async (input, init) => {
     contentType: res.headers.get("content-type") ?? "",
     body: await res.clone().text(),
   };
+  if (res.status === 200) collectNulls(res.url || String(input), lastResponse.body);
   return res;
 };
 const probeLogger = createLogger("silent");
@@ -678,6 +717,10 @@ for (const check of checks) {
   await delay(SPACING_MS);
 }
 
+const newNulls = [...nullsSeen].filter(([path]) => !(path in KNOWN_NULLS));
+for (const [path, url] of newNulls)
+  console.error(`  FAIL Steam sent null at ${path} (seen in ${url})`);
+
 if (RECORD) {
   const sorted = Object.fromEntries(
     Object.entries(recorded).sort(([a], [b]) => a.localeCompare(b)),
@@ -689,6 +732,13 @@ if (RECORD) {
 }
 if (failures.length) {
   console.error(`\n${failures.length}/${ran} API checks failed.`);
+  process.exit(1);
+}
+if (newNulls.length) {
+  console.error(
+    `\nSteam sent null at ${newNulls.length} unlisted place(s): check the formatter reads ` +
+      "each safely (or not at all), then add it to KNOWN_NULLS with where.",
+  );
   process.exit(1);
 }
 if (ran === 0 || rateLimited.length > ran) {
