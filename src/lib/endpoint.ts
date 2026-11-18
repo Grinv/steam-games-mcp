@@ -2,9 +2,8 @@
 // a client turns an upstream failure into a domain answer.
 //
 // Steam encodes some plain answers as HTTP errors (a private friends list is
-// a 401, an appid with no achievement schema a 403), says some things only in
-// a 200's body (an empty tag dictionary), and answers some codes ambiguously
-// (that 403 is also its edge under load). Those are facts about Steam, not
+// a 401, an appid with no achievement schema a 403) and says some things only
+// in a 200's body (an empty tag dictionary). Those are facts about Steam, not
 // about any one caller: an Endpoint states them once, the engine (HttpClient:
 // retries, cache, stale copies) applies them in one fixed order, and `call`
 // hands the client either data or a typed answer — so no client writes a
@@ -12,7 +11,9 @@
 //
 // Each stated fact carries `probes`: calls against live Steam that show it
 // (run by scripts/check-api.ts), so a fact that stops being true is caught,
-// not just remembered in a comment.
+// not just remembered in a comment. An answer is backed by the situations a
+// probe recorded producing its code (recorded.test.ts): a code means what it
+// was seen to mean, never more.
 import { ApiError, type ApiErrorCode } from "./errors.ts";
 import type { HttpClient, RequestOptions } from "./http.ts";
 
@@ -43,9 +44,6 @@ export interface Endpoint<T, A extends string = never> {
   keyless: boolean;
   /** Plain answers Steam sends as HTTP errors: code → answer. */
   answers?: Partial<Record<ApiErrorCode, A>>;
-  /** Codes that are also a passing failure here: a cached copy wins over
-   *  them; with none cached, they read as their answer. */
-  ambiguous?: readonly ApiErrorCode[];
   /** Throws an ApiError when a 200's body isn't usable data for this query.
    *  Runs before caching and inside the retry, like a failed request. */
   validate?: (body: T, query: Query) => void;
@@ -87,7 +85,6 @@ export async function call<T, A extends string>(
   const request: RequestOptions = {
     query: { ...extraQuery, ...rest },
     cache: opts.cache,
-    staleOn: ep.ambiguous,
     validate,
   };
   if (!ep.answers) return (await http.getJson<T>(path, request)) as Answered<T, A>;

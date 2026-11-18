@@ -185,55 +185,11 @@ test("get_global_achievements degrades to a clean empty result for a schema-less
   assert.deepEqual(s.achievements, []);
 });
 
-test("get_global_achievements keyless: a 403 is reported as possibly incomplete, never as 'none'", async (t) => {
-  // Without the key there's no schema to tell "no data" from the edge's
-  // passing 403, so the empty answer carries a note instead of passing as fact.
-  const { STEAM_API_KEY: _key, ...keyless } = ENV;
-  const { client } = await setupServer(t, keyless, (url) =>
-    url.includes("GetGlobalAchievementPercentagesForApp")
-      ? jsonResponse({}, { status: 403 })
-      : router(url),
-  );
-  const res = await client.callTool({ name: "get_global_achievements", arguments: { appid: 620 } });
-  const s = res.structuredContent as { count: number; notes?: string[] };
-  assert.equal(s.count, 0);
-  assert.match(s.notes?.[0] ?? "", /^Achievement rarity unavailable: .*can't be told apart/);
-  // Unknown stays unknown: the advice after it doesn't claim a cause either.
-  assert.doesNotMatch(s.notes?.[0] ?? "", /refused it in passing|security block/);
-});
-
-test("get_global_achievements: a 403 for a game whose schema lists achievements is a failure, not 'none'", async (t) => {
-  // The edge also answers 403 under load; with a key, the schema settles it.
-  const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
-    url.includes("GetGlobalAchievementPercentagesForApp")
-      ? jsonResponse({}, { status: 403 })
-      : router(url),
-  );
-  const res = await client.callTool({ name: "get_global_achievements", arguments: { appid: 620 } });
-  assertToolError(res, /\(403\)\. Steam refused the rarity data.*retry/);
-  // Not the 403 advice for a keyless call, which would send the agent to
-  // change a valid appid.
-  assert.doesNotMatch((res.content as { text: string }[])[0]!.text, /different input|credentials/);
-});
-
-test("get_game_achievements: rarity's 403 for a game that has achievements is a noted gap", async (t) => {
-  const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
-    url.includes("GetGlobalAchievementPercentagesForApp")
-      ? jsonResponse({}, { status: 403 })
-      : router(url),
-  );
-  const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
-  assert.equal(res.isError, undefined);
-  assert.match((res.structuredContent as { notes: string[] }).notes[0]!, /^Achievement rarity/);
-});
-
 test("get_global_achievements never caches that degraded empty result", async (t) => {
   // Regression: the degrade-to-empty result used to be cached (the old
-  // result-level cache stored whatever the callback returned) — a single 403
-  // (Steam's edge answers that under load, not only for a schema-less appid)
-  // then served "this game has no achievements" for the whole TTL, and the
-  // tool's own description tells the model to read it exactly that way.
-  // A real list on the retry is what proves the empty one was never cached.
+  // result-level cache stored whatever the callback returned). Only a
+  // successful body is cached now, so Steam's next answer is always asked
+  // for; a real list on the retry is what proves the empty one wasn't kept.
   let calls = 0;
   const { client } = await setupServer(t, ENV, (url) => {
     if (url.includes("GetSchemaForGame")) return jsonResponse({ game: {} }); // schema-less appid
@@ -261,14 +217,10 @@ test("get_global_achievements never caches that degraded empty result", async (t
 
 for (const [status, expectedCount, why] of [
   [503, 1, "a transient failure is answered with the stale list"],
-  // GetGlobalAchievementPercentagesForApp's 403 is ambiguous: "no schema", or
-  // Steam's edge under load — so a real cached list wins over it too.
-  [403, 1, "an ambiguous 403 is answered with the stale list, not 'no achievements'"],
 ] as const) {
   test(`get_global_achievements after a cached list: a later ${status} → ${why}`, async (t) => {
-    // Stale data answers Steam failing transiently, or a code the endpoint
-    // declared ambiguous (`staleOn`); a definitive 4xx elsewhere propagates
-    // (lib/http.ts's own tests).
+    // Stale data answers only Steam failing transiently; a definitive 4xx
+    // propagates (lib/http.ts's own tests).
     let calls = 0;
     const { client } = await setupServer(
       t,
@@ -789,23 +741,6 @@ describe("get_items", () => {
     const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
     const s = res.structuredContent as { items: { appid: number; tags: string[] }[] };
     assert.equal(s.items[0]!.tags.length, 0);
-  });
-
-  test("a passing empty tag dictionary answered from cache doesn't tell the model its language is wrong", async (t) => {
-    let empty = false;
-    const { client } = await setupServer(
-      t,
-      { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0", CACHE_TTL_MS: "1" },
-      (url) => (empty && url.includes("GetTagList") ? jsonResponse({ response: {} }) : router(url)),
-    );
-    await client.callTool({ name: "get_items", arguments: { appids: [620] } });
-    await new Promise((r) => setTimeout(r, 5)); // let the 1 ms dictionary go stale
-    empty = true;
-    const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
-    const notes = (res.structuredContent as { notes: string[] }).notes;
-    assert.equal(notes.length, 1);
-    assert.match(notes[0]!, /cached copy from/);
-    assert.doesNotMatch(notes[0]!, /language/);
   });
 
   test("get_items: an empty tag dictionary's note tells the model to fix its language", async (t) => {

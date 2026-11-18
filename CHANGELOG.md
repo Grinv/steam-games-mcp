@@ -32,13 +32,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Report a game with no reviews as an unknown review % (`review_percent: null`) instead of 0%, so `get_recommended_games` no longer scores it 0 and drops it.
 - Keep `get_game` and `get_prices` answering, with a noted gap, when Steam's price-correction payload is unusable, instead of failing the call.
 - Report a rejected key or a server bug in `get_player_achievements`' fallback schema lookup as such, not as "no achievement data for this appid".
-- Tell a passing 403 on achievement rarity from "this game has no rarity data": with a key, a game whose schema lists achievements gets a noted gap (`get_game_achievements`) or an error (`get_global_achievements`) instead of empty rarity.
 - Log a bug in the game-title prompt completions instead of silently showing no suggestions.
 - Answer from cache within one request timeout while Steam is down, instead of after every retry (up to ~45 s per call).
 - Stop showing a delisted game, or any definitive Steam answer, from a stale cache entry; cached data now stands in only for a Steam failure.
 - Cache Steam's "no such app" answer for `get_game` too, instead of asking again on every call.
 - Stop a system clock stepped back (NTP, a restored VM) from stalling every store request for as long as the step, or keeping cached data fresh that long.
-- Keep a good cached tag dictionary or price correction when Steam briefly answers with one it can't use, instead of caching that answer.
+- Keep a good cached price correction when Steam briefly answers with one it can't use, and never cache an unusable price or tag-dictionary answer.
 - Report an unexpected HTTP 400 from `get_player_summary` or `get_player_bans` as an invalid request instead of "no such account": Steam answers no account with an empty list there, never a 400 (checked live).
 - Log upstream failures the server answers around (missing player names, price corrections, achievement rarity, stale cache), which used to leave no trace.
 

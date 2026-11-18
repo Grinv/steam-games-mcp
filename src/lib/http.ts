@@ -4,7 +4,7 @@
 // A namespace import, not a destructured one: node:test's mocked timers only
 // replace what's looked up on the module at call time.
 import * as timers from "node:timers/promises";
-import { ApiError, classifyStatus, type ApiErrorCode } from "./errors.ts";
+import { ApiError, classifyStatus } from "./errors.ts";
 import { TtlCache } from "./cache.ts";
 import { CallCancelled, callScope, untilCancelled } from "./call.ts";
 import type { Logger } from "./logger.ts";
@@ -17,15 +17,10 @@ export interface RequestOptions {
    *  don't depend on who asks or need to be live (catalog data, dictionaries,
    *  charts) — never for a player's library or friends. */
   cache?: boolean;
-  /** Codes that, for this endpoint, are as likely a passing hiccup as a real
-   *  answer, so a stale copy is preferred to them too (besides any `retryable`
-   *  failure). Filled from the endpoint's `ambiguous` (clients/endpoints.ts),
-   *  where the quirk is stated — not set at a call site. */
-  staleOn?: readonly ApiErrorCode[];
   /** Throws (an ApiError) when Steam answered with a body this call can't use
    *  — e.g. an empty tag dictionary. Runs before caching, so such a body is
    *  never cached over a good one, and fails like any other request (a stale
-   *  copy stands in if the error is retryable or in `staleOn`). */
+   *  copy stands in if the error is retryable). */
   validate?: (body: unknown) => void;
 }
 
@@ -81,9 +76,9 @@ export class HttpClient {
 
   // A fresh cached body, else a request — shared with concurrent callers of
   // the same URL. A body that isn't JSON fails like a request (bad_response)
-  // and is never cached. Steam failing transiently (`retryable`, or a code the
-  // endpoint declares `ambiguous`, passed in as `staleOn`) is answered with the stale
-  // copy if there is one; a definitive answer (4xx) or a bug propagates.
+  // and is never cached. Steam failing transiently (`retryable`) is answered
+  // with the stale copy if there is one; a definitive answer (4xx) or a bug
+  // propagates.
   //
   // The request is shared, so a cancelled call only stops waiting for it: the
   // other waiters still get its answer, and so does the cache.
@@ -108,9 +103,7 @@ export class HttpClient {
       const text = await untilCancelled(shared, signal);
       return parsed ?? parseJson(text);
     } catch (err) {
-      const staleWins =
-        err instanceof ApiError && (err.retryable || options.staleOn?.includes(err.code));
-      if (stale === undefined || !staleWins) throw err;
+      if (stale === undefined || !(err instanceof ApiError && err.retryable)) throw err;
       callScope.getStore()?.stale.push({ err: err as ApiError, storedAt: stale.storedAt });
       return parseJson(stale.value);
     }

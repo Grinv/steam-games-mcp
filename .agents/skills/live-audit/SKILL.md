@@ -374,11 +374,8 @@ false`, an uncorrected price shown as checked) is this bug. Run
   client caches a shaped or combined result of its own (that is how a
   degraded answer — an uncorrected price, "no achievements" from one 403 —
   used to get cached for the whole TTL over a good entry), that `cache: true`
-  is only on answers that aren't live or per-requester, and that an endpoint
-  whose 4xx can also be a passing hiccup declares it `ambiguous` in
-  `clients/endpoints.ts` (the rarity endpoint's 403) rather than a
-  client-side retry or fallback.
-- **A fact about Steam without a probe.** Every `answers`/`ambiguous`/
+  is only on answers that aren't live or per-requester.
+- **A fact about Steam without a probe.** Every `answers`/
   `validate` entry in `clients/endpoints.ts` needs a probe that passes against
   live Steam (`npm run check:api`). A fixture written from memory agrees with
   the code, not with Steam: the bad-key page is a 401 on IPlayerService, and

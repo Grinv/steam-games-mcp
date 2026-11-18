@@ -283,24 +283,15 @@ describe("response cache (cache: true)", () => {
     );
   });
 
-  test("a code the call site declared ambiguous (staleOn) is answered with the stale copy", async (t) => {
-    let fail = false;
-    installFetch(
-      t,
-      mockFetch(() => (fail ? jsonResponse({}, { status: 403 }) : jsonResponse({ v: 1 }))),
-    );
-    const c = client({ cacheTtlMs: 1 });
-    await warmThenExpire(c);
-    fail = true;
-    assert.deepEqual(await c.getJson("thing", { cache: true, staleOn: ["forbidden"] }), { v: 1 });
-    await assert.rejects(() => c.getJson("thing", { cache: true })); // not declared: propagates
-  });
-
   test("a body the call's validate rejects is never cached over a good one", async (t) => {
-    let empty = false;
+    let mode: "good" | "empty" | "down" = "good";
     installFetch(
       t,
-      mockFetch(() => jsonResponse(empty ? { tags: [] } : { tags: ["a"] })),
+      mockFetch(() =>
+        mode === "down"
+          ? jsonResponse({}, { status: 503 })
+          : jsonResponse(mode === "empty" ? { tags: [] } : { tags: ["a"] }),
+      ),
     );
     const c = client({ cacheTtlMs: 1 });
     const validate = (body: unknown) => {
@@ -309,42 +300,41 @@ describe("response cache (cache: true)", () => {
     };
     await c.getJson("thing", { cache: true, validate });
     await new Promise((r) => setTimeout(r, 5));
-    empty = true;
-    // Not in staleOn: the rejection propagates…
+    mode = "empty";
+    // A definitive rejection propagates…
     await assert.rejects(
       () => c.getJson("thing", { cache: true, validate }),
       (err: unknown) => err instanceof ApiError && err.code === "bad_request",
     );
-    // …and the good body is still what's cached.
-    assert.deepEqual(
-      await c.getJson("thing", { cache: true, validate, staleOn: ["bad_request"] }),
-      {
-        tags: ["a"],
-      },
-    );
+    // …and the good body is still what's cached: Steam failing next is
+    // answered with it, not with the rejected one.
+    mode = "down";
+    assert.deepEqual(await c.getJson("thing", { cache: true, validate }), { tags: ["a"] });
   });
 
   test("the client's classify runs before the cache decides on a stale copy", async (t) => {
     let fail = false;
     installFetch(
       t,
-      mockFetch(() => (fail ? jsonResponse({}, { status: 403 }) : jsonResponse({ v: 1 }))),
+      mockFetch(() => (fail ? jsonResponse({}, { status: 503 }) : jsonResponse({ v: 1 }))),
     );
     const c = new HttpClient({
       baseUrl: "https://example.test/api",
       logger: silentLogger(),
       cacheTtlMs: 1,
+      retries: 0,
+      // A host whose 503 page says something definitive (not retryable).
       classify: (err) =>
-        err.code === "forbidden"
+        err.code === "server_error"
           ? new ApiError({ code: "invalid_key", message: err.message })
           : err,
     });
     await c.getJson("thing", { cache: true });
     await new Promise((r) => setTimeout(r, 5));
     fail = true;
-    // forbidden is declared ambiguous, but what Steam said was invalid_key.
+    // A plain 503 would get the stale copy; what the host said was invalid_key.
     await assert.rejects(
-      () => c.getJson("thing", { cache: true, staleOn: ["forbidden"] }),
+      () => c.getJson("thing", { cache: true }),
       (err: unknown) => err instanceof ApiError && err.code === "invalid_key",
     );
   });

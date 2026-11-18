@@ -76,18 +76,6 @@ const PRIVATE_FRIENDS_REASON =
 const hasAchievements = (schema: GameSchemaResponse) =>
   (schema.game?.availableGameStats?.achievements?.length ?? 0) > 0;
 
-// GetGlobalAchievementPercentagesForApp's 403 ("no data") for a game whose
-// schema lists achievements: the edge's passing block, not an answer.
-function rarityBlocked(appid: number): ApiError {
-  return new ApiError({
-    code: "forbidden",
-    status: 403,
-    retryable: true,
-    message: `GetGlobalAchievementPercentagesForApp 403 for appid ${appid}, whose schema lists achievements`,
-    detail: "Steam refused the rarity data of a game that has achievements (a passing block).",
-  });
-}
-
 function friendIdsOf(r: FriendListResponse): string[] {
   return (r.friendslist?.friends ?? [])
     .map((f) => f.steamid)
@@ -570,36 +558,7 @@ export class SteamWebClient {
       { gameid: appid },
       { cache: true },
     );
-    if (!res.answer) return summarizeGlobalAchievements(res.data);
-    // "No data" is also the edge's passing 403 (clients/endpoints.ts). With a
-    // key, the (cached) schema tells them apart: a game that lists
-    // achievements has rarity data, so the answer was a failure.
-    if (this.configured) {
-      const schema = await optional(
-        "Achievement schema (to tell 'no data' from a passing 403)",
-        this.#call(Steam.GetSchemaForGame, { appid, l: this.#l }, { cache: true }),
-      );
-      if (schema) {
-        if (schema.data && hasAchievements(schema.data)) throw rarityBlocked(appid);
-        return summarizeGlobalAchievements({});
-      }
-    }
-    // Keyless, or the schema unknown: the empty answer may be a passing block,
-    // so it is reported as possibly incomplete, never as "no achievements".
-    noteDegraded(
-      "Achievement rarity",
-      new ApiError({
-        code: "forbidden",
-        status: 403,
-        retryable: true,
-        message: `GetGlobalAchievementPercentagesForApp 403 for appid ${appid}, schema unknown`,
-        detail:
-          "Steam answers 403 both for a game with no achievement data and, under load, for " +
-          "one that has it; without its achievement schema (needs STEAM_API_KEY) the two " +
-          "can't be told apart.",
-      }),
-    );
-    return summarizeGlobalAchievements({});
+    return summarizeGlobalAchievements(res.answer ? {} : res.data);
   }
 
   // Current concurrent player count for a game. Not cached — it's a live number.
@@ -703,12 +662,6 @@ export class SteamWebClient {
     ]);
     // Steam's answer for the appid itself (a nonexistent one).
     if (schema.answer) return summarizeGameSchema({}, {});
-    if (rarity?.data) return summarizeGameSchema(schema.data, rarity.data);
-    // Rarity's "no data" contradicts a schema that lists achievements: the
-    // edge's passing 403, a gap to note — not Steam saying there's none.
-    if (rarity?.answer && hasAchievements(schema.data)) {
-      noteDegraded("Achievement rarity (global unlock %)", rarityBlocked(appid));
-    }
-    return summarizeGameSchema(schema.data, {});
+    return summarizeGameSchema(schema.data, rarity?.data ?? {});
   }
 }

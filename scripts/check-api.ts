@@ -9,7 +9,7 @@
 // and runs `npm run check:api` locally before a release.
 //
 // The second half checks the facts clients/endpoints.ts states about each
-// endpoint (which errors are plain answers, which codes are ambiguous, what a
+// endpoint (which errors are plain answers, what a
 // usable body is): every `probe` there is called through the server's own
 // HttpClient + call(), so it checks both that Steam still answers that way
 // and that the server reads it as stated.

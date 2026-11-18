@@ -253,15 +253,14 @@ export const Steam = {
 
   // ---- keyless-capable (key sent when present) ------------------------------
   // A 403 for a DLC with no achievement data and for a nonexistent appid
-  // (never a 400/404: five such appids sampled live 2026-11-17) —
-  // and, observed under load, from Steam's edge for a game that has data:
-  // so a cached copy wins over it, and with a key the schema tells them apart.
+  // (never a 400/404: five such appids sampled live 2026-11-17). Never seen for
+  // a game that has data: every such game sampled answered 200, and Steam under
+  // load answers 420 (rate_limited), not 403.
   GetGlobalAchievementPercentagesForApp: endpoint<GlobalAchievementsResponse, "no_data">({
     path: "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
     host: "api",
     keyless: true,
     answers: { forbidden: "no_data" },
-    ambiguous: ["forbidden"],
     probes: [
       { query: { gameid: 620 }, expect: "data", shows: "a game with achievements" },
       {
@@ -349,14 +348,12 @@ export const Steam = {
     probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
   }),
   // An unrecognized `language` (an ISO code like "ru" instead of "russian") is
-  // a 200 with an empty dictionary — no language has zero tags. A request
-  // problem, unless a dictionary for this language is cached: then the
-  // language exists, the empty answer is a hiccup, and the cached one wins.
+  // a 200 with an empty dictionary — no language has zero tags: a request
+  // problem.
   GetTagList: endpoint<GetTagListResponse>({
     path: "IStoreService/GetTagList/v1/",
     host: "api",
     keyless: true,
-    ambiguous: ["bad_request"],
     validate: (body, query) => {
       if (Object.keys(summarizeTagList(body)).length > 0) return;
       // The hint lives on the error itself, so every path that reports it —

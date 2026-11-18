@@ -158,16 +158,20 @@ npm run inspector      # run under the MCP Inspector
 - **What Steam means is stated once per endpoint**, in `clients/endpoints.ts`
   (`lib/endpoint.ts` defines the shape): path, host, keyless or not, the plain
   answers Steam sends as HTTP errors (`answers`: e.g. GetFriendList's 401 →
-  "private_or_missing"), codes that are also a passing failure (`ambiguous`:
-  a cached copy wins over them), and the body rule (`validate`). A client
+  "private_or_missing"), and the body rule (`validate`). A client
   calls through `call(...)`/`#call(...)` and gets data, or `{ answer }` typed
   by the endpoint, so the compiler makes it handle every answer — there is no
   `catch` reading Steam in a client. Each stated fact has `probes`: live calls
   that show it, run by `npm run check:api`. Add a fact only with a probe that
   passes against live Steam today — a fact from memory is how the bad-key 401
-  went unclassified while every test passed on a 403 fixture. The one
-  exception is `ambiguous`: a passing edge failure can't be triggered on cue,
-  so its probes show only the plain answer and a comment says what was seen.
+  went unclassified while every test passed on a 403 fixture. **A code means
+  what it was seen to mean, never more:** each `answers` entry must be backed
+  by a recorded situation producing that code (`recorded.test.ts` enforces
+  it), so a guess about what else a status might mean — "a 403 under load",
+  "an empty answer is a hiccup" — has nowhere to go. There used to be such
+  a mechanism (`ambiguous`, exempt from probes); every entry in it turned
+  out to be unobserved (the rarity "403 under load" was Steam's 420 misread),
+  and the code built on it drew three review rounds of bugs.
   **What Steam sends in a situation is recorded, never written by hand.** A
   probe that isn't a plain success names its `situation`; check:api's
   `--record` flag saves Steam's real response (status, body) to
@@ -219,8 +223,7 @@ npm run inspector      # run under the MCP Inspector
   on what actually happened: the host client's `classify` (Steam's bad-key page →
   `invalid_key`) and the endpoint's `validate` (a body it can't use, e.g. an
   empty tag dictionary, fails like a request and is never cached). A stale copy answers only a
-  `retryable` failure (or a code the endpoint declares `ambiguous`), without
-  retries when one exists; it is collected per call via
+  `retryable` failure, without retries when one exists; it is collected per call via
   `callScope` and flags `_meta["io.github.Grinv/stale"]`. `_meta` keys use `META_PREFIX`
   (`src/version.ts`), the reverse-DNS namespace of `mcpName`.
 - **Cancellation** reaches Steam without being threaded through clients: the
