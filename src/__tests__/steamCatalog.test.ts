@@ -479,10 +479,8 @@ describe("get_wishlist", () => {
   });
 
   test("get_wishlist: an empty tag dictionary fails loudly instead of matching nothing", async (t) => {
-    // GetTagList answers an unrecognized language with 200 + {} rather than an
-    // error, so the dictionary came back empty-but-not-null and slipped past the
-    // null guard — every tag filter then rejected every item, which reads as an
-    // honest "no games matched" to the agent.
+    // An empty dictionary once slipped past the null guard — every tag filter
+    // then rejected every item, which reads as an honest "no games matched".
     const { client } = await setupServer(
       t,
       { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
@@ -490,7 +488,7 @@ describe("get_wishlist", () => {
     );
     const res = await client.callTool({
       name: "get_wishlist",
-      arguments: { steamid: "76561198028121353", tags: ["Metroidvania"], language: "ru" },
+      arguments: { steamid: "76561198028121353", tags: ["Metroidvania"] },
     });
     assertToolError(res, /tag dictionary/i);
   });
@@ -503,13 +501,28 @@ describe("get_wishlist", () => {
     );
     const res = await client.callTool({
       name: "discover_games",
-      arguments: { tags: ["Puzzle"], language: "ru" },
+      arguments: { tags: ["Puzzle"] },
     });
     assertToolError(res, /tag dictionary/i);
-    // The language is the cause, so the text names it and doesn't suggest a retry.
-    assertToolError(res, /full language names/);
-    assert.doesNotMatch((res.content as { text: string }[])[0]!.text, /retry/i);
+    // Every Steam language has a dictionary: an empty one is Steam's bad
+    // answer, worth a retry, not a language to fix.
+    assertToolError(res, /retry/i);
   });
+
+  // Steam reads any other value as a language (English text, no tags, zero
+  // reviews), so only its own names get through.
+  for (const [tool, args] of [
+    ["discover_games", { tags: ["Puzzle"], language: "ru" }],
+    ["get_items", { appids: [620], language: "korean" }],
+    ["get_game_reviews", { appid: 620, review_language: "ru" }],
+  ] as const) {
+    test(`${tool}: a language that isn't Steam's is refused before any call`, async (t) => {
+      const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
+      const res = await client.callTool({ name: tool, arguments: args });
+      assertToolError(res, /koreana/);
+      assert.equal(mock.calls.length, 0);
+    });
+  }
 
   test("get_wishlist: country/language alone switch to detailed mode (not silently ignored)", async (t) => {
     const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
@@ -698,7 +711,7 @@ describe("get_items", () => {
     assert.equal(s.items[0]!.tags.length, 0);
   });
 
-  test("get_items: an empty tag dictionary's note tells the model to fix its language", async (t) => {
+  test("get_items: an empty tag dictionary is noted as Steam's failure", async (t) => {
     const { client } = await setupServer(
       t,
       { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
@@ -706,10 +719,10 @@ describe("get_items", () => {
     );
     const res = await client.callTool({
       name: "get_items",
-      arguments: { appids: [620], language: "ru" },
+      arguments: { appids: [620] },
     });
     const notes = (res.structuredContent as { notes: string[] }).notes;
-    assert.match(notes[0]!, /^Game tags unavailable: .*full language names/);
+    assert.match(notes[0]!, /^Game tags unavailable: .*retry/i);
   });
 
   test("get_items: an empty tag dictionary still degrades to empty tags (display-only, never filtered)", async (t) => {

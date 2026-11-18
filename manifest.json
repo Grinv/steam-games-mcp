@@ -150,7 +150,7 @@
     "steam_language": {
       "type": "string",
       "title": "Store language",
-      "description": "Optional. Store language, e.g. 'english', 'russian', 'german'. Defaults to english.",
+      "description": "Optional. Store language: one of Steam's language names, e.g. 'english', 'russian', 'schinese', 'koreana' (not an ISO code like 'ru'). Defaults to english.",
       "required": false,
       "default": "english"
     }

@@ -216,8 +216,8 @@ export class StoreServiceClient {
       status: cause.status,
       retryable: cause.retryable,
       message: `tag dictionary unavailable (${language})`,
-      // The cause's own detail (e.g. the language hint) follows ours; a
-      // 429/5xx carries none and gets the code's "retry" advice instead.
+      // The cause's own detail, if any, follows ours; a 429/5xx carries none
+      // and gets the code's "retry" advice instead.
       detail: [`Could not fetch Steam's tag dictionary, so ${consequence}.`, cause.detail]
         .filter(Boolean)
         .join(" "),

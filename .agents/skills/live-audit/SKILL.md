@@ -254,7 +254,9 @@ environment supports concurrent subagents/background tasks.
   blip. A plausible-but-wrong locale can also corrupt results with no error at
   all: an ISO `language` (`ru`, not Steam's `russian`) emptied the `GetTagList`
   tag dictionary, so every `tags` filter matched nothing — indistinguishable
-  live from "no games matched".
+  live from "no games matched". `language`/`review_language`/`STEAM_LANGUAGE`
+  now take only Steam's names (`STEAM_LANGUAGES`); check that `ru`/`korean`
+  are refused before any call.
 - **Systematic input-schema fuzzing** across every tool: wrong JS types,
   invalid enums, missing required fields, malformed nested objects, extremely
   long strings. Only flag a genuine problem — an unhandled exception/stack

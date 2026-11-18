@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { CompatFilters } from "../format/storeCard.ts";
 import { compatFilterSchema } from "../format/store.schemas.ts";
+import { STEAM_LANGUAGES } from "../format/shared.ts";
 
 export const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
 
@@ -30,8 +31,7 @@ export const appid = z
 
 // Per-call overrides of the server defaults (STEAM_COUNTRY / STEAM_LANGUAGE).
 
-// Same shape of trap as LANGUAGE_ISO_WARNING below, and same reason for being a
-// constant: get_wishlist overrides `country`'s .describe() too, so prose here
+// A constant because get_wishlist overrides `country`'s .describe() too, so prose here
 // would reach every tool but that one. Verified live: cc=XX and cc=ZZ both pass
 // the two-letter regex and come back with US prices.
 export const COUNTRY_UNKNOWN_WARNING =
@@ -48,26 +48,14 @@ export const country = z
       `this call. ${COUNTRY_UNKNOWN_WARNING}`,
   )
   .optional();
-// Steam takes a language NAME, and answers an unrecognized one without erroring,
-// so a wrong value is invisible in the result. All three behaviours below are
-// verified live. Kept as one exported string because three tools override
-// `language`'s own .describe() with their own wording (get_wishlist,
-// get_game_achievements, get_player_achievements) and would otherwise each have
-// to restate — or, as happened once, silently drop — the warning.
-export const LANGUAGE_ISO_WARNING =
-  "Use Steam's own language NAME — english, russian, schinese/tchinese — not an ISO code like " +
-  "en/ru/zh. An unrecognized value is never an error: text comes back in English and any `tags` " +
-  "list comes back EMPTY, which reads as 'this game has no tags' rather than as a bad language. " +
-  "(Filtering BY tags is the one loud case — it fails outright.)";
-
+// Only Steam's own names: Steam reads any other value without an error (see
+// STEAM_LANGUAGES), so the enum is what keeps a wrong one from reaching it.
 export const language = z
-  .string()
-  .trim()
-  .min(2)
+  .enum(STEAM_LANGUAGES)
   .describe(
-    `Store language for the text fields. ${LANGUAGE_ISO_WARNING} Overrides STEAM_LANGUAGE for ` +
-      "this call. This is the content language only — prices and regional availability follow " +
-      "`country`.",
+    "Store language for the text fields (Steam's own name, e.g. russian, schinese, koreana). " +
+      "Overrides STEAM_LANGUAGE for this call. This is the content language only — prices and " +
+      "regional availability follow `country`.",
   )
   .optional();
 

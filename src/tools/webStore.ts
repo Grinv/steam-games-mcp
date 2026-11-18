@@ -11,7 +11,6 @@ import type { StoreServiceClient } from "../clients/storeService.ts";
 import { toolRegistrar, type ToolOutput } from "./guard.ts";
 import {
   COUNTRY_UNKNOWN_WARNING,
-  LANGUAGE_ISO_WARNING,
   ITEMS_MAX,
   PRICES_MAX,
   READ_ONLY,
@@ -44,7 +43,7 @@ import {
   getGameReviewsOutput,
   wishlistLightFound,
 } from "../format/web.schemas.ts";
-import { storeDayStart } from "../format/shared.ts";
+import { STEAM_LANGUAGES, storeDayStart } from "../format/shared.ts";
 import { getChartsOutput, chartSchema } from "../format/charts.schemas.ts";
 import { getGlobalAchievementsOutput } from "../format/webAchievements.schemas.ts";
 
@@ -179,13 +178,9 @@ export function registerStoreWebTools(
             )
             .optional(),
           review_language: z
-            .string()
-            .trim()
-            .nonempty()
+            .enum(["all", ...STEAM_LANGUAGES])
             .describe(
-              "Filter reviews by language. Use Steam's full language name — english, russian, " +
-                "schinese — NOT an ISO code like en/ru/zh: Steam answers an unrecognized value with " +
-                "zero reviews rather than an error, so a 9M-review game reads as having none. " +
+              "Filter reviews by language (Steam's own name, e.g. russian, schinese). " +
                 "Default 'all'. Setting this ALSO rescopes the summary counts (total_reviews / " +
                 "positive / negative / %) to that language — they are no longer the game's global " +
                 "totals. Leave it at 'all' when you want those.",
@@ -606,7 +601,7 @@ export function registerStoreWebTools(
           `Country (cc) for prices; overrides STEAM_COUNTRY. Implies include_details. ${COUNTRY_UNKNOWN_WARNING}`,
         ),
         language: language.describe(
-          `Store language; overrides STEAM_LANGUAGE. Implies include_details. ${LANGUAGE_ISO_WARNING}`,
+          "Store language (Steam's own name, e.g. russian); overrides STEAM_LANGUAGE. Implies include_details.",
         ),
       }),
       outputSchema: getWishlistOutput,

@@ -50,6 +50,45 @@ export function isSteamId64(s: string): boolean {
   return accountid >= 1n && accountid <= 0xffffffffn;
 }
 
+// Steam's language names (its "API language code" column,
+// partner.steamgames.com/doc/store/localization/languages). Steam answers any
+// other value as if it were a language — English text, an empty tag
+// dictionary, zero reviews — so only these reach it. Each verified live
+// 2026-11-18: a full GetTagList dictionary, where "korean" and "ru" get none.
+export const STEAM_LANGUAGES = [
+  "arabic",
+  "bulgarian",
+  "schinese",
+  "tchinese",
+  "czech",
+  "danish",
+  "dutch",
+  "english",
+  "finnish",
+  "french",
+  "german",
+  "greek",
+  "hungarian",
+  "indonesian",
+  "italian",
+  "japanese",
+  "koreana",
+  "malay",
+  "norwegian",
+  "polish",
+  "portuguese",
+  "brazilian",
+  "romanian",
+  "russian",
+  "spanish",
+  "latam",
+  "swedish",
+  "thai",
+  "turkish",
+  "ukrainian",
+  "vietnamese",
+] as const;
+
 export const STEAMID64_RANGE =
   "A SteamID64 is a 17-digit number from 76561197960265729 to 76561202255233023.";
 

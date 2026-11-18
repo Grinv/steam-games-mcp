@@ -103,4 +103,11 @@ describe("loadConfig", () => {
     assert.throws(() => loadConfig({ HTTP_TIMEOUT_MS: "0" })); // .positive()
     assert.throws(() => loadConfig({ HTTP_RETRIES: "-1" })); // .nonnegative()
   });
+
+  // Steam ignores case but reads any other name as a language (English text,
+  // an empty tag dictionary), so only its own names start the server.
+  test("STEAM_LANGUAGE is one of Steam's names, in any case", () => {
+    assert.equal(loadConfig({ STEAM_LANGUAGE: "Russian" }).language, "russian");
+    assert.throws(() => loadConfig({ STEAM_LANGUAGE: "ru" }), /koreana/);
+  });
 });

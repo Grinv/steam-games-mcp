@@ -36,7 +36,7 @@
         },
         {
           "name": "STEAM_LANGUAGE",
-          "description": "Store language (e.g. english, russian, german).",
+          "description": "Store language: one of Steam's language names (e.g. english, russian, schinese, koreana).",
           "isRequired": false,
           "default": "english"
         }
@@ -68,7 +68,7 @@
         },
         {
           "name": "STEAM_LANGUAGE",
-          "description": "Store language (e.g. english, russian, german).",
+          "description": "Store language: one of Steam's language names (e.g. english, russian, schinese, koreana).",
           "isRequired": false,
           "default": "english"
         }

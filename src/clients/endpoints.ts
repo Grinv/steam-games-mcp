@@ -359,30 +359,28 @@ export const Steam = {
     keyless: true,
     probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
   }),
-  // An unrecognized `language` (an ISO code like "ru" instead of "russian") is
-  // a 200 with an empty dictionary — no language has zero tags: a request
-  // problem.
+  // Every Steam language has a full dictionary (446 tags each, 2026-11-18),
+  // and only Steam's names reach it (STEAM_LANGUAGES), so an empty one is a
+  // body we can't use, not an answer.
   GetTagList: endpoint<GetTagListResponse>({
     path: "IStoreService/GetTagList/v1/",
     host: "api",
     keyless: true,
     validate: (body, query) => {
       if (Object.keys(summarizeTagList(body)).length > 0) return;
-      // The hint lives on the error itself, so every path that reports it —
-      // a tags filter, recommendations, a "Game tags" note — says how to fix it.
       throw new ApiError({
-        code: "bad_request",
+        code: "bad_response",
         message: `Steam returned an empty tag dictionary for language "${query.language}"`,
-        detail:
-          `Steam has no tag dictionary for language "${query.language}": use one of Steam's ` +
-          "full language names (english, russian, schinese — not an ISO code like en/ru/zh).",
+        retryable: true,
       });
     },
     probes: [
       { query: { language: "english" }, expect: "data", shows: "a dictionary" },
       {
+        // Why the schemas take only STEAM_LANGUAGES: Steam doesn't refuse
+        // another value, it answers it empty.
         query: { language: "ru" },
-        expect: "bad_request",
+        expect: "bad_response",
         shows: "an ISO code is an empty 200",
         situation: "iso-language",
       },

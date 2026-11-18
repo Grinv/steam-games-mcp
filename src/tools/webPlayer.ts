@@ -9,7 +9,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { SteamWebClient } from "../clients/web.ts";
 import { toolRegistrar, type ToolOutput } from "./guard.ts";
-import { LANGUAGE_ISO_WARNING, READ_ONLY, appid, language } from "./common.ts";
+import { READ_ONLY, appid, language } from "./common.ts";
 import { PUBLIC_PROFILE_NOTE, keyGate, otherSteamid, steamid, steamIdTool } from "./webShared.ts";
 import { notFoundReason, withNotFound } from "../format/shared.schemas.ts";
 import { recommendedGamesFound } from "../format/store.schemas.ts";
@@ -99,8 +99,8 @@ export function registerPlayerWebTools(
       inputSchema: z.strictObject({
         appid,
         language: language.describe(
-          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE. " +
-            LANGUAGE_ISO_WARNING,
+          "Language for achievement names/descriptions (Steam's own name, e.g. russian); " +
+            "overrides STEAM_LANGUAGE.",
         ),
       }),
       outputSchema: getGameAchievementsOutput,
@@ -435,8 +435,8 @@ export function registerPlayerWebTools(
         steamid,
         appid,
         language: language.describe(
-          "Language for achievement names/descriptions; overrides STEAM_LANGUAGE. " +
-            LANGUAGE_ISO_WARNING,
+          "Language for achievement names/descriptions (Steam's own name, e.g. russian); " +
+            "overrides STEAM_LANGUAGE.",
         ),
       }),
       outputSchema: getPlayerAchievementsOutput,

@@ -99,15 +99,15 @@ describe("search_games", () => {
     assert.equal(mock.calls.length, 0);
   });
 
-  // Regression: a padded country/language override (e.g. pasted with stray
-  // whitespace) must still be usable — country's regex is anchored
-  // (^[A-Za-z]{2}$) so untrimmed whitespace would otherwise fail validation
-  // outright instead of being accepted like the trimmed value.
-  test("search_games trims whitespace from per-call country/language overrides", async (t) => {
+  // Regression: a padded country override (e.g. pasted with stray whitespace)
+  // must still be usable — country's regex is anchored (^[A-Za-z]{2}$) so
+  // untrimmed whitespace would otherwise fail validation outright. (language
+  // is an enum the schema lists, so it has no padded form to accept.)
+  test("search_games trims whitespace from a per-call country override", async (t) => {
     const { client, mock } = await setupServer(t, ENV, router);
     const res = await client.callTool({
       name: "search_games",
-      arguments: { term: "portal", country: " RU ", language: " russian " },
+      arguments: { term: "portal", country: " RU ", language: "russian" },
     });
     assert.equal(res.isError, undefined);
     assert.deepEqual(searchInput(mock).context, { country_code: "RU", language: "russian" });

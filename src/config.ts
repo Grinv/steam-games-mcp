@@ -6,6 +6,7 @@
 // error at call time when it is missing. Empty strings AND unsubstituted .mcpb
 // placeholders (e.g. "${user_config.steam_id}") are treated as unset.
 import { z } from "zod";
+import { STEAM_LANGUAGES } from "./format/shared.ts";
 import type { LogLevel } from "./lib/logger.ts";
 
 const EnvSchema = z.object({
@@ -26,7 +27,9 @@ const EnvSchema = z.object({
 
   // Storefront is region/locale-aware: cc = ISO country (prices), l = language.
   STEAM_COUNTRY: z.string().trim().min(2).max(2).default("US"),
-  STEAM_LANGUAGE: z.string().trim().min(2).default("english"),
+  // Steam ignores case; any name outside its list is refused here, at startup,
+  // rather than read by Steam as English text and an empty tag dictionary.
+  STEAM_LANGUAGE: z.string().trim().toLowerCase().pipe(z.enum(STEAM_LANGUAGES)).default("english"),
 
   // --- Generic tunables. ---
   HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),

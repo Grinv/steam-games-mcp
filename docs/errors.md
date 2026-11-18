@@ -89,15 +89,17 @@ waiting for finishes for that call (and the cache) instead.
 ## bad_request
 
 The request can't be served as given: Steam rejected it (HTTP 400/405/422),
-something it needs is missing (e.g. no `steamid` and no `STEAM_ID` default), or
-Steam doesn't recognize the `language` (an ISO code like `ru` instead of
-`russian` gets an empty tag dictionary). `detail` says what to change.
+or something it needs is missing (e.g. no `steamid` and no `STEAM_ID` default).
+`detail` says what to change. An input Steam would misread (a SteamID64 that
+names no account, a language that isn't one of Steam's names) is refused
+before any call, with a validation message instead.
 
 ## bad_response
 
 Steam answered with a success status but a body that can't be used: invalid
 JSON, an empty or non-object body, or one the endpoint's own check rejects (e.g.
-an appdetails answer missing an appid it was asked about). Usually transient.
+an appdetails answer missing an appid it was asked about, an empty tag
+dictionary). Usually transient.
 
 ## unknown
 
