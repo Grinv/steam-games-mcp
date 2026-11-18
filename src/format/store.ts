@@ -31,6 +31,7 @@ import {
   nativePlatforms,
   priceFields,
   resolveTags,
+  shownHere,
   storeCard,
   storeItemFilter,
   type StoreFilters,
@@ -131,8 +132,7 @@ export function summarizeDiscover(
   const keep = storeItemFilter(opts);
   const rows = (r.response?.store_items ?? [])
     .filter(
-      (it): it is StoreItemWithAppid =>
-        it.visible !== false && typeof it.appid === "number" && keep(it),
+      (it): it is StoreItemWithAppid => shownHere(it) && typeof it.appid === "number" && keep(it),
     )
     .map((it) => storeCard(it, opts.tagMap))
     .sort((a, b) => (b.discount_pct as number) - (a.discount_pct as number));
@@ -172,13 +172,9 @@ export function summarizeItems(
     count: appids.length,
     items: appids.map((appid) => {
       const it = byId.get(appid);
-      // Steam's own verdict, not a guess from which fields came back: an item
-      // it won't show here is `visible:false` (success 15) — RDR2 1174180 under
-      // cc=RU carries its name plus `unvailable_for_country_restriction`, and a
-      // nonexistent or removed appid comes back as appid 0 (all seen live
-      // 2026-11-19). A shown one is `visible:true` (success 1); the flag is
-      // on every item (GetItems' body rule, clients/endpoints.ts).
-      if (!it?.visible) return { appid, available: false };
+      // Steam's own verdict, per row (shownHere): a nonexistent or removed
+      // appid comes back as appid 0, so it has no row here either.
+      if (!it || !shownHere(it)) return { appid, available: false };
       const bp = ownPurchaseOption(it);
       return {
         ...baseCard(it, tagMap),
@@ -379,7 +375,7 @@ export function summarizeRecommendations(
   const scored = candidates
     .filter(
       (it): it is StoreItemWithAppid =>
-        it.visible !== false &&
+        shownHere(it) &&
         typeof it.appid === "number" &&
         !ownedAppids.has(it.appid) &&
         // Client-side discount backstop, like summarizeDiscover: the server

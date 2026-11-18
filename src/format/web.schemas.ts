@@ -48,7 +48,7 @@ export const getPlayerSummaryOutput = z.discriminatedUnion("found", [
     name: z.string().nullable(),
     real_name: z.string().nullable(),
     state: personaStateSchema,
-    visibility: visibilitySchema,
+    visibility: visibilitySchema.nullable(),
     country: z.string().nullable(),
     level: z.number().nullable(),
     created: z.string().nullable(),

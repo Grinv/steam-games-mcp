@@ -60,10 +60,12 @@ const ACCOUNT_0 = "76561197960265728";
 const json = (o: unknown) => JSON.stringify(o);
 const ctx = { language: "english", country_code: "US" };
 
-// A field a verdict is read from must be in the body: absent, it would turn
-// into one by default ("no such app", "no achievements", "private",
-// "available"). Each is sent on every answer seen live (2026-11-19); a body
-// without it is unusable, never a verdict.
+// A field a whole-body verdict is read from must be in the body: absent, it
+// would turn into one by default ("no such app", "no achievements"). Each is
+// sent on every answer seen live (2026-11-19); a body without it is unusable,
+// never a verdict. A fact about one item of a batch is decided per row
+// instead (format/'s shownHere, a profile's visibility): one odd item must
+// not cost the rest.
 function requireField(present: boolean, what: string): void {
   if (present) return;
   throw new ApiError({ code: "bad_response", message: `the body has no ${what}`, retryable: true });
@@ -147,11 +149,6 @@ export const Steam = {
     path: "ISteamUser/GetPlayerSummaries/v2/",
     host: "api",
     keyless: false,
-    validate: (body) =>
-      requireField(
-        (body.response?.players ?? []).every((p) => typeof p.communityvisibilitystate === "number"),
-        "communityvisibilitystate on every player",
-      ),
     probes: [
       { query: { steamids: PUBLIC }, expect: "data", shows: "a public profile" },
       badKeyProbe({ steamids: PUBLIC }),
@@ -426,12 +423,6 @@ export const Steam = {
     path: "IStoreBrowseService/GetItems/v1/",
     host: "api",
     keyless: true,
-    // Steam's own "shown here" verdict (get_items' available), on every item.
-    validate: (body) =>
-      requireField(
-        (body.response?.store_items ?? []).every((i) => typeof i.visible === "boolean"),
-        "visible on every store item",
-      ),
     probes: [
       {
         query: { input_json: json({ ids: [{ appid: 620 }], context: ctx }) },

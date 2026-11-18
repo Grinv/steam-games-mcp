@@ -97,10 +97,13 @@ export function summarizePlayer(
     name: p.personaname ?? null,
     real_name: p.realname || null,
     state: personaState(p),
+    // Absent, the profile's visibility is unknown, not "private".
     visibility:
-      p.communityvisibilitystate === VISIBILITY_PUBLIC
-        ? visibilitySchema.enum.public
-        : visibilitySchema.enum.private,
+      p.communityvisibilitystate === undefined
+        ? null
+        : p.communityvisibilitystate === VISIBILITY_PUBLIC
+          ? visibilitySchema.enum.public
+          : visibilitySchema.enum.private,
     country: p.loccountrycode || null,
     level: level ?? null,
     created: isoDay(p.timecreated),

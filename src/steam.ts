@@ -16,6 +16,10 @@ export function isSteamId64(s: string): boolean {
   return accountid >= 1n && accountid <= 0xffffffffn;
 }
 
+// What a steamid input accepts: a 17-digit value must name an account;
+// anything else isn't a SteamID64 at all (the regex or a vanity says so).
+export const steamIdAccepts = (s: string): boolean => !STEAMID64_RE.test(s) || isSteamId64(s);
+
 // Steam's language names (its "API language code" column,
 // partner.steamgames.com/doc/store/localization/languages). Steam answers any
 // other value as if it were a language — English text, an empty tag

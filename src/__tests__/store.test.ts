@@ -165,8 +165,8 @@ test("summarizeDiscover re-checks minDiscount client-side (backstop for Steam's 
   // catalog at exactly 100, so summarizeDiscover must re-filter on discount_pct
   // itself — otherwise full-price games leak through as "deals".
   const items: StoreItem[] = [
-    { appid: 1, name: "Full price", best_purchase_option: { discount_pct: 0 } },
-    { appid: 2, name: "Real deal", best_purchase_option: { discount_pct: 80 } },
+    { appid: 1, visible: true, name: "Full price", best_purchase_option: { discount_pct: 0 } },
+    { appid: 2, visible: true, name: "Real deal", best_purchase_option: { discount_pct: 80 } },
   ];
   const s = summarizeDiscover({ response: { store_items: items } }, { minDiscount: 50 }) as {
     deals: { appid: number }[];
@@ -289,15 +289,16 @@ const RECO_TAG_MAP: TagMap = { 1: "Roguelike", 2: "Horror", 3: "Souls-like" };
 
 test("computeFavoriteTagWeights: weights tags by hours played, ignores zero/no playtime", () => {
   const items: StoreItem[] = [
-    { appid: 10, tags: [{ tagid: 1, weight: 900 }] }, // 120 min = 2h
+    { appid: 10, visible: true, tags: [{ tagid: 1, weight: 900 }] }, // 120 min = 2h
     {
       appid: 20,
+      visible: true,
       tags: [
         { tagid: 1, weight: 500 },
         { tagid: 2, weight: 400 },
       ],
     }, // 60 min = 1h
-    { appid: 30, tags: [{ tagid: 2, weight: 900 }] }, // 0 min → contributes nothing
+    { appid: 30, visible: true, tags: [{ tagid: 2, weight: 900 }] }, // 0 min → contributes nothing
   ];
   const playtime = new Map([
     [10, 120],
@@ -312,20 +313,22 @@ test("computeFavoriteTagWeights: weights tags by hours played, ignores zero/no p
 describe("summarizeRecommendations", () => {
   test("excludes owned/zero-overlap candidates, ranks by tag weight × review %", () => {
     const candidates: StoreItem[] = [
-      { appid: 100, name: "Owned", tags: [{ tagid: 1, weight: 900 }] },
+      { appid: 100, visible: true, name: "Owned", tags: [{ tagid: 1, weight: 900 }] },
       {
         appid: 200,
+        visible: true,
         name: "Great Roguelike",
         tags: [{ tagid: 1, weight: 900 }],
         reviews: { summary_filtered: { percent_positive: 90 } },
       },
       {
         appid: 300,
+        visible: true,
         name: "Poorly-received Roguelike",
         tags: [{ tagid: 1, weight: 900 }],
         reviews: { summary_filtered: { percent_positive: 20 } },
       },
-      { appid: 400, name: "No overlap", tags: [{ tagid: 2, weight: 900 }] },
+      { appid: 400, visible: true, name: "No overlap", tags: [{ tagid: 2, weight: 900 }] },
     ];
     const tagWeights = new Map([["Roguelike", 10]]);
     const s = summarizeRecommendations(
@@ -358,6 +361,7 @@ describe("summarizeRecommendations", () => {
     const candidates: StoreItem[] = [
       {
         appid: 910,
+        visible: true,
         name: "Full price roguelike",
         tags: [{ tagid: 1, weight: 900 }],
         best_purchase_option: { discount_pct: 0 },
@@ -365,6 +369,7 @@ describe("summarizeRecommendations", () => {
       },
       {
         appid: 920,
+        visible: true,
         name: "Discounted roguelike",
         tags: [{ tagid: 1, weight: 900 }],
         best_purchase_option: { discount_pct: 60 },

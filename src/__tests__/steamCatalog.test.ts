@@ -1156,3 +1156,19 @@ test("an appid past 32 bits is refused before any call", async (t) => {
   }
   assert.equal(mock.calls.length, 0);
 });
+
+// Turkish "İ" lowercases to "i" plus U+0307: the same key on both sides.
+test("discover_games: a Turkish tag matches without its dotted capital", async (t) => {
+  const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+    url.includes("GetTagList")
+      ? jsonResponse({ response: { tags: [{ tagid: 5851, name: "İzometrik" }] } })
+      : router(url),
+  );
+  await client.callTool({
+    name: "discover_games",
+    arguments: { tags: ["izometrik"], language: "turkish" },
+  });
+  const q = mock.calls.find((c) => c.url.includes("IStoreQueryService/Query"))!;
+  const input = JSON.parse(new URL(q.url).searchParams.get("input_json")!);
+  assert.deepEqual(input.query.filters.tagids_must_match, [{ tagids: [5851] }]);
+});

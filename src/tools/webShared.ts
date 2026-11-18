@@ -5,7 +5,7 @@
 // too) — `steamid` and the steamid-resolving helper below are Web-API-specific.
 import { z } from "zod";
 import { ownProblem, type Problem } from "../lib/result.ts";
-import { isSteamId64, STEAMID64_RANGE, STEAMID64_RE } from "../steam.ts";
+import { STEAMID64_RANGE, STEAMID64_RE, steamIdAccepts } from "../steam.ts";
 
 // Appended to the key-gate message, but only for the tools that ALSO need the
 // target profile's privacy opened up. Four key-gated tools don't:
@@ -55,7 +55,7 @@ export const steamId64Base = z
   .regex(STEAMID64_RE, STEAMID64_MSG)
   // zod runs .refine() even when .regex() above already failed: defer to the
   // regex issue for a value that isn't 17 digits, so its message wins.
-  .refine((s) => !STEAMID64_RE.test(s) || isSteamId64(s), STEAMID64_MSG);
+  .refine(steamIdAccepts, STEAMID64_MSG);
 
 export const steamid = steamId64Base
   .describe(

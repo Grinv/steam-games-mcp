@@ -1931,26 +1931,10 @@ describe("a SteamID64 that can't name an account is refused before any call", ()
 // A field a verdict is read from must be in the body; absent, the answer is
 // unusable (retryable), never "no such app", "no achievements", "private" or
 // "available" by default.
-describe("a body missing the field a verdict rests on is unusable, not a verdict", () => {
+describe("a body missing the field a whole-body verdict rests on is unusable", () => {
   for (const [tool, args, endpoint, body] of [
     ["get_current_players", { appid: 620 }, "GetNumberOfCurrentPlayers", { response: {} }],
     ["get_game_achievements", { appid: 620 }, "GetSchemaForGame", {}],
-    [
-      "get_player_summary",
-      { steamid: "76561197960287930" },
-      "GetPlayerSummaries",
-      {
-        response: { players: [{ steamid: "76561197960287930", personaname: "x" }] },
-      },
-    ],
-    [
-      "get_items",
-      { appids: [620] },
-      "IStoreBrowseService/GetItems",
-      {
-        response: { store_items: [{ appid: 620, name: "Portal 2" }] },
-      },
-    ],
   ] as const) {
     test(`${tool}: ${endpoint} without it`, async (t) => {
       const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
@@ -1960,4 +1944,34 @@ describe("a body missing the field a verdict rests on is unusable, not a verdict
       assertToolError(res, /unusable/);
     });
   }
+});
+
+// A fact about one item of a batch is decided per row: one odd item (Steam
+// sends appid 4294967295 back with success 8 and no visible) costs its own
+// row only.
+test("get_items: an item Steam returns no card for is its own unavailable row", async (t) => {
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("IStoreBrowseService/GetItems")
+      ? jsonResponse({
+          response: {
+            store_items: [
+              { appid: 620, visible: true, success: 1, name: "Portal 2" },
+              { appid: 4294967295, success: 8 },
+            ],
+          },
+        })
+      : router(url),
+  );
+  const res = await client.callTool({
+    name: "get_items",
+    arguments: { appids: [620, 4294967295] },
+  });
+  const s = res.structuredContent as { items: { appid: number; available: boolean }[] };
+  assert.deepEqual(
+    s.items.map((i) => [i.appid, i.available]),
+    [
+      [620, true],
+      [4294967295, false],
+    ],
+  );
 });

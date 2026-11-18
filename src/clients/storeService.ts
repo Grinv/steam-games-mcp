@@ -109,17 +109,17 @@ function reviewScoreFloor(threshold: number): number {
   return 1;
 }
 
-// A title as matched by name: only its letters and digits count, Latin
-// accents folded — "half life" is Half-Life, "dont starve" Don't Starve,
-// "stalker" S.T.A.L.K.E.R., "pokemon" Pokémon, "civilization vi"
-// Civilization® VI, "mirrors edge" Mirror's Edge™. Only Latin: elsewhere a
-// mark is part of the letter (Japanese ガ is カ plus dakuten), so it's kept,
-// composed back (NFC). NFD, not NFKD: compatibility forms would spell ™ as
-// "TM" and ½ as "12".
+// A title as matched by name: only its letters and digits count — symbols
+// (™, ®) dropped, compatibility forms unfolded (², full-width letters), and
+// diacritics folded where they are accents (Latin, Cyrillic ё, Greek tonos):
+// "half life" is Half-Life, "dont starve" Don't Starve, "mirrors edge"
+// Mirror's Edge™, "pokemon" Pokémon, "portal 2" Portal². Elsewhere a mark is
+// part of the letter (Japanese ガ is カ plus dakuten), so it's kept (NFC).
 function titleKey(s: string): string {
   return s
-    .normalize("NFD")
-    .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
+    .replace(/\p{S}/gu, "")
+    .normalize("NFKD")
+    .replace(/([\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Greek}])\p{M}+/gu, "$1")
     .normalize("NFC")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\p{M}]/gu, "");
@@ -132,12 +132,14 @@ function titleKey(s: string): string {
 // doesn't have without a word (it matches or excludes nothing), and the
 // dictionary is in hand, so such a name is refused here, naming it.
 function tagIdsFor(names: string[], tagMap: TagMap, language: string): number[][] {
+  // Lowercase without U+0307: Turkish "İ" lowercases to "i" plus that dot, so
+  // "izometrik" missed İzometrik (14 Turkish tags carry an İ, seen live).
+  const key = (n: string) => n.toLowerCase().replace(/\u0307/g, "");
   const byName = new Map<string, number[]>();
   for (const [id, n] of Object.entries(tagMap)) {
-    const key = n.toLowerCase();
-    byName.set(key, [...(byName.get(key) ?? []), Number(id)]);
+    byName.set(key(n), [...(byName.get(key(n)) ?? []), Number(id)]);
   }
-  const idsOf = (name: string) => byName.get(name.toLowerCase()) ?? [];
+  const idsOf = (name: string) => byName.get(key(name)) ?? [];
   const unknown = names.filter((n) => idsOf(n).length === 0);
   if (unknown.length) {
     throw new ApiError({

@@ -175,6 +175,15 @@ function discountEnd(bp: StoreItem["best_purchase_option"]): string | null {
  *  $48.36 as bundle 67187 "The Darkest Grimdark Bundle", alongside another
  *  game. A bundle price is not this app's price, so anything answering "what
  *  does this game cost" must check this first. */
+/** Whether Steam shows this item here — its own per-item verdict, decided
+ *  per row (a batch holds items of every kind): `visible:true` (success 1);
+ *  `visible:false` when not shown in this country (RDR2 1174180 under cc=RU,
+ *  success 15); no flag at all on an item Steam returned no card for (appid
+ *  4294967295, success 8). All seen live 2026-11-19. */
+export function shownHere(it: StoreItem): boolean {
+  return it.visible === true;
+}
+
 export function isOwnPackage(bp: StoreItem["best_purchase_option"]): boolean {
   return typeof bp?.packageid === "number";
 }

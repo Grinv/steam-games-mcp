@@ -539,7 +539,7 @@ test("summarizePlayer: no players → found:false; sparse player fills nullable 
   }) as Record<string, unknown>;
   assert.equal(p.found, true);
   assert.equal(p.state, null); // no personastate: unknown, not offline
-  assert.equal(p.visibility, "private"); // communityvisibilitystate !== 3
+  assert.equal(p.visibility, null); // no communityvisibilitystate: unknown, not private
   assert.equal(p.country, null);
   assert.equal(p.created, null);
   assert.equal(p.in_game, null);
@@ -653,6 +653,14 @@ test("summarizeNews: no news items (brand-new game) → empty items, not thrown"
 });
 
 describe("summarizeGlobalAchievements", () => {
+  // Number("") is 0: a blank percent is no value, not "nobody unlocked it".
+  test("a blank achievement percent is unknown, not 0%", () => {
+    const s = summarizeGlobalAchievements({
+      achievementpercentages: { achievements: [{ name: "A", percent: "" }] },
+    }) as { achievements: { percent: number | null }[] };
+    assert.equal(s.achievements[0]!.percent, null);
+  });
+
   test("no achievements (brand-new/achievement-less game) → count 0", () => {
     const s = summarizeGlobalAchievements({ achievementpercentages: { achievements: [] } }) as {
       count: number;
@@ -829,12 +837,4 @@ describe("a game with no reviews", () => {
       [2],
     );
   });
-});
-
-// Number("") is 0: a blank percent is no value, not "nobody unlocked it".
-test("a blank achievement percent is unknown, not 0%", () => {
-  const s = summarizeGlobalAchievements({
-    achievementpercentages: { achievements: [{ name: "A", percent: "" }] },
-  }) as { achievements: { percent: number | null }[] };
-  assert.equal(s.achievements[0]!.percent, null);
 });

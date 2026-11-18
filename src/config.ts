@@ -6,7 +6,7 @@
 // error at call time when it is missing. Empty strings AND unsubstituted .mcpb
 // placeholders (e.g. "${user_config.steam_id}") are treated as unset.
 import { z } from "zod";
-import { isSteamId64, STEAMID64_RANGE, STEAMID64_RE, steamLanguage } from "./steam.ts";
+import { STEAMID64_RANGE, steamIdAccepts, steamLanguage } from "./steam.ts";
 import type { LogLevel } from "./lib/logger.ts";
 
 const EnvSchema = z.object({
@@ -27,7 +27,7 @@ const EnvSchema = z.object({
     .string()
     .trim()
     .min(2)
-    .refine((s) => !STEAMID64_RE.test(s) || isSteamId64(s), `STEAM_ID: ${STEAMID64_RANGE}`)
+    .refine(steamIdAccepts, `STEAM_ID: ${STEAMID64_RANGE}`)
     .optional(),
   // --- Steam Storefront API: no key; game/store data. ---
   STEAM_STORE_BASE_URL: z.httpUrl().trim().default("https://store.steampowered.com"),

@@ -388,6 +388,24 @@ const checks: Check[] = [
     },
   },
   {
+    // And an item Steam returns no card for at all carries no flag (shownHere
+    // reads it as not shown): the largest appid, success 8, seen 2026-11-19.
+    name: "web IStoreBrowseService/GetItems (no card for an id)",
+    run: async () => {
+      const input = {
+        ids: [{ appid: 4294967295 }],
+        context: { language: "english", country_code: "US" },
+        data_request: storeCardDataRequest(),
+      };
+      type Item = { visible?: unknown; success?: unknown };
+      const body = await getJson<{ response?: { store_items?: Item[] } }>(
+        `${API}/IStoreBrowseService/GetItems/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
+      );
+      const it = body.response?.store_items?.[0];
+      need(it && it.visible === undefined && it.success !== 1, "no visible flag, success not 1");
+    },
+  },
+  {
     // get_game's name lookup (resolveAppId) matches titles: its request,
     // data_request {}, must still carry each item's name.
     name: "web IStoreQueryService/SearchSuggestions (name lookup)",
