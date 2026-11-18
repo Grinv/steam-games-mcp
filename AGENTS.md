@@ -158,7 +158,7 @@ npm run inspector      # run under the MCP Inspector
 - **What Steam means is stated once per endpoint**, in `clients/endpoints.ts`
   (`lib/endpoint.ts` defines the shape): path, host, keyless or not, the plain
   answers Steam sends as HTTP errors (`answers`: e.g. GetFriendList's 401 →
-  "private_or_missing"), and the body rule (`validate`). A client
+  "not_shown"), and the body rule (`validate`). A client
   calls through `call(...)`/`#call(...)` and gets data, or `{ answer }` typed
   by the endpoint, so the compiler makes it handle every answer — there is no
   `catch` reading Steam in a client. Each stated fact has `probes`: live calls

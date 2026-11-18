@@ -59,14 +59,14 @@ const ACCOUNT_0 = "76561197960265728";
 const json = (o: unknown) => JSON.stringify(o);
 const ctx = { language: "english", country_code: "US" };
 
-// Every player endpoint keyed on one SteamID64 answers accountid 0 with a 400
-// (verified for each below) — the one id that passes the schema but names no
-// account. Read as "no such account", like Steam's own empty answers.
-const invalidSteamid = { bad_request: "invalid_steamid" } as const;
+// accountid 0 names no account: Steam answers it with a 400 HTML page on
+// every player endpoint keyed on one SteamID64. The tools refuse it before
+// any call (tools/webShared.ts), so the 400 stays an error, never an answer —
+// read as one, it also covered every other 400 (e.g. a missing key).
 const invalidSteamidProbe = (query: Record<string, string | number>) => ({
   query,
-  expect: "invalid_steamid",
-  shows: "accountid 0 is a 400, not an empty answer",
+  expect: "bad_request",
+  shows: "accountid 0 is a 400",
   situation: "accountid-0",
 });
 
@@ -145,29 +145,26 @@ export const Steam = {
       },
     ],
   }),
-  GetSteamLevel: endpoint<SteamLevelResponse, "invalid_steamid">({
+  GetSteamLevel: endpoint<SteamLevelResponse>({
     path: "IPlayerService/GetSteamLevel/v1/",
     host: "api",
     keyless: false,
-    answers: invalidSteamid,
     probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
   }),
-  GetOwnedGames: endpoint<OwnedGamesResponse, "invalid_steamid">({
+  GetOwnedGames: endpoint<OwnedGamesResponse>({
     path: "IPlayerService/GetOwnedGames/v1/",
     host: "api",
     keyless: false,
-    answers: invalidSteamid,
     probes: [
       { query: { steamid: PUBLIC }, expect: "data", shows: "a public library" },
       invalidSteamidProbe({ steamid: ACCOUNT_0 }),
       badKeyProbe({ steamid: PUBLIC }),
     ],
   }),
-  GetRecentlyPlayedGames: endpoint<RecentlyPlayedResponse, "invalid_steamid">({
+  GetRecentlyPlayedGames: endpoint<RecentlyPlayedResponse>({
     path: "IPlayerService/GetRecentlyPlayedGames/v1/",
     host: "api",
     keyless: false,
-    answers: invalidSteamid,
     probes: [
       invalidSteamidProbe({ steamid: ACCOUNT_0, count: 1 }),
       badKeyProbe({ steamid: PUBLIC, count: 1 }),
@@ -182,7 +179,6 @@ export const Steam = {
     keyless: false,
     answers: {
       unauthorized: "not_shown",
-      bad_request: "not_shown",
       not_found: "not_shown",
     },
     probes: [
@@ -201,7 +197,7 @@ export const Steam = {
       },
       {
         query: { steamid: ACCOUNT_0, relationship: "friend" },
-        expect: "not_shown",
+        expect: "bad_request",
         shows: "accountid 0 is a 400",
         situation: "accountid-0",
       },
@@ -332,32 +328,28 @@ export const Steam = {
       },
     ],
   }),
-  GetWishlist: endpoint<WishlistResponse, "invalid_steamid">({
+  GetWishlist: endpoint<WishlistResponse>({
     path: "IWishlistService/GetWishlist/v1/",
     host: "api",
     keyless: true,
-    answers: invalidSteamid,
     probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
   }),
-  GetWishlistSortedFiltered: endpoint<WishlistDetailedResponse, "invalid_steamid">({
+  GetWishlistSortedFiltered: endpoint<WishlistDetailedResponse>({
     path: "IWishlistService/GetWishlistSortedFiltered/v1/",
     host: "api",
     keyless: true,
-    answers: invalidSteamid,
     probes: [invalidSteamidProbe({ input_json: json({ steamid: ACCOUNT_0 }) })],
   }),
-  GetGamesFollowed: endpoint<FollowedGamesResponse, "invalid_steamid">({
+  GetGamesFollowed: endpoint<FollowedGamesResponse>({
     path: "IStoreService/GetGamesFollowed/v1/",
     host: "api",
     keyless: true,
-    answers: invalidSteamid,
     probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
   }),
-  GetGamesFollowedCount: endpoint<FollowedGamesCountResponse, "invalid_steamid">({
+  GetGamesFollowedCount: endpoint<FollowedGamesCountResponse>({
     path: "IStoreService/GetGamesFollowedCount/v1/",
     host: "api",
     keyless: true,
-    answers: invalidSteamid,
     probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
   }),
   // An unrecognized `language` (an ISO code like "ru" instead of "russian") is

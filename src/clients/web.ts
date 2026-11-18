@@ -232,19 +232,17 @@ export class SteamWebClient {
       "Steam level",
       this.#call(Steam.GetSteamLevel, { steamid }, { cache: true }),
     );
-    return res?.data?.response?.player_level ?? null;
+    return res?.response?.player_level ?? null;
   }
 
   async getPlayerBans(steamid: string): Promise<Record<string, unknown>> {
     return summarizePlayerBans(await this.#call(Steam.GetPlayerBans, { steamids: steamid }));
   }
 
-  // GetOwnedGames, with Steam's "no such steamid" answer (accountid 0) read
-  // like its usual empty private/not-found shape. Shared by getOwnedGames,
-  // getRecommendedGames, comparePlayers and #ownedPlaytimes.
-  async #ownedGamesRaw(steamid: string, query: Query): Promise<OwnedGamesResponse> {
-    const res = await this.#call(Steam.GetOwnedGames, { steamid, ...query });
-    return res.answer ? {} : res.data;
+  // GetOwnedGames. Shared by getOwnedGames, getRecommendedGames,
+  // comparePlayers and #ownedPlaytimes.
+  #ownedGamesRaw(steamid: string, query: Query): Promise<OwnedGamesResponse> {
+    return this.#call(Steam.GetOwnedGames, { steamid, ...query });
   }
 
   async getOwnedGames(
@@ -267,7 +265,7 @@ export class SteamWebClient {
       steamid,
       count: RECENTLY_PLAYED_MAX,
     });
-    return summarizeRecentlyPlayed(res.answer ? {} : res.data);
+    return summarizeRecentlyPlayed(res);
   }
 
   // Personalized recommendations derived from the player's own library: tags
@@ -576,8 +574,7 @@ export class SteamWebClient {
 
   // A player's wishlist (needs the wishlist/profile to be public). Keyless.
   async #getWishlistLight(steamid: string): Promise<Record<string, unknown>> {
-    const res = await this.#call(Steam.GetWishlist, { steamid });
-    return summarizeWishlist(res.answer ? {} : res.data);
+    return summarizeWishlist(await this.#call(Steam.GetWishlist, { steamid }));
   }
 
   // A player's followed games (needs the profile to be public). Keyless — a
@@ -591,9 +588,8 @@ export class SteamWebClient {
     return summarizeFollowedGames(list, count);
   }
 
-  async #followedGamesRaw(steamid: string): Promise<FollowedGamesResponse> {
-    const res = await this.#call(Steam.GetGamesFollowed, { steamid });
-    return res.answer ? {} : res.data;
+  #followedGamesRaw(steamid: string): Promise<FollowedGamesResponse> {
+    return this.#call(Steam.GetGamesFollowed, { steamid });
   }
 
   // Optional: summarizeFollowedGames falls back to appids.length. Steam's own
@@ -604,7 +600,7 @@ export class SteamWebClient {
       "Steam's own followed-games count (total is the listed games)",
       this.#call(Steam.GetGamesFollowedCount, { steamid }),
     );
-    return res?.data ?? {};
+    return res ?? {};
   }
 
   #getWishlistDetailed(
@@ -649,7 +645,16 @@ export class SteamWebClient {
       ),
     ]);
     // Steam's answer for the appid itself (a nonexistent one).
-    if (schema.answer) return summarizeGameSchema({}, {});
+    if (schema.answer) {
+      // Not "no achievements": Steam has no schema to count them from.
+      throw new ApiError({
+        code: "not_found",
+        status: 400,
+        message: `GetSchemaForGame has no schema for appid ${appid}`,
+        detail:
+          "Steam has no achievement schema for this appid; get_game shows whether the appid exists.",
+      });
+    }
     return summarizeGameSchema(schema.data, rarity?.data ?? {});
   }
 }

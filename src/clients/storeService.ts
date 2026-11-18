@@ -257,17 +257,19 @@ export class StoreServiceClient {
   }
 
   // Shared shape behind getItems/#queryCatalog/getWishlistDetailed: fetch the
-  // store-service page alongside the (cached) tag dictionary in parallel, then
-  // resolve/guard the tag map through the same rule every caller needs.
-  // tagsBeingFiltered is omitted by getItems, which never filters by tags.
+  // store-service page alongside the (cached) tag dictionary in parallel; the
+  // tags are display-only here, so a missing dictionary is a noted gap. A
+  // caller that filtered by tags already read the dictionary (and failed
+  // loudly without it): it passes that one in, so there's one read per call.
   async #fetchWithTags<T, A extends string>(
     ep: Endpoint<T, A>,
     query: Query,
     language: string,
-    tagsBeingFiltered?: string[],
+    filterTagMap?: TagMap,
   ): Promise<{ res: Answered<T, A>; tagMap: TagMap | undefined }> {
+    if (filterTagMap) return { res: await this.#call(ep, query), tagMap: filterTagMap };
     const [res, tagMap] = await Promise.all([this.#call(ep, query), this.#tagNames(language)]);
-    return { res, tagMap: this.#requireTagMapIfFiltering(tagsBeingFiltered, tagMap, language) };
+    return { res, tagMap: this.#requireTagMapIfFiltering(undefined, tagMap, language) };
   }
 
   // Title search (search_games, and the is_it_worth_buying prompt's completions)
@@ -647,7 +649,7 @@ export class StoreServiceClient {
       Steam.Query,
       { input_json: JSON.stringify(input) },
       l,
-      p.tags,
+      filterTagMap,
     );
     return summarizeDiscover(res, { ...post, tagMap });
   }
@@ -746,40 +748,27 @@ export class StoreServiceClient {
       page_size: checksHere ? WISHLIST_CHECK_MAX : WISHLIST_DETAIL_MAX,
     };
     // In parallel: the plain id list for the wishlist's real size (`total`,
-    // and telling "nothing matched" from "empty or private", which a
+    // and telling "nothing matched" from "nothing shown", which a
     // server-filtered response alone can't), and the filtered cards.
     const [total, filtered] = await Promise.all([
       this.#wishlistSize(steamid),
-      // Steam's "invalid steamid" answer (accountid 0) comes with an empty
-      // plain list too (total 0), so the answer alone means nothing matched.
       this.#fetchWithTags(
         Steam.GetWishlistSortedFiltered,
         { input_json: JSON.stringify(input) },
         l,
+        filterTagMap,
       ),
     ]);
-    if (total > 0 && filtered.res.answer)
-      // The id list exists but the filtered call was refused: say so rather
-      // than reporting that nothing matched. Not reproduced live (no filter
-      // tried 2026-11-17 drew a 400), so the detail doesn't guess a cause.
-      throw new ApiError({
-        code: "bad_request",
-        status: 400,
-        message: "GetWishlistSortedFiltered answered 400 for a readable wishlist",
-        detail:
-          "Steam refused the filtered wishlist request, though the wishlist itself is readable. " +
-          "Try fewer filters.",
-      });
-    return summarizeWishlistDetailed(filtered.res.data ?? {}, filtered.tagMap, filters(), {
+    return summarizeWishlistDetailed(filtered.res, filtered.tagMap, filters(), {
       total,
       exact: !checksHere,
     });
   }
 
-  // The wishlist's size from the plain GetWishlist id list; 0 for an empty or
-  // private wishlist, and for a malformed steamid Steam answers with a 400.
+  // The wishlist's size from the plain GetWishlist id list; 0 when Steam
+  // returns none.
   async #wishlistSize(steamid: string): Promise<number> {
     const res = await this.#call(Steam.GetWishlist, { steamid });
-    return res.data?.response?.items?.length ?? 0;
+    return res.response?.items?.length ?? 0;
   }
 }

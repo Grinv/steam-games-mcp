@@ -637,6 +637,9 @@ for (const [name, ep] of Object.entries(Steam) as [string, Endpoint<unknown, str
         if (RECORD) {
           // A real key must never land in the repo, even echoed by an error page.
           need(!KEY || !seen.body.includes(KEY), "the response echoes the API key");
+          // Nor the maintainer's id a $STEAM_ID probe sends (MAINTAINER).
+          const me = process.env.STEAM_ID;
+          need(!me || !seen.body.includes(me), "the response echoes STEAM_ID");
           recorded[id] = seen;
         } else {
           const was = recorded[id];

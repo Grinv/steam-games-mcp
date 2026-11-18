@@ -353,22 +353,6 @@ describe("get_wishlist", () => {
     assert.equal(s.items.length, WISHLIST_DETAIL_MAX);
   });
 
-  test("get_wishlist include_details: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
-    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
-      url.includes("GetWishlistSortedFiltered")
-        ? recorded("GetWishlistSortedFiltered/accountid-0")
-        : jsonResponse({}),
-    );
-    const res = await client.callTool({
-      name: "get_wishlist",
-      arguments: { steamid: "76561197960265728", include_details: true }, // accountid 0
-    });
-    assert.equal(res.isError, undefined);
-    const s = res.structuredContent as { found: boolean; reason: string };
-    assert.equal(s.found, false);
-    assertNotShown(s.reason);
-  });
-
   test("get_wishlist on_sale_only keeps only discounted items, ranked by discount", async (t) => {
     const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     const res = await client.callTool({
@@ -440,21 +424,6 @@ describe("get_wishlist", () => {
     assert.equal(s.items[0]!.steam_machine, "playable");
   });
 
-  test("get_wishlist: a refused filtered call on a non-empty wishlist is an error, not 'nothing matched'", async (t) => {
-    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
-      url.includes("GetWishlistSortedFiltered")
-        ? // Synthetic: no live call drew this 400 (see storeService), so the
-          // test covers only that an unexplained refusal isn't "nothing matched".
-          jsonResponse({ error: "bad" }, { status: 400 })
-        : router(url),
-    );
-    const res = await client.callTool({
-      name: "get_wishlist",
-      arguments: { steamid: "76561197960287930", min_review: 80 },
-    });
-    assertToolError(res, /refused the filtered wishlist/i);
-  });
-
   test("get_wishlist sends tags, Steam Deck, platform and a discount floor to Steam", async (t) => {
     const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
     await client.callTool({
@@ -491,20 +460,6 @@ describe("get_wishlist", () => {
       name: "get_wishlist",
       arguments: { steamid: "76561197960287930" },
     });
-    const s = res.structuredContent as { found: boolean; reason: string };
-    assert.equal(s.found, false);
-    assertNotShown(s.reason);
-  });
-
-  test("get_wishlist: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
-    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
-      url.includes("GetWishlist") ? recorded("GetWishlist/accountid-0") : jsonResponse({}),
-    );
-    const res = await client.callTool({
-      name: "get_wishlist",
-      arguments: { steamid: "76561197960265728" }, // accountid 0
-    });
-    assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
     assertNotShown(s.reason);
@@ -821,22 +776,6 @@ describe("get_followed_games", () => {
     assert.equal(s.total, 0);
   });
 
-  test("get_followed_games: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
-    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
-      url.includes("GetGamesFollowed")
-        ? recorded("GetGamesFollowed/accountid-0")
-        : jsonResponse({}),
-    );
-    const res = await client.callTool({
-      name: "get_followed_games",
-      arguments: { steamid: "76561197960265728" }, // accountid 0
-    });
-    assert.equal(res.isError, undefined);
-    const s = res.structuredContent as { found: boolean; total: number };
-    assert.equal(s.found, false);
-    assert.equal(s.total, 0);
-  });
-
   test("get_followed_games still succeeds when GetGamesFollowedCount fails (falls back to appids.length)", async (t) => {
     const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) => {
       if (url.includes("GetGamesFollowedCount")) return jsonResponse({}, { status: 500 });
@@ -1140,4 +1079,17 @@ describe("discover_games", () => {
     assert.equal(s.deals.length, 2);
     assert.ok(s.deals.every((d) => d.tags.length === 0));
   });
+});
+
+test("a tags filter reads the tag dictionary once per call, not again for the cards", async (t) => {
+  // With the cache off every read is a request: the filter's dictionary is
+  // the one the cards are named from.
+  const { client, mock } = await setupServer(
+    t,
+    { ...ENV, CACHE_TTL_MS: "0", STEAM_API_MIN_INTERVAL_MS: "0" },
+    router,
+  );
+  const res = await client.callTool({ name: "discover_games", arguments: { tags: ["Puzzle"] } });
+  assert.equal(res.isError, undefined);
+  assert.equal(mock.calls.filter((c) => c.url.includes("GetTagList")).length, 1);
 });

@@ -96,20 +96,6 @@ describe("get_owned_games", () => {
     assertNotShown(s.reason);
   });
 
-  test("get_owned_games: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetOwnedGames") ? recorded("GetOwnedGames/accountid-0") : jsonResponse({}),
-    );
-    const res = await client.callTool({
-      name: "get_owned_games",
-      arguments: { steamid: "76561197960265728" }, // accountid 0
-    });
-    assert.equal(res.isError, undefined);
-    const s = res.structuredContent as { found: boolean; reason: string };
-    assert.equal(s.found, false);
-    assertNotShown(s.reason);
-  });
-
   // Regression: a steamid pasted with surrounding whitespace (e.g. copied from a
   // profile URL or with a trailing newline) is trimmed before validation and
   // before the upstream call — matching the vanity field and the STEAM_ID env
@@ -298,22 +284,6 @@ describe("get_recently_played", () => {
     assert.equal(s.total, 0);
     assert.deepEqual(s.games, []);
   });
-
-  test("get_recently_played: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetRecentlyPlayedGames")
-        ? recorded("GetRecentlyPlayedGames/accountid-0")
-        : jsonResponse({}),
-    );
-    const res = await client.callTool({
-      name: "get_recently_played",
-      arguments: { steamid: "76561197960265728" }, // accountid 0
-    });
-    assert.equal(res.isError, undefined);
-    const s = res.structuredContent as { found: boolean; total: number; games: unknown[] };
-    assert.equal(s.found, false);
-    assert.deepEqual(s.games, []);
-  });
 });
 
 describe("get_recommended_games", () => {
@@ -472,20 +442,6 @@ describe("get_recommended_games", () => {
       name: "get_recommended_games",
       arguments: { steamid: "76561197960287930" },
     });
-    const s = res.structuredContent as { found: boolean; reason: string };
-    assert.equal(s.found, false);
-    assertNotShown(s.reason);
-  });
-
-  test("get_recommended_games: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetOwnedGames") ? recorded("GetOwnedGames/accountid-0") : jsonResponse({}),
-    );
-    const res = await client.callTool({
-      name: "get_recommended_games",
-      arguments: { steamid: "76561197960265728" }, // accountid 0
-    });
-    assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
     assertNotShown(s.reason);
@@ -654,6 +610,17 @@ describe("get_player_achievements", () => {
     revoked = true;
     const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
     assertToolError(res, /^Steam rejected the configured STEAM_API_KEY/);
+  });
+
+  test("get_game_achievements: no schema for the appid is an error, never '0 achievements'", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetSchemaForGame") ? recorded("GetSchemaForGame/no-app") : router(url),
+    );
+    const res = await client.callTool({
+      name: "get_game_achievements",
+      arguments: { appid: 99999999 },
+    });
+    assertToolError(res, /no achievement schema for this appid; get_game shows/);
   });
 
   test("get_game_achievements: a bad key on the schema call isn't read as 'no achievements'", async (t) => {
@@ -888,20 +855,6 @@ describe("get_friend_list", () => {
       name: "get_friend_list",
       arguments: { steamid: "76561197960287930" },
     });
-    const s = res.structuredContent as { found: boolean; reason: string };
-    assert.equal(s.found, false);
-    assert.match(s.reason, /friends list/i);
-  });
-
-  test("get_friend_list: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetFriendList") ? recorded("GetFriendList/accountid-0") : jsonResponse({}),
-    );
-    const res = await client.callTool({
-      name: "get_friend_list",
-      arguments: { steamid: "76561197960265728" }, // accountid 0
-    });
-    assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
     assert.match(s.reason, /friends list/i);
@@ -1215,20 +1168,6 @@ describe("find_friends_who_own", () => {
     assert.match(s.reason, /friends list/i);
   });
 
-  test("find_friends_who_own: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetFriendList") ? recorded("GetFriendList/accountid-0") : jsonResponse({}),
-    );
-    const res = await client.callTool({
-      name: "find_friends_who_own",
-      arguments: { appids: [620], steamid: "76561197960265728" }, // accountid 0
-    });
-    assert.equal(res.isError, undefined);
-    const s = res.structuredContent as { found: boolean; reason: string };
-    assert.equal(s.found, false);
-    assert.match(s.reason, /friends list/i);
-  });
-
   // A public-but-empty friends list is distinct from a private one: it's a
   // real, successful zero-friends result, not an error/found:false.
   test("find_friends_who_own handles a public but empty friends list without crashing", async (t) => {
@@ -1339,22 +1278,6 @@ describe("compare_players", () => {
       name: "compare_players",
       arguments: { steamid: "76561197960287930", other_steamid: "76561197960287931" },
     });
-    const s = res.structuredContent as { found: boolean; reason: string };
-    assert.equal(s.found, false);
-    assertNotShown(s.reason);
-  });
-
-  test("compare_players: a malformed/out-of-range other_steamid reports found:false, not a raw HTML error", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) => {
-      if (!url.includes("GetOwnedGames")) return jsonResponse({});
-      if (url.includes("steamid=76561197960265728")) return recorded("GetOwnedGames/accountid-0");
-      return jsonResponse(OWNED);
-    });
-    const res = await client.callTool({
-      name: "compare_players",
-      arguments: { steamid: "76561197960287930", other_steamid: "76561197960265728" }, // accountid 0
-    });
-    assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
     assertNotShown(s.reason);
@@ -1816,4 +1739,50 @@ test("a tool call the client cancels aborts its outstanding Steam request", asyn
   await assert.rejects(call);
   for (let i = 0; i < 50 && !aborted; i += 1) await new Promise((r) => setTimeout(r, 5));
   assert.equal(aborted, true, "the server stopped its fetch instead of letting it run on");
+});
+
+// accountid 0 (Steam's 400) and an id past the 32-bit account range name no
+// account by construction: refused at the tool boundary, before any request,
+// so no 400 ever has to be read as "no such account".
+describe("a SteamID64 that can't name an account is refused before any call", () => {
+  const ME = "76561197960287930";
+  for (const [tool, args] of [
+    ["get_player_summary", {}],
+    ["get_player_bans", {}],
+    ["get_owned_games", {}],
+    ["get_recently_played", {}],
+    ["get_player_achievements", { appid: 620 }],
+    ["get_friend_list", {}],
+    ["find_friends_who_own", { appids: [620] }],
+    ["get_recommended_games", {}],
+    ["get_wishlist", {}],
+    ["get_followed_games", {}],
+  ] as const) {
+    for (const id of ["76561197960265728", "76561202255233024"]) {
+      test(`${tool}(${id})`, async (t) => {
+        const { client, mock } = await setupServer(t, ENV);
+        const res = await client.callTool({ name: tool, arguments: { steamid: id, ...args } });
+        assertToolError(res, /from 76561197960265729 to 76561202255233023/);
+        assert.equal(mock.calls.length, 0);
+      });
+    }
+  }
+
+  test("compare_players' other_steamid too", async (t) => {
+    const { client, mock } = await setupServer(t, ENV);
+    const res = await client.callTool({
+      name: "compare_players",
+      arguments: { steamid: ME, other_steamid: "76561197960265728" },
+    });
+    assertToolError(res, /from 76561197960265729 to 76561202255233023/);
+    assert.equal(mock.calls.length, 0);
+  });
+
+  test("the account range's own ends are accepted", async (t) => {
+    const { client } = await setupServer(t, ENV);
+    for (const id of ["76561197960265729", "76561202255233023"]) {
+      const res = await client.callTool({ name: "get_player_bans", arguments: { steamid: id } });
+      assert.equal(res.isError, undefined, id);
+    }
+  });
 });
