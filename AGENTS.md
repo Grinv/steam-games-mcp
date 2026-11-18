@@ -188,7 +188,11 @@ npm run inspector      # run under the MCP Inspector
   to the outcome its probe expects. check:api also walks every JSON 200 it
   sees for nulls: Steam sends explicit nulls where a type says "absent"
   (`original_price` rendered as "0.00 USD" once), so a null at a place not in
-  its `KNOWN_NULLS` (each with where it's handled) fails the run. Hand-written error bodies stay only in tests of the
+  its `KNOWN_NULLS` (each with where it's handled) fails the run. A fact the
+  code reads off a 200 body (Steam's `visible` flag, a 0-100 review score, the
+  own package among purchase options) is asserted there too, on the request
+  the server actually sends (e.g. `storeCardDataRequest()`): a "verified live"
+  comment is checked once, a check:api assertion every run. Hand-written error bodies stay only in tests of the
   generic pipeline (`lib/` behaviour on any status), never as "what Steam
   answers here": that is how the 403 fixture above, a bad key "401 on all of
   IPlayerService" (only GetOwnedGames is) and an invented accountid-0 page

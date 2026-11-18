@@ -56,7 +56,8 @@ type Call = <T, A extends string>(
 // and the recommendation scoring read only that many (resolveTags), Steam
 // returns the most-weighted ones first (verified live), and tag FILTERING runs
 // server-side, so a longer list was only ever discarded.
-const storeCardDataRequest = () => ({
+// Exported for scripts/check-api.ts, which checks the fields cards read off it.
+export const storeCardDataRequest = () => ({
   include_reviews: true,
   include_release: true,
   include_platforms: true,

@@ -30,6 +30,7 @@ import { call, type Endpoint, type Probe } from "../src/lib/endpoint.ts";
 import { ApiError } from "../src/lib/errors.ts";
 import { createLogger } from "../src/lib/logger.ts";
 import { MAINTAINER, Steam, classifySteamApiError } from "../src/clients/endpoints.ts";
+import { storeCardDataRequest } from "../src/clients/storeService.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const STORE = process.env.STEAM_STORE_BASE_URL ?? "https://store.steampowered.com";
@@ -186,6 +187,21 @@ const checks: Check[] = [
     },
   },
   {
+    // What format/web.ts's personaState rests on: a profile that isn't public
+    // reports personastate 0 whatever its status (the friends-only probe id).
+    name: "web GetPlayerSummaries (key): a non-public profile's status is 0",
+    skip: KEY ? undefined : "STEAM_API_KEY not set",
+    run: async () => {
+      type P = { communityvisibilitystate?: unknown; personastate?: unknown };
+      const body = await getJson<{ response?: { players?: P[] } }>(
+        `${API}/ISteamUser/GetPlayerSummaries/v2/?key=${KEY}&steamids=76561197960287930`,
+      );
+      const p = body.response?.players?.[0];
+      need(p && p.communityvisibilitystate !== 3, "a non-public profile (visibility !== 3)");
+      need(p.personastate === 0, "personastate 0");
+    },
+  },
+  {
     // Game-details visibility (owned games, recent playtime, level) isn't
     // guaranteed public on any profile — Steam answers 200 with an
     // empty `response: {}` in that case, which is a valid, documented shape
@@ -299,37 +315,97 @@ const checks: Check[] = [
     },
   },
   {
-    name: "web IStoreBrowseService/GetItems (compat + tags)",
+    // The card request the server sends (storeCardDataRequest), and the fields
+    // format/storeCard.ts reads off it as facts: Steam's visible flag decides
+    // get_items' availability, reviews are a 0-100 integer over a count, the
+    // release date is unix seconds, the app's own package is a purchase
+    // option with a packageid, the four compat enums and the tags are there.
+    // A drift in any of them would otherwise read as null or a default.
+    name: "web IStoreBrowseService/GetItems (the card request)",
     run: async () => {
-      // Guards the platforms.* compat enums and the tag list get_items /
-      // discover_games surface: steam_deck (long-standing) plus steam_os (SteamOS)
-      // and steam_frame (Steam Frame VR), and popular user tags (tagids resolved
-      // via GetTagList below). Portal 2 carries all of them; a drift that drops one
-      // should fail the release, not silently blank the field.
       const input = {
         ids: [{ appid: APPID }],
         context: { language: "english", country_code: "US" },
-        data_request: { include_platforms: true, include_tag_count: 5 },
+        data_request: storeCardDataRequest(),
       };
-      const body = await getJson<{
-        response?: {
-          store_items?: { platforms?: Record<string, unknown>; tags?: { tagid?: unknown }[] }[];
-        };
-      }>(
+      type Item = {
+        visible?: unknown;
+        reviews?: { summary_filtered?: { review_count?: unknown; percent_positive?: unknown } };
+        release?: { steam_release_date?: unknown };
+        purchase_options?: { packageid?: unknown; formatted_final_price?: unknown }[];
+        platforms?: Record<string, unknown>;
+        tags?: { tagid?: unknown; weight?: unknown }[];
+      };
+      const body = await getJson<{ response?: { store_items?: Item[] } }>(
         `${API}/IStoreBrowseService/GetItems/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
       );
       const item = body.response?.store_items?.[0];
-      const platforms = item?.platforms;
-      if (!platforms) throw new Error("missing store_items[0].platforms");
-      for (const field of [
-        "steam_deck_compat_category",
-        "steam_os_compat_category",
-        "steam_frame_compat_category",
-      ]) {
-        if (typeof platforms[field] !== "number") throw new Error(`missing platforms.${field}`);
-      }
-      if (!Array.isArray(item?.tags) || typeof item.tags[0]?.tagid !== "number")
-        throw new Error("missing store_items[0].tags[].tagid");
+      need(item?.visible === true, "store_items[0].visible === true");
+      const r = item.reviews?.summary_filtered;
+      need(
+        typeof r?.review_count === "number" && r.review_count > 0,
+        "reviews.summary_filtered.review_count",
+      );
+      const pct = r.percent_positive;
+      need(
+        Number.isInteger(pct) && (pct as number) >= 0 && (pct as number) <= 100,
+        "percent_positive in 0-100",
+      );
+      need(
+        String(item.release?.steam_release_date).length === 10,
+        "release.steam_release_date (unix s)",
+      );
+      const own = item.purchase_options?.find((o) => typeof o.packageid === "number");
+      need(typeof own?.formatted_final_price === "string", "purchase_options[] own package price");
+      for (const f of ["steam_deck", "steam_os", "steam_frame", "steam_machine"])
+        need(
+          typeof item.platforms?.[`${f}_compat_category`] === "number",
+          `platforms.${f}_compat_category`,
+        );
+      need(
+        typeof item.tags?.[0]?.tagid === "number" && typeof item.tags[0].weight === "number",
+        "tags[].tagid/weight",
+      );
+    },
+  },
+  {
+    // What get_items reads as "not shown here": an app Steam won't sell in a
+    // country comes back visible:false (RDR2 under RU, seen 2026-11-19).
+    name: "web IStoreBrowseService/GetItems (not sold in a country)",
+    run: async () => {
+      const input = {
+        ids: [{ appid: 1174180 }],
+        context: { language: "english", country_code: "RU" },
+        data_request: storeCardDataRequest(),
+      };
+      const body = await getJson<{ response?: { store_items?: { visible?: unknown }[] } }>(
+        `${API}/IStoreBrowseService/GetItems/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
+      );
+      need(
+        body.response?.store_items?.[0]?.visible === false,
+        "RU store_items[0].visible === false",
+      );
+    },
+  },
+  {
+    // get_game's name lookup (resolveAppId) matches titles: its request,
+    // data_request {}, must still carry each item's name.
+    name: "web IStoreQueryService/SearchSuggestions (name lookup)",
+    run: async () => {
+      const input = {
+        search_term: "portal",
+        max_results: 10,
+        context: { language: "english", country_code: "US" },
+        data_request: {},
+      };
+      const body = await getJson<{ response?: { store_items?: { name?: unknown }[] } }>(
+        `${API}/IStoreQueryService/SearchSuggestions/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
+      );
+      const items = body.response?.store_items ?? [];
+      need(
+        items.length > 0 && items.every((i) => typeof i.name === "string"),
+        "store_items[].name",
+      );
     },
   },
   {
