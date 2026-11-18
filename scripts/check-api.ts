@@ -14,6 +14,12 @@
 // HttpClient + call(), so it checks both that Steam still answers that way
 // and that the server reads it as stated.
 //
+// A probe that names a `situation` also has its real response recorded in
+// src/__tests__/recorded/steam.json, which tests replay instead of guessing
+// what Steam sends. `npm run check:api -- --record` (re)writes the recordings
+// of the probes that pass; a plain run fails when Steam's status for a
+// recorded situation has moved, so a recording can't go stale unnoticed.
+//
 // Run: `npm run check:api`.
 
 import { HttpClient } from "../src/lib/http.ts";
@@ -21,6 +27,7 @@ import { call, type Endpoint, type Probe } from "../src/lib/endpoint.ts";
 import { ApiError } from "../src/lib/errors.ts";
 import { createLogger } from "../src/lib/logger.ts";
 import { Steam, classifySteamApiError } from "../src/clients/endpoints.ts";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const STORE = process.env.STEAM_STORE_BASE_URL ?? "https://store.steampowered.com";
 const API = process.env.STEAM_API_BASE_URL ?? "https://api.steampowered.com";
@@ -566,6 +573,26 @@ const checks: Check[] = [
 
 // ---- probes: the facts clients/endpoints.ts states, against live Steam ----
 const BAD_KEY = "0123456789ABCDEF0123456789ABCDEF";
+const RECORDED_FILE = new URL("../src/__tests__/recorded/steam.json", import.meta.url);
+const RECORD = process.argv.includes("--record");
+interface Recorded {
+  status: number;
+  contentType: string;
+  body: string;
+}
+const recorded: Record<string, Recorded> = JSON.parse(readFileSync(RECORDED_FILE, "utf8"));
+// The last response fetch returned, as Steam sent it (the probe's final attempt).
+let lastResponse: Recorded | undefined;
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+  const res = await realFetch(input, init);
+  lastResponse = {
+    status: res.status,
+    contentType: res.headers.get("content-type") ?? "",
+    body: await res.clone().text(),
+  };
+  return res;
+};
 const probeLogger = createLogger("silent");
 const hosts = {
   api: new HttpClient({ baseUrl: API, logger: probeLogger, classify: classifySteamApiError }),
@@ -589,8 +616,25 @@ for (const [name, ep] of Object.entries(Steam) as [string, Endpoint<unknown, str
       // A bad-key probe brings its own key; a keyed fact needs a real one.
       skip: !ep.keyless && !probe.badKey && !KEY ? "needs STEAM_API_KEY" : undefined,
       run: async () => {
+        lastResponse = undefined;
         const got = await outcomeOf(ep, probe);
         need(got === probe.expect, `Steam now answers ${got}, not ${probe.expect}`);
+        if (!probe.situation) return;
+        const id = `${name}/${probe.situation}`;
+        const seen = lastResponse as Recorded | undefined; // set by the fetch wrapper
+        need(seen !== undefined, "no response was seen to record");
+        if (RECORD) {
+          // A real key must never land in the repo, even echoed by an error page.
+          need(!KEY || !seen.body.includes(KEY), "the response echoes the API key");
+          recorded[id] = seen;
+        } else {
+          const was = recorded[id];
+          need(was !== undefined, `no recording: run npm run check:api -- --record`);
+          need(
+            was.status === seen.status,
+            `Steam now sends ${seen.status}, recorded ${was.status}: re-record`,
+          );
+        }
       },
     });
   }
@@ -620,6 +664,15 @@ for (const check of checks) {
   await delay(SPACING_MS);
 }
 
+if (RECORD) {
+  const sorted = Object.fromEntries(
+    Object.entries(recorded).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  writeFileSync(RECORDED_FILE, JSON.stringify(sorted, null, 2) + "\n");
+  console.log(
+    `\nRecorded ${Object.keys(sorted).length} Steam responses to ${RECORDED_FILE.pathname}.`,
+  );
+}
 if (failures.length) {
   console.error(`\n${failures.length}/${ran} API checks failed.`);
   process.exit(1);

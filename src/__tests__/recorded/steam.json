@@ -1,0 +1,142 @@
+{
+  "GetFriendList/accountid-0": {
+    "status": 400,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Bad Request</title></head><body><h1>Bad Request</h1>Unknown problem determining WebApi request destination.</body></html>"
+  },
+  "GetFriendList/bad-key": {
+    "status": 403,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>Access is denied. Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>"
+  },
+  "GetFriendList/friends-only": {
+    "status": 401,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{}"
+  },
+  "GetFriendList/no-account": {
+    "status": 404,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{}"
+  },
+  "GetGamesFollowed/accountid-0": {
+    "status": 400,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Bad Request</title></head><body><h1>Bad Request</h1>Missing required routing parameter</body></html>"
+  },
+  "GetGamesFollowedCount/accountid-0": {
+    "status": 400,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Bad Request</title></head><body><h1>Bad Request</h1>Missing required routing parameter</body></html>"
+  },
+  "GetGlobalAchievementPercentagesForApp/no-app": {
+    "status": 403,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{}"
+  },
+  "GetGlobalAchievementPercentagesForApp/schema-less-dlc": {
+    "status": 403,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{}"
+  },
+  "GetNewsForApp/no-app": {
+    "status": 403,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{}"
+  },
+  "GetNumberOfCurrentPlayers/no-app": {
+    "status": 404,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{\"response\":{\"result\":42}}"
+  },
+  "GetOwnedGames/accountid-0": {
+    "status": 400,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Bad Request</title></head><body><h1>Bad Request</h1>Missing required routing parameter</body></html>"
+  },
+  "GetOwnedGames/bad-key": {
+    "status": 401,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Unauthorized</title></head><body><h1>Unauthorized</h1>Access is denied. Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>"
+  },
+  "GetPlayerAchievements/app-without-stats": {
+    "status": 400,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{\"playerstats\":{\"error\":\"Requested app has no stats\",\"success\":false}}"
+  },
+  "GetPlayerAchievements/bad-key": {
+    "status": 403,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>Access is denied. Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>"
+  },
+  "GetPlayerAchievements/private-game-details": {
+    "status": 403,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{\"playerstats\":{\"error\":\"Profile is not public\",\"success\":false}}"
+  },
+  "GetPlayerBans/accountid-0": {
+    "status": 200,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{\"players\":[]}"
+  },
+  "GetPlayerSummaries/accountid-0": {
+    "status": 200,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{\"response\":{\"players\":[]}}"
+  },
+  "GetPlayerSummaries/bad-key": {
+    "status": 403,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>Access is denied. Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>"
+  },
+  "GetRecentlyPlayedGames/accountid-0": {
+    "status": 400,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Bad Request</title></head><body><h1>Bad Request</h1>Missing required routing parameter</body></html>"
+  },
+  "GetRecentlyPlayedGames/bad-key": {
+    "status": 403,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>Access is denied. Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>"
+  },
+  "GetSchemaForGame/bad-key": {
+    "status": 403,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>Access is denied. Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>"
+  },
+  "GetSchemaForGame/no-app": {
+    "status": 400,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{}"
+  },
+  "GetSchemaForGame/schema-less-dlc": {
+    "status": 200,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{\"game\":{}}"
+  },
+  "GetSteamLevel/accountid-0": {
+    "status": 400,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Bad Request</title></head><body><h1>Bad Request</h1>Missing required routing parameter</body></html>"
+  },
+  "GetTagList/iso-language": {
+    "status": 200,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{\"response\":{}}"
+  },
+  "GetWishlist/accountid-0": {
+    "status": 400,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Bad Request</title></head><body><h1>Bad Request</h1>Missing required routing parameter</body></html>"
+  },
+  "GetWishlistSortedFiltered/accountid-0": {
+    "status": 400,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Bad Request</title></head><body><h1>Bad Request</h1>Missing required routing parameter</body></html>"
+  },
+  "ResolveVanityURL/bad-key": {
+    "status": 403,
+    "contentType": "text/html; charset=UTF-8",
+    "body": "<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>Access is denied. Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>"
+  }
+}

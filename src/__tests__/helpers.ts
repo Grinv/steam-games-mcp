@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { createLogger, type Logger } from "../lib/logger.ts";
 import { buildServer } from "../server.ts";
 import { loadConfig } from "../config.ts";
+import { readFileSync } from "node:fs";
 
 export function silentLogger(): Logger {
   return createLogger("silent");
@@ -18,6 +19,20 @@ export function jsonResponse(
     status: init.status ?? 200,
     headers: { "content-type": "application/json", ...init.headers },
   });
+}
+
+export const RECORDED: Record<string, { status: number; contentType: string; body: string }> =
+  JSON.parse(readFileSync(new URL("./recorded/steam.json", import.meta.url), "utf8"));
+
+/** Steam's real response in a named situation (`<endpoint>/<situation>`, a
+ *  probe in clients/endpoints.ts), as `npm run check:api -- --record` saw it.
+ *  What Steam sends in a situation is a fact, so a test replays it rather
+ *  than writing down a guess — that's how a 403 fixture once hid that the
+ *  bad key is a 401 on IPlayerService. */
+export function recorded(situation: string): Response {
+  const r = RECORDED[situation];
+  if (!r) throw new Error(`no recorded Steam response for ${situation}`);
+  return new Response(r.body, { status: r.status, headers: { "content-type": r.contentType } });
 }
 
 /** A non-JSON error body, like the raw HTML "Bad Request" page Steam answers

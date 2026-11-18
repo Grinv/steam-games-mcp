@@ -168,6 +168,17 @@ npm run inspector      # run under the MCP Inspector
   went unclassified while every test passed on a 403 fixture. The one
   exception is `ambiguous`: a passing edge failure can't be triggered on cue,
   so its probes show only the plain answer and a comment says what was seen.
+  **What Steam sends in a situation is recorded, never written by hand.** A
+  probe that isn't a plain success names its `situation`; check:api's
+  `--record` flag saves Steam's real response (status, body) to
+  `src/__tests__/recorded/steam.json`, tests replay it with
+  `recorded("<Endpoint>/<situation>")`, and a plain `check:api` fails when
+  Steam's status for one has moved. `recorded.test.ts` keeps probes and
+  recordings one set. Hand-written error bodies stay only in tests of the
+  generic pipeline (`lib/` behaviour on any status), never as "what Steam
+  answers here": that is how the 403 fixture above, a bad key "401 on all of
+  IPlayerService" (only GetOwnedGames is) and an invented accountid-0 page
+  went unnoticed.
 - **Decide from the fact, at the place it is known — never from a stand-in
   for it.** Every bug in the error/cache rework's review rounds was one
   decision taken from a proxy: advice picked by "was a key sent" instead of

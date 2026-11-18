@@ -27,6 +27,11 @@ export interface Probe {
   shows: string;
   /** Send a deliberately invalid key, to show how Steam answers one. */
   badKey?: boolean;
+  /** Names the situation this probe shows. Its real response is recorded
+   *  (`npm run check:api -- --record`) as `<endpoint>/<situation>`, and tests
+   *  replay that recording instead of a hand-written guess at what Steam
+   *  sends. Required on every probe that isn't a plain success. */
+  situation?: string;
 }
 
 export interface Endpoint<T, A extends string = never> {

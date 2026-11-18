@@ -5,7 +5,14 @@
 // (keyless-capable Web API store tools).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { setupServer, jsonResponse, htmlResponse, assertToolError, textOf } from "./helpers.ts";
+import {
+  setupServer,
+  jsonResponse,
+  htmlResponse,
+  recorded,
+  assertToolError,
+  textOf,
+} from "./helpers.ts";
 import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.ts";
 import { FRIENDS_CHECKED_MAX, FRIENDS_MAX } from "../format/web.ts";
 import { OWNED_GAMES_LIMIT_MAX } from "../tools/webPlayer.ts";
@@ -14,9 +21,6 @@ import { OWNED_GAMES_LIMIT_MAX } from "../tools/webPlayer.ts";
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant
 // (accountid 0), which is 17 digits and passes the tool schema but is never a
 // real account. Regression coverage for that raw body leaking to the agent.
-const ROUTING_400 =
-  "<html><body><h1>Bad Request</h1>Missing required routing parameter</body></html>";
-
 test("player tools error clearly without STEAM_API_KEY", async (t) => {
   const { client } = await setupServer(t);
   const res = await client.callTool({
@@ -93,7 +97,7 @@ describe("get_owned_games", () => {
 
   test("get_owned_games: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetOwnedGames") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+      url.includes("GetOwnedGames") ? recorded("GetOwnedGames/accountid-0") : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "get_owned_games",
@@ -296,7 +300,9 @@ describe("get_recently_played", () => {
 
   test("get_recently_played: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetRecentlyPlayedGames") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+      url.includes("GetRecentlyPlayedGames")
+        ? recorded("GetRecentlyPlayedGames/accountid-0")
+        : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "get_recently_played",
@@ -472,7 +478,7 @@ describe("get_recommended_games", () => {
 
   test("get_recommended_games: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetOwnedGames") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+      url.includes("GetOwnedGames") ? recorded("GetOwnedGames/accountid-0") : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "get_recommended_games",
@@ -570,10 +576,7 @@ describe("get_player_achievements", () => {
   test("get_player_achievements: private profile (403) → clear private reason", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetPlayerAchievements")
-        ? jsonResponse(
-            { playerstats: { error: "Profile is not public", success: false } },
-            { status: 403 },
-          )
+        ? recorded("GetPlayerAchievements/private-game-details")
         : jsonResponse({}),
     );
     const res = await client.callTool({
@@ -585,28 +588,21 @@ describe("get_player_achievements", () => {
     assert.match(s.reason, /private/i);
   });
 
-  // A bad/revoked key also gets a 403 on every key-gated endpoint, but with
-  // this HTML page (captured live), not the private profile's JSON — it must
-  // surface as invalid_key, never as "profile is private" or "no data". It's
-  // classified once in SteamWebClient.#get, so every key-gated path is covered.
-  const BAD_KEY_403 =
-    "<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>Access is denied. " +
-    "Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>";
-
-  // The page comes as a 403 on most endpoints and a 401 on IPlayerService
-  // (probed live 2026-11-17 — the 401 went unclassified while only 403 was
-  // checked, and this fixture said 403 for GetOwnedGames too).
-  for (const [tool, endpoint, args, status] of [
-    ["get_player_achievements", "GetPlayerAchievements", { appid: 620 }, 403],
-    ["get_friend_list", "GetFriendList", {}, 403],
-    ["get_owned_games", "GetOwnedGames", {}, 401],
-    ["get_recently_played", "GetRecentlyPlayedGames", {}, 401],
-    ["get_player_summary", "GetPlayerSummaries", {}, 403],
-    ["find_friends_who_own", "GetFriendList", { appids: [620] }, 403],
+  // A bad/revoked key gets Steam's "verify your key=" page on every key-gated
+  // endpoint — a 401 on some, a 403 on others (recorded per endpoint, never
+  // guessed: a fixture once said 401 for all of IPlayerService, and only
+  // GetOwnedGames is). It must surface as invalid_key, never as "private".
+  for (const [tool, endpoint, args] of [
+    ["get_player_achievements", "GetPlayerAchievements", { appid: 620 }],
+    ["get_friend_list", "GetFriendList", {}],
+    ["get_owned_games", "GetOwnedGames", {}],
+    ["get_recently_played", "GetRecentlyPlayedGames", {}],
+    ["get_player_summary", "GetPlayerSummaries", {}],
+    ["find_friends_who_own", "GetFriendList", { appids: [620] }],
   ] as const) {
-    test(`${tool}: a bad key's ${status} reports invalid_key, not a private profile`, async (t) => {
+    test(`${tool}: a bad key reports invalid_key, not a private profile`, async (t) => {
       const { client } = await setupServer(t, ENV, (url) =>
-        url.includes(endpoint) ? htmlResponse(BAD_KEY_403, { status }) : jsonResponse({}),
+        url.includes(endpoint) ? recorded(`${endpoint}/bad-key`) : jsonResponse({}),
       );
       const res = await client.callTool({
         name: tool,
@@ -626,7 +622,7 @@ describe("get_player_achievements", () => {
       { ...ENV, CACHE_TTL_MS: "1", HTTP_RETRIES: "0" },
       (url) => {
         if (revoked && url.includes("GetSchemaForGame"))
-          return htmlResponse(BAD_KEY_403, { status: 403 });
+          return recorded("GetSchemaForGame/bad-key");
         return router(url);
       },
     );
@@ -643,10 +639,11 @@ describe("get_player_achievements", () => {
 
   test("get_game_achievements: a bad key on the schema call isn't read as 'no achievements'", async (t) => {
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
-      if (url.includes("GetSchemaForGame")) return htmlResponse(BAD_KEY_403, { status: 403 });
+      if (url.includes("GetSchemaForGame")) return recorded("GetSchemaForGame/bad-key");
       // The keyless rarity call fails appid-specifically too, which used to
       // make the pair read as "this game has no achievement schema".
-      if (url.includes("GetGlobalAchievementPercentages")) return jsonResponse({}, { status: 403 });
+      if (url.includes("GetGlobalAchievementPercentages"))
+        return recorded("GetGlobalAchievementPercentagesForApp/schema-less-dlc");
       return jsonResponse({});
     });
     const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
@@ -731,7 +728,7 @@ describe("get_player_achievements", () => {
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       if (url.includes("GetPlayerAchievements"))
         return jsonResponse({ playerstats: { success: false } });
-      if (url.includes("GetSchemaForGame")) return htmlResponse(BAD_KEY_403, { status: 403 });
+      if (url.includes("GetSchemaForGame")) return recorded("GetSchemaForGame/bad-key");
       return jsonResponse({});
     });
     const res = await client.callTool({
@@ -763,7 +760,7 @@ describe("get_player_achievements", () => {
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       if (url.includes("GetPlayerAchievements"))
         return jsonResponse({ playerstats: { success: false, error: "Steam's own words" } });
-      if (url.includes("GetSchemaForGame")) return jsonResponse({}, { status: 400 });
+      if (url.includes("GetSchemaForGame")) return recorded("GetSchemaForGame/no-app");
       return jsonResponse({});
     });
     const res = await client.callTool({
@@ -800,7 +797,7 @@ describe("get_player_achievements", () => {
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       if (url.includes("GetPlayerAchievements"))
         return jsonResponse({ playerstats: { success: false } });
-      if (url.includes("GetSchemaForGame")) return jsonResponse({}, { status: 400 });
+      if (url.includes("GetSchemaForGame")) return recorded("GetSchemaForGame/no-app");
       return jsonResponse({});
     });
     const res = await client.callTool({
@@ -866,7 +863,7 @@ describe("get_friend_list", () => {
 
   test("get_friend_list reports found:false for a private friends list (401)", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetFriendList") ? jsonResponse({}, { status: 401 }) : jsonResponse({}),
+      url.includes("GetFriendList") ? recorded("GetFriendList/friends-only") : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "get_friend_list",
@@ -879,7 +876,7 @@ describe("get_friend_list", () => {
 
   test("get_friend_list: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetFriendList") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+      url.includes("GetFriendList") ? recorded("GetFriendList/accountid-0") : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "get_friend_list",
@@ -898,9 +895,7 @@ describe("get_friend_list", () => {
     // (get_player_summary, get_owned_games, ...) already degrades this same id
     // to found:false, so get_friend_list should too instead of leaking the 404.
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetFriendList")
-        ? jsonResponse({ error: "No matching resource was found" }, { status: 404 })
-        : jsonResponse({}),
+      url.includes("GetFriendList") ? recorded("GetFriendList/no-account") : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "get_friend_list",
@@ -1190,7 +1185,7 @@ describe("find_friends_who_own", () => {
   test("find_friends_who_own reports found:false for a private friends list (401)", async (t) => {
     // A friends-only list is a 401 (probed live); a 403 there is the bad-key page.
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetFriendList") ? jsonResponse({}, { status: 401 }) : jsonResponse({}),
+      url.includes("GetFriendList") ? recorded("GetFriendList/friends-only") : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "find_friends_who_own",
@@ -1203,7 +1198,7 @@ describe("find_friends_who_own", () => {
 
   test("find_friends_who_own: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetFriendList") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+      url.includes("GetFriendList") ? recorded("GetFriendList/accountid-0") : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "find_friends_who_own",
@@ -1333,7 +1328,7 @@ describe("compare_players", () => {
   test("compare_players: a malformed/out-of-range other_steamid reports found:false, not a raw HTML error", async (t) => {
     const { client } = await setupServer(t, ENV, (url) => {
       if (!url.includes("GetOwnedGames")) return jsonResponse({});
-      if (url.includes("steamid=76561197960265728")) return htmlResponse(ROUTING_400);
+      if (url.includes("steamid=76561197960265728")) return recorded("GetOwnedGames/accountid-0");
       return jsonResponse(OWNED);
     });
     const res = await client.callTool({
@@ -1484,7 +1479,7 @@ describe("get_game_achievements", () => {
     const { client } = await setupServer(t, ENV, (url) => {
       if (url.includes("GetSchemaForGame")) return jsonResponse({ game: {} });
       if (url.includes("GetGlobalAchievementPercentagesForApp"))
-        return jsonResponse({}, { status: 403 });
+        return recorded("GetGlobalAchievementPercentagesForApp/schema-less-dlc");
       return router(url);
     });
     const res = await client.callTool({
@@ -1552,26 +1547,6 @@ describe("get_game_achievements", () => {
     const second = (await call()).structuredContent as S;
     assert.equal(second.achievements[0]!.global_unlock_pct, 74.2, "rarity-less result was cached");
   });
-
-  test("a schema 403 plus a transient rarity failure stays a credentials error, not 'no achievements'", async (t) => {
-    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
-      url.includes("GetSchemaForGame")
-        ? jsonResponse({}, { status: 403 })
-        : url.includes("GetGlobalAchievementPercentagesForApp")
-          ? jsonResponse({}, { status: 500 })
-          : router(url),
-    );
-    const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
-    assert.equal(res.isError, true);
-  });
-
-  test("still surfaces a credentials-flavored error when only the schema call 403s and the keyless global-rarity call succeeds (genuinely ambiguous)", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetSchemaForGame") ? jsonResponse({}, { status: 403 }) : router(url),
-    );
-    const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
-    assert.equal(res.isError, true);
-  });
 });
 
 describe("STEAM_ID default / vanity resolution", () => {
@@ -1631,8 +1606,7 @@ describe("STEAM_ID default / vanity resolution", () => {
       { ...ENV, STEAM_ID: "gabe", HTTP_RETRIES: "0" },
       (url) => {
         if (url.includes("steamcommunity.com")) return PROFILE_XML("76561197960287930");
-        if (url.includes("ResolveVanityURL"))
-          return jsonResponse({ error: "nope" }, { status: 403 });
+        if (url.includes("ResolveVanityURL")) return recorded("ResolveVanityURL/bad-key");
         return router(url);
       },
     );

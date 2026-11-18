@@ -5,7 +5,7 @@
 // (Storefront tools) and steamPlayer.test.ts (key-gated player tools).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { setupServer, jsonResponse, htmlResponse, assertToolError } from "./helpers.ts";
+import { setupServer, jsonResponse, recorded, assertToolError } from "./helpers.ts";
 import {
   ENV,
   FOLLOWED,
@@ -32,9 +32,6 @@ const startDate = (mock: { calls: { url: string }[] }) =>
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant
 // (accountid 0), which is 17 digits and passes the tool schema but is never a
 // real account. Regression coverage for that raw body leaking to the agent.
-const ROUTING_400 =
-  "<html><body><h1>Bad Request</h1>Missing required routing parameter</body></html>";
-
 test("get_game_news works without a key", async (t) => {
   const { client } = await setupServer(
     t,
@@ -66,7 +63,7 @@ test("get_game_news degrades to a clean empty result for a large/unassigned appi
   // surface the generic "resembles an injection attempt" 403 message, which
   // misled on the single most likely trigger: the appid doesn't exist.
   const { client } = await setupServer(t, ENV, (url) =>
-    url.includes("GetNewsForApp") ? jsonResponse({}, { status: 403 }) : router(url),
+    url.includes("GetNewsForApp") ? recorded("GetNewsForApp/no-app") : router(url),
   );
   const res = await client.callTool({ name: "get_game_news", arguments: { appid: 99999999 } });
   assert.equal(res.isError, undefined);
@@ -172,7 +169,7 @@ test("get_global_achievements degrades to a clean empty result for a schema-less
   // be a credentials problem even though a key happens to be attached.
   const { client } = await setupServer(t, ENV, (url) => {
     if (url.includes("GetGlobalAchievementPercentagesForApp"))
-      return jsonResponse({}, { status: 403 });
+      return recorded("GetGlobalAchievementPercentagesForApp/schema-less-dlc");
     // A schema-less appid: the key-gated schema lists no achievements either.
     if (url.includes("GetSchemaForGame")) return jsonResponse({ game: {} });
     return router(url);
@@ -242,7 +239,7 @@ test("get_global_achievements never caches that degraded empty result", async (t
     if (url.includes("GetSchemaForGame")) return jsonResponse({ game: {} }); // schema-less appid
     if (!url.includes("GetGlobalAchievementPercentagesForApp")) return router(url);
     calls++;
-    if (calls === 1) return jsonResponse({}, { status: 403 });
+    if (calls === 1) return recorded("GetGlobalAchievementPercentagesForApp/schema-less-dlc");
     return router(url);
   });
   const degraded = await client.callTool({
@@ -316,7 +313,7 @@ test("get_current_players errors on an unknown appid instead of reporting a sile
   // genuine (nonexistent) zero.
   const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
     url.includes("GetNumberOfCurrentPlayers")
-      ? jsonResponse({ response: { result: 42 } }, { status: 404 })
+      ? recorded("GetNumberOfCurrentPlayers/no-app")
       : jsonResponse({}),
   );
   const res = await client.callTool({
@@ -339,14 +336,6 @@ test("get_current_players errors on a 200 response with a non-1 result too", asy
   assertToolError(res, /no steam app with id 999999999/i);
 });
 
-test("get_current_players: a 403 with a key configured is not blamed on credentials", async (t) => {
-  const { client } = await setupServer(t, ENV, (url) =>
-    url.includes("GetNumberOfCurrentPlayers") ? jsonResponse({}, { status: 403 }) : router(url),
-  );
-  const res = await client.callTool({ name: "get_current_players", arguments: { appid: 730 } });
-  assertToolError(res, /isn't the API key/i);
-});
-
 describe("get_wishlist", () => {
   test("get_wishlist sorts by priority (no key) and reports private as not-found", async (t) => {
     const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, router);
@@ -362,17 +351,6 @@ describe("get_wishlist", () => {
     assert.equal(s.found, true);
     assert.equal(s.total, 2);
     assert.equal(s.items[0]!.appid, 620); // priority 1 sorts first
-  });
-
-  test("get_wishlist (light): a 403 with a key configured is not blamed on credentials", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetWishlist/v1") ? jsonResponse({}, { status: 403 }) : router(url),
-    );
-    const res = await client.callTool({
-      name: "get_wishlist",
-      arguments: { steamid: "76561198028121353" },
-    });
-    assertToolError(res, /isn't the API key/i);
   });
 
   test("get_wishlist include_details returns full store cards (name, price, tags) in one call", async (t) => {
@@ -425,7 +403,9 @@ describe("get_wishlist", () => {
 
   test("get_wishlist include_details: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
     const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
-      url.includes("GetWishlistSortedFiltered") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+      url.includes("GetWishlistSortedFiltered")
+        ? recorded("GetWishlistSortedFiltered/accountid-0")
+        : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "get_wishlist",
@@ -511,7 +491,9 @@ describe("get_wishlist", () => {
   test("get_wishlist: a refused filtered call on a non-empty wishlist is an error, not 'nothing matched'", async (t) => {
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
       url.includes("GetWishlistSortedFiltered")
-        ? jsonResponse({ error: "bad" }, { status: 400 })
+        ? // Synthetic: no live call drew this 400 (see storeService), so the
+          // test covers only that an unexplained refusal isn't "nothing matched".
+          jsonResponse({ error: "bad" }, { status: 400 })
         : router(url),
     );
     const res = await client.callTool({
@@ -564,7 +546,7 @@ describe("get_wishlist", () => {
 
   test("get_wishlist: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
     const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
-      url.includes("GetWishlist") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+      url.includes("GetWishlist") ? recorded("GetWishlist/accountid-0") : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "get_wishlist",
@@ -798,17 +780,6 @@ describe("get_items", () => {
     assert.equal(s.items.find((i) => i.appid === 999)!.available, false);
   });
 
-  test("get_items: a 403 with a key configured is not blamed on the key", async (t) => {
-    // Regression: GetItems once told the agent its working key was bad.
-    const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("IStoreBrowseService/GetItems")
-        ? jsonResponse({}, { status: 403 })
-        : router(url),
-    );
-    const res = await client.callTool({ name: "get_items", arguments: { appids: [620] } });
-    assertToolError(res, /isn't the API key/i);
-  });
-
   test("get_items: still succeeds when GetTagList is unavailable (tags are display-only there)", async (t) => {
     const { client } = await setupServer(
       t,
@@ -917,7 +888,9 @@ describe("get_followed_games", () => {
 
   test("get_followed_games: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
     const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
-      url.includes("GetGamesFollowed") ? htmlResponse(ROUTING_400) : jsonResponse({}),
+      url.includes("GetGamesFollowed")
+        ? recorded("GetGamesFollowed/accountid-0")
+        : jsonResponse({}),
     );
     const res = await client.callTool({
       name: "get_followed_games",
@@ -927,17 +900,6 @@ describe("get_followed_games", () => {
     const s = res.structuredContent as { found: boolean; total: number };
     assert.equal(s.found, false);
     assert.equal(s.total, 0);
-  });
-
-  test("get_followed_games: a 403 with a key configured is not blamed on credentials", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetGamesFollowed") ? jsonResponse({}, { status: 403 }) : jsonResponse({}),
-    );
-    const res = await client.callTool({
-      name: "get_followed_games",
-      arguments: { steamid: "76561197960287930" },
-    });
-    assertToolError(res, /isn't the API key/i);
   });
 
   test("get_followed_games still succeeds when GetGamesFollowedCount fails (falls back to appids.length)", async (t) => {

@@ -63,12 +63,26 @@ const invalidSteamidProbe = (query: Record<string, string | number>) => ({
   query,
   expect: "invalid_steamid",
   shows: "accountid 0 is a 400, not an empty answer",
+  situation: "accountid-0",
+});
+
+// Steam's page for a bad/revoked key, shown on each key-gated endpoint with a
+// deliberately invalid key; its status differs by endpoint (see below), so
+// each endpoint records its own.
+const badKeyProbe = (query: Record<string, string | number>) => ({
+  query,
+  badKey: true,
+  expect: "invalid_key",
+  shows: "a bad key's page",
+  situation: "bad-key",
 });
 
 // A bad/revoked key gets this HTML page on every key-gated endpoint ("Access
 // is denied. Retrying will not help. Please verify your <pre>key=</pre>
-// parameter.") — as a 403 on most, a 401 on IPlayerService (verified live
-// 2026-11-17; the 401 was missed while only 403 was checked). The same
+// parameter.") — a 401 or a 403 by endpoint, not by interface: GetOwnedGames
+// sends 401, GetRecentlyPlayedGames 403, both IPlayerService (each endpoint's
+// bad-key probe records which; the 401 once went unclassified while only 403
+// was checked, and a test fixture then guessed 401 for all of IPlayerService). The same
 // statuses a private profile gets, never its JSON body. Classified as its own
 // code where the response is read (HttpClient's `classify`), before retries,
 // the cache and any endpoint answer act on it. (Keyless endpoints ignore a
@@ -93,7 +107,10 @@ export const Steam = {
     path: "ISteamUser/ResolveVanityURL/v1/",
     host: "api",
     keyless: false,
-    probes: [{ query: { vanityurl: "gabelogannewell" }, expect: "data", shows: "resolves" }],
+    probes: [
+      { query: { vanityurl: "gabelogannewell" }, expect: "data", shows: "resolves" },
+      badKeyProbe({ vanityurl: "gabelogannewell" }),
+    ],
   }),
   GetPlayerSummaries: endpoint<PlayerSummariesResponse>({
     path: "ISteamUser/GetPlayerSummaries/v2/",
@@ -101,14 +118,14 @@ export const Steam = {
     keyless: false,
     probes: [
       { query: { steamids: PUBLIC }, expect: "data", shows: "a public profile" },
-      {
-        query: { steamids: PUBLIC },
-        badKey: true,
-        expect: "invalid_key",
-        shows: "a bad key's page, as a 403 (elsewhere)",
-      },
+      badKeyProbe({ steamids: PUBLIC }),
       // Unlike the per-player endpoints, no account is a 200 with no players.
-      { query: { steamids: ACCOUNT_0 }, expect: "data", shows: "accountid 0 is an empty 200" },
+      {
+        query: { steamids: ACCOUNT_0 },
+        expect: "data",
+        shows: "accountid 0 is an empty 200",
+        situation: "accountid-0",
+      },
     ],
   }),
   GetPlayerBans: endpoint<PlayerBansResponse>({
@@ -116,7 +133,12 @@ export const Steam = {
     host: "api",
     keyless: false,
     probes: [
-      { query: { steamids: ACCOUNT_0 }, expect: "data", shows: "accountid 0 is an empty 200" },
+      {
+        query: { steamids: ACCOUNT_0 },
+        expect: "data",
+        shows: "accountid 0 is an empty 200",
+        situation: "accountid-0",
+      },
     ],
   }),
   GetSteamLevel: endpoint<SteamLevelResponse, "invalid_steamid">({
@@ -134,12 +156,7 @@ export const Steam = {
     probes: [
       { query: { steamid: PUBLIC }, expect: "data", shows: "a public library" },
       invalidSteamidProbe({ steamid: ACCOUNT_0 }),
-      {
-        query: { steamid: PUBLIC },
-        badKey: true,
-        expect: "invalid_key",
-        shows: "a bad key's page, as a 401 (IPlayerService)",
-      },
+      badKeyProbe({ steamid: PUBLIC }),
     ],
   }),
   GetRecentlyPlayedGames: endpoint<RecentlyPlayedResponse, "invalid_steamid">({
@@ -147,7 +164,10 @@ export const Steam = {
     host: "api",
     keyless: false,
     answers: invalidSteamid,
-    probes: [invalidSteamidProbe({ steamid: ACCOUNT_0, count: 1 })],
+    probes: [
+      invalidSteamidProbe({ steamid: ACCOUNT_0, count: 1 }),
+      badKeyProbe({ steamid: PUBLIC, count: 1 }),
+    ],
   }),
   // A private list and a missing account answer alike, so one answer for both.
   // Never a plain 403 (only the bad-key page): 36 of 36 non-public profiles
@@ -162,20 +182,24 @@ export const Steam = {
       not_found: "private_or_missing",
     },
     probes: [
+      badKeyProbe({ steamid: PUBLIC, relationship: "friend" }),
       {
         query: { steamid: "76561197960287930", relationship: "friend" },
         expect: "private_or_missing",
         shows: "a friends-only list is a 401",
+        situation: "friends-only",
       },
       {
         query: { steamid: "76561199999999999", relationship: "friend" },
         expect: "private_or_missing",
         shows: "no such account is a 404",
+        situation: "no-account",
       },
       {
         query: { steamid: ACCOUNT_0, relationship: "friend" },
         expect: "private_or_missing",
         shows: "accountid 0 is a 400",
+        situation: "accountid-0",
       },
     ],
   }),
@@ -188,15 +212,18 @@ export const Steam = {
     keyless: false,
     answers: { forbidden: "private", bad_request: "no_stats" },
     probes: [
+      badKeyProbe({ steamid: PUBLIC, appid: 620 }),
       {
         query: { steamid: "76561197960435530", appid: 620 },
         expect: "private",
         shows: "private game details are a 403",
+        situation: "private-game-details",
       },
       {
         query: { steamid: PUBLIC, appid: 228980 },
         expect: "no_stats",
         shows: "an app without stats is a 400",
+        situation: "app-without-stats",
       },
     ],
   }),
@@ -208,8 +235,19 @@ export const Steam = {
     keyless: false,
     answers: { bad_request: "no_schema" },
     probes: [
-      { query: { appid: 1206340 }, expect: "data", shows: "a schema-less DLC is an empty 200" },
-      { query: { appid: 99999999 }, expect: "no_schema", shows: "no such app is a 400" },
+      {
+        query: { appid: 1206340 },
+        expect: "data",
+        shows: "a schema-less DLC is an empty 200",
+        situation: "schema-less-dlc",
+      },
+      {
+        query: { appid: 99999999 },
+        expect: "no_schema",
+        shows: "no such app is a 400",
+        situation: "no-app",
+      },
+      badKeyProbe({ appid: 620 }),
     ],
   }),
 
@@ -226,8 +264,18 @@ export const Steam = {
     ambiguous: ["forbidden"],
     probes: [
       { query: { gameid: 620 }, expect: "data", shows: "a game with achievements" },
-      { query: { gameid: 1206340 }, expect: "no_data", shows: "a schema-less DLC is a 403" },
-      { query: { gameid: 99999999 }, expect: "no_data", shows: "no such app is a 403" },
+      {
+        query: { gameid: 1206340 },
+        expect: "no_data",
+        shows: "a schema-less DLC is a 403",
+        situation: "schema-less-dlc",
+      },
+      {
+        query: { gameid: 99999999 },
+        expect: "no_data",
+        shows: "no such app is a 403",
+        situation: "no-app",
+      },
     ],
   }),
   GetNumberOfCurrentPlayers: endpoint<CurrentPlayersResponse, "no_app">({
@@ -237,7 +285,12 @@ export const Steam = {
     answers: { not_found: "no_app" },
     probes: [
       { query: { appid: 620 }, expect: "data", shows: "a live count" },
-      { query: { appid: 99999999 }, expect: "no_app", shows: "no such app is a 404" },
+      {
+        query: { appid: 99999999 },
+        expect: "no_app",
+        shows: "no such app is a 404",
+        situation: "no-app",
+      },
     ],
   }),
   GetNewsForApp: endpoint<NewsResponse, "unknown_appid">({
@@ -251,6 +304,7 @@ export const Steam = {
         query: { appid: 99999999, count: 1 },
         expect: "unknown_appid",
         shows: "no such app is a 403",
+        situation: "no-app",
       },
     ],
   }),
@@ -317,7 +371,12 @@ export const Steam = {
     },
     probes: [
       { query: { language: "english" }, expect: "data", shows: "a dictionary" },
-      { query: { language: "ru" }, expect: "bad_request", shows: "an ISO code is an empty 200" },
+      {
+        query: { language: "ru" },
+        expect: "bad_request",
+        shows: "an ISO code is an empty 200",
+        situation: "iso-language",
+      },
     ],
   }),
   GetItems: endpoint<StoreItemsResponse>({
