@@ -25,6 +25,7 @@ import {
 } from "../format/webAchievements.ts";
 import {
   summarizePurchasePrices,
+  summarizeItems,
   summarizeRecommendations,
   summarizeSearchSuggestions,
 } from "../format/store.ts";
@@ -755,26 +756,29 @@ describe("a game with no reviews", () => {
   const tagMap = { 1: "Puzzle" };
 
   test("has an unknown review %, not 0%", () => {
-    const s = summarizeRecommendations(
-      [unreviewed],
-      new Map([["Puzzle", 5]]),
-      new Set(),
-      tagMap,
-      10,
-      ["Puzzle"],
-    );
-    assert.equal(s.recommendations[0]?.review_percent, null);
+    const s = summarizeItems({ response: { store_items: [unreviewed] } }, [1], tagMap) as {
+      items: { review_percent: number | null }[];
+    };
+    assert.equal(s.items[0]?.review_percent, null);
   });
 
-  test("stays a recommendation, neither boosted nor dropped by its review %", () => {
+  test("isn't recommended: its reception is unknown, not best or worst", () => {
+    const reviewed = {
+      ...unreviewed,
+      appid: 2,
+      reviews: { summary_filtered: { review_count: 50, percent_positive: 95 } },
+    };
     const s = summarizeRecommendations(
-      [unreviewed],
+      [unreviewed, reviewed],
       new Map([["Puzzle", 5]]),
       new Set(),
       tagMap,
       10,
       ["Puzzle"],
     );
-    assert.equal(s.recommendations[0]?.match_score, 5);
+    assert.deepEqual(
+      s.recommendations.map((r) => r.appid),
+      [2],
+    );
   });
 });

@@ -599,7 +599,9 @@ const hosts = {
   store: new HttpClient({ baseUrl: STORE, logger: probeLogger }),
 };
 async function outcomeOf(ep: Endpoint<unknown, string>, probe: Probe): Promise<string> {
-  const key = probe.badKey ? BAD_KEY : ep.host === "api" ? KEY : undefined;
+  // A keyless endpoint is probed without the key: "works without one" is
+  // the fact it states, and the situation a keyless server is in.
+  const key = probe.badKey ? BAD_KEY : ep.host === "api" && !ep.keyless ? KEY : undefined;
   try {
     const res = await call(hosts[ep.host], ep, probe.query, {}, key ? { key } : {});
     return ep.answers ? ((res as { answer?: string }).answer ?? "data") : "data";

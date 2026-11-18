@@ -390,9 +390,10 @@ export const Steam = {
   }),
   // GetItems asked only for purchase options (data_request
   // include_all_purchase_options), feeding a price correction: a body that
-  // doesn't fit the price shape fails like a request — never cached, a stale
-  // copy stands in. Its own entry because the rule holds for that query's URL,
-  // not for every GetItems answer.
+  // doesn't fit the price shape fails like a request and is never cached. Not
+  // retryable (the same body fails the same way), so it costs that chunk's
+  // correction, noted. Its own entry because the rule holds for that query's
+  // URL, not for every GetItems answer.
   GetPurchaseOptions: endpoint<StoreItemsResponse>({
     path: "IStoreBrowseService/GetItems/v1/",
     host: "api",

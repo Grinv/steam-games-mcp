@@ -462,7 +462,9 @@ export class SteamWebClient {
       // One friend's upstream failure is theirs alone; a bug fails the call.
       if (!(r.reason instanceof ApiError)) throw r.reason;
       const cause = `${r.reason.code}:${r.reason.status ?? ""}`;
-      failedByCause.set(cause, [...(failedByCause.get(cause) ?? []), r.reason]);
+      const errs = failedByCause.get(cause);
+      if (errs) errs.push(r.reason);
+      else failedByCause.set(cause, [r.reason]);
       return r.reason;
     });
     for (const errs of failedByCause.values()) {

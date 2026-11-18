@@ -384,10 +384,11 @@ export function summarizeRecommendations(
       const matchedTags = tags.filter((t) => tagWeights.has(t));
       const tagScore = matchedTags.reduce((sum, t) => sum + (tagWeights.get(t) ?? 0), 0);
       // Discount by review quality so a tag match on a poorly-received game
-      // doesn't outrank a better one; missing review data (too new/rare to
-      // judge) stays neutral (×1) rather than being penalized as if bad.
-      const percent = reviewPercent(it);
-      const reviewMultiplier = typeof percent === "number" ? percent / 100 : 1;
+      // doesn't outrank a better one. A game with no reviews has no reception
+      // to weigh, so it isn't recommended (score 0, dropped below): in the
+      // live pool those are mostly coming-soon games (7 of 10 sampled), which
+      // any made-up multiplier would rank above every reviewed match.
+      const reviewMultiplier = (reviewPercent(it) ?? 0) / 100;
       return { it, matchedTags, matchScore: tagScore * reviewMultiplier };
     })
     .filter((x) => x.matchScore > 0)

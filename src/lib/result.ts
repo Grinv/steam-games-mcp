@@ -74,7 +74,7 @@ const PROBLEMS: Record<
   },
   unauthorized: {
     title: "The upstream service rejected the request",
-    advice: NOT_THE_KEY + "Retry, or check for an upstream outage.",
+    advice: NOT_THE_KEY + "Retrying the same request won't change Steam's answer.",
   },
   forbidden: {
     title: "The upstream service denied access",

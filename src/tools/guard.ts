@@ -69,31 +69,42 @@ export function toolOutput(logger: Logger): ToolOutput {
   // One sentence per gap, in the pipeline's own wording (toProblem), never an
   // error's raw message.
   function notesOf(state: CallState): string[] {
-    const notes = new Set<string>();
+    const notes: string[] = [];
+    const staleSeen = new Set<string>();
     // One line each: an expected Steam failure, not a bug — stacks are for
     // the internal-error path (toProblem), where they're the diagnostics.
     const line = (err: ApiError) =>
       `${err.code}${err.status ? ` ${err.status}` : ""}: ${err.message.split("\n")[0]}`;
     // Counted, not collapsed: two chunks missing alike ("Prices of 100
-    // appids") are two gaps, and the model must know both.
-    const gaps = new Map<string, number>();
+    // appids") are two gaps, and the model must know both. Grouped by what is
+    // missing and why (the data), never by the sentence it renders to.
+    const gaps = new Map<string, { what: string; err: ApiError; n: number }>();
     for (const { what, err } of state.degraded) {
       logger.warn(`partial answer, ${what} unavailable: ${line(err)}`);
-      const gap = `${what} unavailable: ${toProblem(err, logger).detail}`;
-      gaps.set(gap, (gaps.get(gap) ?? 0) + 1);
+      const key = JSON.stringify([what, err.code, err.status ?? null, err.detail ?? null]);
+      const gap = gaps.get(key);
+      if (gap) gap.n += 1;
+      else gaps.set(key, { what, err, n: 1 });
     }
-    for (const [gap, n] of gaps) notes.add(n > 1 ? `${n}× ${gap}` : gap);
+    for (const { what, err, n } of gaps.values()) {
+      const gap = `${what} unavailable: ${toProblem(err, logger).detail}`;
+      notes.push(n > 1 ? `${n}× ${gap}` : gap);
+    }
     for (const { err, storedAt } of state.stale) {
       logger.warn(`served stale cache data after ${line(err)}`);
       // problemSummary, not the full detail: answering with a stale copy
       // means the failure was taken as passing, so its definitive reading
-      // (e.g. "your language is invalid") would mislead.
-      notes.add(
+      // (e.g. "your language is invalid") would mislead. One sentence per
+      // copy time and failure: it states the same fact for each such part.
+      const key = JSON.stringify([storedAt, err.code, err.status ?? null]);
+      if (staleSeen.has(key)) continue;
+      staleSeen.add(key);
+      notes.push(
         `Part of this answer is a cached copy from ${new Date(storedAt).toISOString()}, ` +
           `because Steam's latest answer failed: ${problemSummary(err)}.`,
       );
     }
-    return [...notes];
+    return notes;
   }
 
   async function guard(fn: () => Promise<ToolResult>, ctx: CallContext): Promise<ToolResult> {

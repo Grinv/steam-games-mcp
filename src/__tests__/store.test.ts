@@ -346,12 +346,14 @@ describe("summarizeRecommendations", () => {
         name: "Full price roguelike",
         tags: [{ tagid: 1, weight: 900 }],
         best_purchase_option: { discount_pct: 0 },
+        reviews: { summary_filtered: { review_count: 100, percent_positive: 90 } },
       },
       {
         appid: 920,
         name: "Discounted roguelike",
         tags: [{ tagid: 1, weight: 900 }],
         best_purchase_option: { discount_pct: 60 },
+        reviews: { summary_filtered: { review_count: 100, percent_positive: 90 } },
       },
     ];
     const tagWeights = new Map([["Roguelike", 10]]);
