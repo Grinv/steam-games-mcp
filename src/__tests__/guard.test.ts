@@ -164,8 +164,9 @@ test("a failed call is logged, with the gaps met before it failed", async () => 
   }
 });
 
-// An error read off a cached copy (an old "no such app") is as old as the copy.
-test("a failed call that used a cached copy says so", async () => {
+// The error may rest on the copy (an old "no such app") or not: stated as
+// read by the call, never as the error's source, and no data was served.
+test("a failed call that read a cached copy says so, as the call's", async () => {
   const { out, restore } = setup();
   try {
     const r = await out.guard(async () => {
@@ -178,9 +179,9 @@ test("a failed call that used a cached copy says so", async () => {
     assert.equal(r.isError, true);
     assert.match(
       r.content[0]!.text,
-      /^No matching resource was found\. No app 5\. Part of this answer is a cached copy from 2026-11-18T00:00:00\.000Z/,
+      /^No matching resource was found\. No app 5\. Part of what this call read was a cached copy from 2026-11-18T00:00:00\.000Z/,
     );
-    assert.equal((r._meta as Record<string, unknown>)[STALE_META_KEY], true);
+    assert.equal((r._meta as Record<string, unknown>)[STALE_META_KEY], undefined);
   } finally {
     restore();
   }

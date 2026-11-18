@@ -365,6 +365,10 @@ describe("summarizePurchasePrices", () => {
     ["a store_items that isn't a list", {}],
     ["a null item", [null]],
     ["an item whose purchase_options isn't a list", [{ appid: 1, purchase_options: "x" }]],
+    [
+      "an option whose active_discounts holds a null",
+      [{ appid: 1, purchase_options: [{ packageid: 1, active_discounts: [null] }] }],
+    ],
   ] as const) {
     // Retryable like every unusable body: it's no fact about the game, so a
     // good cached correction stands in for it (lib/http.ts serves a stale
@@ -567,7 +571,7 @@ describe("summarizeOwnedGames", () => {
 });
 
 describe("summarizeFriendsWhoOwn", () => {
-  test("caps owners/private_friends/unavailable_friends at 100 and reports the true total only when truncated", () => {
+  test("caps owners/not_shown_friends/unavailable_friends at 100 and reports the true total only when truncated", () => {
     // Regression: a big public friends list used to grow these arrays
     // unbounded — a token-budget risk AGENTS.md requires capping against,
     // same as every sibling collection summarizer.
@@ -593,11 +597,11 @@ describe("summarizeFriendsWhoOwn", () => {
       response: { players: [] },
     }) as {
       matches: { owners_total?: number }[];
-      private_friends_total?: number;
+      not_shown_friends_total?: number;
       unavailable_friends_total?: number;
     };
     assert.equal(s.matches[0]!.owners_total, undefined);
-    assert.equal(s.private_friends_total, undefined);
+    assert.equal(s.not_shown_friends_total, undefined);
     assert.equal(s.unavailable_friends_total, undefined);
   });
 });

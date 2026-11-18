@@ -44,7 +44,8 @@ import {
   getGameReviewsOutput,
   wishlistLightFound,
 } from "../format/web.schemas.ts";
-import { STEAM_LANGUAGES, storeDayStart } from "../format/shared.ts";
+import { storeDayStart } from "../format/shared.ts";
+import { steamLanguage } from "../steam.ts";
 import { getChartsOutput, chartSchema } from "../format/charts.schemas.ts";
 import { getGlobalAchievementsOutput } from "../format/webAchievements.schemas.ts";
 
@@ -178,8 +179,7 @@ export function registerStoreWebTools(
                 "reviews, Steam widens it on its own.",
             )
             .optional(),
-          review_language: z
-            .enum(["all", ...STEAM_LANGUAGES])
+          review_language: steamLanguage("all")
             .describe(
               "Filter reviews by language (Steam's own name, e.g. russian, schinese). " +
                 "Default 'all'. Setting this ALSO rescopes the summary counts (total_reviews / " +

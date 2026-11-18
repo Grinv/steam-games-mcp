@@ -5,7 +5,7 @@
 // too) — `steamid` and the steamid-resolving helper below are Web-API-specific.
 import { z } from "zod";
 import { ownProblem, type Problem } from "../lib/result.ts";
-import { isSteamId64, STEAMID64_RANGE, STEAMID64_RE } from "../format/shared.ts";
+import { isSteamId64, STEAMID64_RANGE, STEAMID64_RE } from "../steam.ts";
 
 // Appended to the key-gate message, but only for the tools that ALSO need the
 // target profile's privacy opened up. Four key-gated tools don't:

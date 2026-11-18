@@ -36,63 +36,6 @@ export const NO_SUCH_ACCOUNT_REASON =
   "so this is not a privacy setting — double-check the id, or resolve a vanity name " +
   "with resolve_vanity_url.";
 
-// The 17-digit SteamID64 shape. Single source for both the steamid tool-input
-// validation (tools/webShared.ts) and the SteamID64-vs-vanity discrimination in
-// the client's requireSteamId (clients/web.ts) — same pattern, two purposes.
-// Homed here (a leaf both the tools and clients layers already import from) so
-// the regex can't drift between the two.
-export const STEAMID64_RE = /^\d{17}$/;
-
-// A 17-digit string that can name an account: accountid (the low 32 bits) is
-// 1..2^32-1. BigInt keeps the comparison exact past Number.MAX_SAFE_INTEGER.
-export function isSteamId64(s: string): boolean {
-  if (!STEAMID64_RE.test(s)) return false;
-  const accountid = BigInt(s) - 76561197960265728n;
-  return accountid >= 1n && accountid <= 0xffffffffn;
-}
-
-// Steam's language names (its "API language code" column,
-// partner.steamgames.com/doc/store/localization/languages). Steam answers any
-// other value as if it were a language — English text, an empty tag
-// dictionary, zero reviews — so only these reach it. Each verified live
-// 2026-11-18: a full GetTagList dictionary, where "korean" and "ru" get none.
-export const STEAM_LANGUAGES = [
-  "arabic",
-  "bulgarian",
-  "schinese",
-  "tchinese",
-  "czech",
-  "danish",
-  "dutch",
-  "english",
-  "finnish",
-  "french",
-  "german",
-  "greek",
-  "hungarian",
-  "indonesian",
-  "italian",
-  "japanese",
-  "koreana",
-  "malay",
-  "norwegian",
-  "polish",
-  "portuguese",
-  "brazilian",
-  "romanian",
-  "russian",
-  "spanish",
-  "latam",
-  "swedish",
-  "thai",
-  "turkish",
-  "ukrainian",
-  "vietnamese",
-] as const;
-
-export const STEAMID64_RANGE =
-  "A SteamID64 is a 17-digit number from 76561197960265729 to 76561202255233023.";
-
 export function names(list: { description?: string; name?: string }[] | undefined): string[] {
   // Dedup: Steam repeats entries in some lists (e.g. a game's `categories`
   // carries "Steam Workshop"/controller-support labels twice), which would

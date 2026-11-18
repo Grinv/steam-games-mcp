@@ -237,6 +237,13 @@ export class StoreServiceClient {
     });
   }
 
+  // Refuses a tag name Steam doesn't have (or fails with the dictionary), for
+  // a caller that must check its input before any verdict about the player
+  // (get_recommended_games' exclude_tags, before the library is read).
+  async checkTags(tags: string[] | undefined, language?: string): Promise<void> {
+    await this.#resolveTagFilter(tags, language ?? this.#l);
+  }
+
   // Tag names → ids for a server-side tag filter, which needs the dictionary
   // BEFORE the query (cached per language, so usually free). tagIds is
   // undefined with no tags.
@@ -555,8 +562,7 @@ export class StoreServiceClient {
       // #requireTagMapIfFiltering — recommendations are meaningless without it.
       throw this.#tagsUnavailable(tagMap, "recommendations can't be computed", l);
     }
-    // The input first, as soon as the dictionary allows: an unknown exclude
-    // tag is refused whatever the player's library turns out to say.
+    // Already checked before the library (checkTags); same cached dictionary.
     const excludeIds = tagIdsFor(opts.excludeTags ?? [], tagMap, l);
     if (sampleRes instanceof ApiError) throw sampleRes;
     const tagWeights = computeFavoriteTagWeights(
@@ -731,18 +737,6 @@ export class StoreServiceClient {
       opts.steamMachine !== undefined ||
       opts.steamFrame !== undefined ||
       opts.platform === "windows";
-    function filters() {
-      return {
-        onSaleOnly: opts.onSaleOnly,
-        minReview: opts.minReview,
-        minDiscount: opts.minDiscount,
-        platform: opts.platform,
-        steamDeck: opts.steamDeck,
-        steamOs: opts.steamOs,
-        steamMachine: opts.steamMachine,
-        steamFrame: opts.steamFrame,
-      };
-    }
     const input = {
       steamid,
       context: { language: l, country_code: opts.country ?? this.#country, steam_realm: 1 },
@@ -765,7 +759,17 @@ export class StoreServiceClient {
         filterTagMap,
       ),
     ]);
-    return summarizeWishlistDetailed(filtered.res, filtered.tagMap, filters(), {
+    const filters = {
+      onSaleOnly: opts.onSaleOnly,
+      minReview: opts.minReview,
+      minDiscount: opts.minDiscount,
+      platform: opts.platform,
+      steamDeck: opts.steamDeck,
+      steamOs: opts.steamOs,
+      steamMachine: opts.steamMachine,
+      steamFrame: opts.steamFrame,
+    };
+    return summarizeWishlistDetailed(filtered.res, filtered.tagMap, filters, {
       total,
       exact: !checksHere,
     });

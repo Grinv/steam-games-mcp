@@ -94,7 +94,9 @@ export function toolOutput(logger: Logger): ToolOutput {
     return notes;
   }
 
-  function staleNotes(state: CallState): string[] {
+  // `lead` says what the copy is part of: an answer, or (on a failed call)
+  // only the call, since which part an error rests on isn't known here.
+  function staleNotes(state: CallState, lead = "Part of this answer is"): string[] {
     const notes: string[] = [];
     const staleSeen = new Set<string>();
     for (const { err, storedAt } of state.stale) {
@@ -107,7 +109,7 @@ export function toolOutput(logger: Logger): ToolOutput {
       if (staleSeen.has(key)) continue;
       staleSeen.add(key);
       notes.push(
-        `Part of this answer is a cached copy from ${new Date(storedAt).toISOString()}, ` +
+        `${lead} a cached copy from ${new Date(storedAt).toISOString()}, ` +
           `because Steam's latest answer failed: ${problemSummary(err)}.`,
       );
     }
@@ -132,13 +134,14 @@ export function toolOutput(logger: Logger): ToolOutput {
         // on the way (their notes have no result to ride in).
         gapNotes(state);
         logger.warn(`tool call failed: ${line(err)}`);
-        // An error read off a cached copy (an old "no such app") is as old as
-        // that copy: said so, as on a successful answer.
-        const stale = staleNotes(state);
+        // The error may rest on a cached copy (an old "no such app"), or not
+        // (a later required request failed): which isn't known here, so the
+        // copy is stated as read by the call, never as this error's source.
+        // No stale flag: no data was served.
+        const stale = staleNotes(state, "Part of what this call read was");
         if (stale.length) {
           const problem = toProblem(err, logger);
-          const res = problemResult({ ...problem, detail: [problem.detail, ...stale].join(" ") });
-          return { ...res, _meta: { ...(res._meta ?? {}), [STALE_META_KEY]: true } };
+          return problemResult({ ...problem, detail: [problem.detail, ...stale].join(" ") });
         }
       }
       return problemResult(toProblem(err, logger));

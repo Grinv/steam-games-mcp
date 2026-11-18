@@ -443,6 +443,17 @@ describe("get_recommended_games", () => {
     assert.ok(!mock.calls.some((c) => c.url.includes("IStoreQueryService/Query")));
   });
 
+  test("get_recommended_games: an unknown exclude tag is refused even for a hidden library", async (t) => {
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetOwnedGames") ? jsonResponse({ response: {} }) : recoRouter(url),
+    );
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930", exclude_tags: ["Not A Tag"] },
+    });
+    assertToolError(res, /Not a Steam tag in english: "Not A Tag"\./);
+  });
+
   test("get_recommended_games reports found:false for a private profile", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetOwnedGames") ? jsonResponse({ response: {} }) : jsonResponse({}),
@@ -939,7 +950,7 @@ describe("find_friends_who_own", () => {
         appid: number;
         owners: { steamid: string; name: string | null; playtime_hours: number | null }[];
       }[];
-      private_friends: { steamid: string; name: string | null }[];
+      not_shown_friends: { steamid: string; name: string | null }[];
     };
     assert.equal(s.total_friends, 2);
     const m620 = s.matches.find((m) => m.appid === 620)!;
@@ -953,8 +964,8 @@ describe("find_friends_who_own", () => {
     // whole library.
     const lookup = decodeURIComponent(mock.calls.find((c) => c.url.includes("GetOwnedGames"))!.url);
     assert.match(lookup, /appids_filter\[0\]=620&appids_filter\[1\]=999/);
-    assert.equal(s.private_friends.length, 1);
-    assert.equal(s.private_friends[0]!.steamid, "76561197960287931");
+    assert.equal(s.not_shown_friends.length, 1);
+    assert.equal(s.not_shown_friends[0]!.steamid, "76561197960287931");
   });
 
   // Promise.allSettled coverage: one friend's own GetOwnedGames genuinely
@@ -982,7 +993,7 @@ describe("find_friends_who_own", () => {
     const s = res.structuredContent as {
       total_friends: number;
       matches: { appid: number; owners: { steamid: string; playtime_hours: number | null }[] }[];
-      private_friends: { steamid: string }[];
+      not_shown_friends: { steamid: string }[];
       unavailable_friends: { steamid: string; reason: string }[];
     };
     assert.equal(s.total_friends, 2);
@@ -992,7 +1003,7 @@ describe("find_friends_who_own", () => {
     assert.equal(m620.owners[0]!.steamid, "76561197960287930");
     assert.equal(m620.owners[0]!.playtime_hours, 10);
     // The failing friend is unavailable, NOT counted as private.
-    assert.equal(s.private_friends.length, 0);
+    assert.equal(s.not_shown_friends.length, 0);
     assert.equal(s.unavailable_friends.length, 1);
     assert.equal(s.unavailable_friends[0]!.steamid, "76561197960287931");
     assert.match(s.unavailable_friends[0]!.reason, /5xx|500|retry later/i);
@@ -1208,18 +1219,18 @@ describe("find_friends_who_own", () => {
     const s = res.structuredContent as {
       total_friends: number;
       matches: { appid: number; owners: unknown[] }[];
-      private_friends: unknown[];
+      not_shown_friends: unknown[];
     };
     assert.equal(s.total_friends, 0);
     assert.equal(s.matches.length, 2); // both requested appids still reported, just with no owners
     assert.ok(s.matches.every((m) => m.owners.length === 0));
-    assert.equal(s.private_friends.length, 0);
+    assert.equal(s.not_shown_friends.length, 0);
   });
 
   // Regression: without include_played_free_games, Steam omits a played
   // free-to-play game from a friend's GetOwnedGames entirely — an owning
   // friend would then be silently missing from `owners` (not even landing
-  // in private_friends/unavailable_friends), contradicting "checks each
+  // in not_shown_friends/unavailable_friends), contradicting "checks each
   // friend's FULL library".
   test("find_friends_who_own finds an owner of a free-to-play game (needs include_played_free_games)", async (t) => {
     const { client } = await setupServer(t, ENV, (url) => {
@@ -1239,11 +1250,11 @@ describe("find_friends_who_own", () => {
     });
     const s = res.structuredContent as {
       matches: { appid: number; owners: { steamid: string }[] }[];
-      private_friends: unknown[];
+      not_shown_friends: unknown[];
     };
     const m570 = s.matches.find((m) => m.appid === 570)!;
     assert.equal(m570.owners.length, 2);
-    assert.equal(s.private_friends.length, 0);
+    assert.equal(s.not_shown_friends.length, 0);
   });
 });
 

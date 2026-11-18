@@ -226,10 +226,10 @@ export const findFriendsWhoOwnFound = z.strictObject({
       owners_total: z.number().optional(),
     }),
   ),
-  private_friends: z.array(friendNameEntry),
-  private_friends_total: z.number().optional(),
+  not_shown_friends: z.array(friendNameEntry),
+  not_shown_friends_total: z.number().optional(),
   // A friend whose own GetOwnedGames call failed (rate-limited/network/
-  // timeout/5xx) rather than came back private — see summarizeFriendsWhoOwn.
+  // timeout/5xx) rather than came back without a library — see summarizeFriendsWhoOwn.
   unavailable_friends: z.array(friendNameEntry.extend({ reason: z.string() })),
   unavailable_friends_total: z.number().optional(),
 });

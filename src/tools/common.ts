@@ -5,7 +5,7 @@
 import { z } from "zod";
 import type { CompatFilters } from "../format/storeCard.ts";
 import { compatFilterSchema } from "../format/store.schemas.ts";
-import { STEAM_LANGUAGES } from "../format/shared.ts";
+import { steamLanguage } from "../steam.ts";
 
 export const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
 
@@ -50,9 +50,8 @@ export const country = z
   )
   .optional();
 // Only Steam's own names: Steam reads any other value without an error (see
-// STEAM_LANGUAGES), so the enum is what keeps a wrong one from reaching it.
-export const language = z
-  .enum(STEAM_LANGUAGES)
+// STEAM_LANGUAGES in src/steam.ts), so this is what keeps one from reaching it.
+export const language = steamLanguage()
   .describe(
     "Store language for the text fields (Steam's own name, e.g. russian, schinese, koreana). " +
       "Overrides STEAM_LANGUAGE for this call. This is the content language only — prices and " +

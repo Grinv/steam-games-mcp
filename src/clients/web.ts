@@ -19,7 +19,7 @@ import {
 import { Steam, classifySteamApiError } from "./endpoints.ts";
 import { noteDegraded, optional, optionalParts, orFailure } from "../lib/call.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
-import { isSteamId64, STEAMID64_RANGE, STEAMID64_RE } from "../format/shared.ts";
+import { isSteamId64, STEAMID64_RANGE, STEAMID64_RE } from "../steam.ts";
 import {
   FRIENDS_CHECKED_MAX,
   friendIdsToEnrich,
@@ -274,13 +274,18 @@ export class SteamWebClient {
       minDiscount?: number;
     } = {},
   ): Promise<Record<string, unknown>> {
-    const res = await this.#ownedGamesRaw(steamid, {
-      include_appinfo: false,
-      // Without this, Steam omits free-to-play games from the owned list
-      // entirely — they'd then not only miss tag-weighting but, worse, never
-      // get excluded as "already owned" and could be recommended back.
-      include_played_free_games: true,
-    });
+    const [res] = await Promise.all([
+      this.#ownedGamesRaw(steamid, {
+        include_appinfo: false,
+        // Without this, Steam omits free-to-play games from the owned list
+        // entirely — they'd then not only miss tag-weighting but, worse, never
+        // get excluded as "already owned" and could be recommended back.
+        include_played_free_games: true,
+      }),
+      // The input before any verdict about the library: an unknown exclude
+      // tag is refused whatever that library turns out to be.
+      this.#store.checkTags(opts.excludeTags, opts.language),
+    ]);
     if (ownedGamesNotShown(res)) return libraryNotShown();
     const games = (res.response?.games ?? [])
       .filter((g): g is { appid: number; playtime_forever?: number } => typeof g.appid === "number")
@@ -403,8 +408,8 @@ export class SteamWebClient {
     // agent can actually name — a raw slice took Steam's arbitrary payload order,
     // which barely overlaps the 100 get_friend_list shows for the same account.
     const ids = friendIdsToEnrich(res, FRIENDS_CHECKED_MAX);
-    // settledWithLimit, not Promise.all: #ownedPlaytimes only returns null for a
-    // private profile (see below) — a genuine transient failure (rate-limited/
+    // settledWithLimit, not Promise.all: #ownedPlaytimes returns null when
+    // Steam returns no library (see below) — a genuine transient failure (rate-limited/
     // network/timeout/5xx) on ONE friend's own GetOwnedGames call still throws,
     // and with a friend list of any size that's not a rare case. One friend's
     // bad luck must not sink everyone else's results.
@@ -436,7 +441,8 @@ export class SteamWebClient {
   }
 
   // Playtime (minutes, playtime_forever) for just the requested appids a
-  // steamid owns, or null when the profile/game-details are private. Only
+  // steamid owns, or null when Steam returns no library (as it does for
+  // private game details, without saying so). Only
   // requested appids are kept — the caller never needs the rest of the library.
   async #ownedPlaytimes(steamid: string, appids: number[]): Promise<Map<number, number> | null> {
     // include_played_free_games: without it Steam omits a played free-to-play

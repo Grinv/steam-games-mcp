@@ -138,6 +138,13 @@ export const searchGamesOutput = z.strictObject({
 // The part of a GetItems answer summarizePurchasePrices() reads, checked
 // before it reads it: a payload that doesn't fit costs the price correction
 // (bad_response), never a TypeError. Loose: any other field passes through.
+// Every container summarizePurchasePrices walks into (priceFields reads each
+// option's active_discounts entries); the leaf values it reads are typeof- or
+// ??-guarded, and a wrong one fails purchasePricesSchema below.
+const purchaseOptionInput = z.looseObject({
+  active_discounts: z.array(z.looseObject({})).optional(),
+});
+
 export const purchaseItemsInput = z.looseObject({
   response: z
     .looseObject({
@@ -146,8 +153,8 @@ export const purchaseItemsInput = z.looseObject({
           z.looseObject({
             appid: z.number().optional(),
             is_free: z.boolean().optional(),
-            best_purchase_option: z.looseObject({}).optional(),
-            purchase_options: z.array(z.looseObject({})).optional(),
+            best_purchase_option: purchaseOptionInput.optional(),
+            purchase_options: z.array(purchaseOptionInput).optional(),
           }),
         )
         .optional(),

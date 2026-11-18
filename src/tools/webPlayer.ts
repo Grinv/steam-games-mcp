@@ -168,12 +168,13 @@ export function registerPlayerWebTools(
         "playtime_hours may still be low or 0). For the PLAYER'S OWN ownership instead of a friend's, use " +
         "get_owned_games's check_appids. Requires STEAM_API_KEY and the player's OWN friends list " +
         "to be public — otherwise the whole call returns found:false, which also covers a " +
-        "SteamID64 with no account behind it; read `reason`. A friend's individually private " +
-        "library is a different, per-friend case: that friend is listed in private_friends (can't be " +
-        "checked) rather than silently counted as a non-owner. Likewise, a friend whose own library " +
+        "SteamID64 with no account behind it; read `reason`. A friend whose library Steam didn't " +
+        "return (Steam doesn't say why: usually its game details are private) is a different, " +
+        "per-friend case: that friend is listed in not_shown_friends (can't be checked) rather than " +
+        "silently counted as a non-owner. Likewise, a friend whose own library " +
         "lookup failed (e.g. rate-limited) lands in unavailable_friends with a reason instead of " +
         "failing the whole call — every other friend's result still comes through. Each of owners, " +
-        `private_friends and unavailable_friends is capped at ${FRIENDS_WHO_OWN_MAX} entries (a sibling _total field ` +
+        `not_shown_friends and unavailable_friends is capped at ${FRIENDS_WHO_OWN_MAX} entries (a sibling _total field ` +
         `appears only when it was actually truncated). On a big account only ${FRIENDS_CHECKED_MAX} friends are ` +
         "looked up at all (one Steam call per friend would otherwise run past an MCP client's " +
         "request timeout), and they are the most-recently-added ones — the same ordering and the " +

@@ -14,7 +14,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Breaking:** `language`, `review_language` and `STEAM_LANGUAGE` take only Steam's 31 language names (`english`, `russian`, `schinese`, `koreana`, …; `STEAM_LANGUAGE` in any case). Steam reads any other value without an error — English text, an empty tag dictionary, zero reviews — so an ISO code like `ru` is now refused before any call (and a bad `STEAM_LANGUAGE` at startup), and an empty tag dictionary is a retryable Steam failure instead of a hint to fix the language.
+- **Breaking:** rename `find_friends_who_own`'s `private_friends` (and `private_friends_total`) to `not_shown_friends`: Steam returns no library for such a friend without saying why, so the field no longer names a cause.
+- **Breaking:** `language`, `review_language` and `STEAM_LANGUAGE` take only Steam's 31 language names (`english`, `russian`, `schinese`, `koreana`, …, in any case). Steam reads any other value without an error — English text, an empty tag dictionary, zero reviews — so an ISO code like `ru` is now refused before any call (and a bad `STEAM_LANGUAGE` at startup), and an empty tag dictionary is a retryable Steam failure instead of a hint to fix the language.
 - **Breaking:** mark a `get_prices` row whose price Steam failed to return as `available: null` (unknown, explained in `notes`) instead of `available: false`, which now only means the appid doesn't exist or isn't sold in that country.
 - Stop Steam requests for a tool call the client cancels, instead of letting them run on (including the retry backoff and the store rate-limit wait).
 - Build the bundle with tsdown instead of tsup, shrinking `dist/index.js` from 890 kB to 527 kB.

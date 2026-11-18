@@ -582,8 +582,9 @@ export function summarizeFriendList(
 // ---- Web API: find friends who own a game (key required) -------------------
 
 // Per appid, which friends own it, plus two reasons a friend can be missing
-// from that count instead of a confirmed non-owner: private_friends (their
-// library is private — #ownedPlaytimes' own null) and unavailable_friends
+// from that count instead of a confirmed non-owner: not_shown_friends (Steam
+// didn't return their library, for a reason it doesn't give — #ownedPlaytimes'
+// own null) and unavailable_friends
 // (their individual GetOwnedGames call failed — rate-limited/network/
 // timeout/5xx, from findFriendsWhoOwn's Promise.allSettled over all friends).
 // Both are kept separate from "doesn't own" so an agent never reports either
@@ -616,12 +617,12 @@ export function summarizeFriendsWhoOwn(
   const owners = new Map<number, ({ playtime_hours: number | null } & ReturnType<typeof nameOf>)[]>(
     appids.map((a) => [a, []]),
   );
-  const privateFriends: ReturnType<typeof nameOf>[] = [];
+  const notShownFriends: ReturnType<typeof nameOf>[] = [];
   const unavailableFriends: (ReturnType<typeof nameOf> & { reason: string })[] = [];
   friendIds.forEach((steamid, i) => {
     const playtimes = ownership[i];
     if (playtimes === null) {
-      privateFriends.push(nameOf(steamid));
+      notShownFriends.push(nameOf(steamid));
       return;
     }
     if (!(playtimes instanceof Map)) {
@@ -642,7 +643,7 @@ export function summarizeFriendsWhoOwn(
     }
   });
 
-  const cappedPrivate = capList(privateFriends, max);
+  const cappedNotShown = capList(notShownFriends, max);
   const cappedUnavailable = capList(unavailableFriends, max);
   return findFriendsWhoOwnFound.parse({
     found: true,
@@ -657,9 +658,9 @@ export function summarizeFriendsWhoOwn(
         ...(returned < forAppid.length && { owners_total: forAppid.length }),
       };
     }),
-    private_friends: cappedPrivate.included,
-    ...(cappedPrivate.returned < privateFriends.length && {
-      private_friends_total: privateFriends.length,
+    not_shown_friends: cappedNotShown.included,
+    ...(cappedNotShown.returned < notShownFriends.length && {
+      not_shown_friends_total: notShownFriends.length,
     }),
     unavailable_friends: cappedUnavailable.included,
     ...(cappedUnavailable.returned < unavailableFriends.length && {
