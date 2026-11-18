@@ -41,7 +41,8 @@ interface HttpClientOptions {
    *  anything, so they act on what actually happened. */
   classify?: (err: ApiError, body: string) => ApiError;
   /** This upstream's paths name a player (e.g. a community profile): log the
-   *  origin only. */
+   *  origin only, and keep its error pages (which may echo the path) out of
+   *  the error message, which is logged. */
   privatePaths?: boolean;
 }
 
@@ -131,7 +132,7 @@ export class HttpClient {
     for (;;) {
       try {
         if (this.#opts.beforeRequest) await this.#opts.beforeRequest(signal);
-        const text = await this.#once(url, options, accept, timeoutMs, signal);
+        const text = await this.#once(url, accept, timeoutMs, signal);
         check?.(text ?? "");
         return text;
       } catch (err) {
@@ -163,7 +164,6 @@ export class HttpClient {
 
   async #once(
     url: string,
-    options: RequestOptions,
     accept: string,
     timeoutMs: number,
     signal?: AbortSignal,
@@ -208,7 +208,7 @@ export class HttpClient {
       // can't be read, what this failure means is unknown — an I/O failure,
       // not an answer to read off the status alone.
       const raw = await io(res.text());
-      const err = toHttpError(res, raw);
+      const err = toHttpError(res, this.#opts.privatePaths ? "" : raw);
       throw this.#opts.classify ? this.#opts.classify(err, raw) : err;
     } finally {
       clearTimeout(timer);

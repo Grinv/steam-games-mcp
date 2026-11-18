@@ -483,6 +483,18 @@ const checks: Check[] = [
     },
   },
   {
+    // The other answer #vanityViaCommunity reads: a name nothing has is a 200
+    // with this <error>; any other page is unusable, never "no such profile".
+    name: "community profile XML (a vanity nothing has)",
+    run: async () => {
+      const res = await politeFetch(`${COMMUNITY}/id/zzzz-no-such-vanity-q7x/?xml=1`, {
+        headers: { Accept: "*/*" },
+      });
+      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+      need(/<error>.*profile could not be found/s.test(await res.text()), "the not-found <error>");
+    },
+  },
+  {
     name: "storefront featuredcategories",
     run: async () => {
       const body = await getJson<Record<string, { items?: { type?: unknown }[] } | undefined>>(

@@ -577,7 +577,9 @@ export function registerStoreWebTools(
           .describe(
             "Keep only wishlist items carrying ALL of these user tags (case-insensitive), e.g. " +
               "['Metroidvania']. Steam's own tag names, in the call's language; one Steam doesn't " +
-              "have is refused with an error naming it. Implies include_details.",
+              "have is refused with an error naming it, and so is one two Steam tags share in that " +
+              "language (the wishlist filter can't match either; discover_games can). Implies " +
+              "include_details.",
           )
           .optional(),
         min_review: z

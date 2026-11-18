@@ -109,13 +109,14 @@ function reviewScoreFloor(threshold: number): number {
   return 1;
 }
 
-// A title as matched by name: case, punctuation and marks (®, ™) don't count,
-// so "half life" names Half-Life and "civilization vi" Civilization® VI.
+// A title as matched by name: only its letters and digits count, accents
+// folded — "half life" is Half-Life, "dont starve" Don't Starve, "stalker"
+// S.T.A.L.K.E.R., "pokemon" Pokémon, "civilization vi" Civilization® VI.
 function titleKey(s: string): string {
   return s
+    .normalize("NFKD")
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
+    .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 // Tag names → each name's tagids, case-insensitively. A name isn't unique: in
@@ -257,16 +258,18 @@ export class StoreServiceClient {
   }
 
   // get_recommended_games' dictionary, read once and alongside the library
-  // (clients/web.ts), so its input — exclude_tags — is checked before any
-  // verdict about that library. Recommendations can't be computed without it.
+  // (clients/web.ts). An unknown exclude_tags name is the input's fault, so it
+  // throws, before any verdict about the library; the dictionary failing is
+  // Steam's, returned so the library's own verdict (hidden, empty) still
+  // comes first — recommendations can't be computed without it either way.
   async recommendationTags(
     excludeTags: string[] | undefined,
     language?: string,
-  ): Promise<RecommendationTags> {
+  ): Promise<RecommendationTags | ApiError> {
     const l = language ?? this.#l;
     const tagMap = await this.#tagNames(l);
     if (tagMap instanceof ApiError) {
-      throw this.#tagsUnavailable(tagMap, "recommendations can't be computed", l);
+      return this.#tagsUnavailable(tagMap, "recommendations can't be computed", l);
     }
     return { tagMap, excludeIds: tagIdsFor(excludeTags ?? [], tagMap, l).flat() };
   }
@@ -382,7 +385,8 @@ export class StoreServiceClient {
     });
     const items = (res.response?.store_items ?? []).filter((it) => typeof it.appid === "number");
     const wanted = titleKey(term);
-    return (items.find((it) => titleKey(it.name ?? "") === wanted) ?? items[0])?.appid ?? null;
+    const exact = wanted ? items.find((it) => titleKey(it.name ?? "") === wanted) : undefined;
+    return (exact ?? items[0])?.appid ?? null;
   }
 
   // Batch store card (price+discount, review %, compat, popular tags, release) for
@@ -562,11 +566,12 @@ export class StoreServiceClient {
       language?: string;
       minDiscount?: number;
     },
-    tags: RecommendationTags,
+    tags: RecommendationTags | ApiError,
   ): Promise<Record<string, unknown>> {
     if (ownedGames.length === 0) {
       return noGamesToRecommendFrom();
     }
+    if (tags instanceof ApiError) throw tags;
     const l = opts.language ?? this.#l;
     const cc = opts.country ?? this.#country;
     const { tagMap, excludeIds } = tags;

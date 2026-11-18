@@ -286,6 +286,32 @@ describe("get_game", () => {
     assert.match(asked, /appids=400\b/);
   });
 
+  // Only letters and digits count, accents folded: a title typed without its
+  // apostrophe, periods or accent is still the exact one.
+  for (const [typed, title] of [
+    ["dont starve", "Don't Starve"],
+    ["stalker", "S.T.A.L.K.E.R."],
+    ["pokemon", "Pokémon"],
+    ["half life", "Half-Life"],
+  ] as const) {
+    test(`get_game by name: "${typed}" is ${title}`, async (t) => {
+      const { client, mock } = await setupServer(t, ENV, (url) =>
+        url.includes("SearchSuggestions")
+          ? jsonResponse({
+              response: {
+                store_items: [
+                  { appid: 1, name: `${title} Together` },
+                  { appid: 2, name: title },
+                ],
+              },
+            })
+          : router(url),
+      );
+      await client.callTool({ name: "get_game", arguments: { name: typed } });
+      assert.match(mock.calls.find((c) => c.url.includes("appdetails"))!.url, /appids=2\b/);
+    });
+  }
+
   test("get_game reports no match when the title resolves to nothing", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("SearchSuggestions")

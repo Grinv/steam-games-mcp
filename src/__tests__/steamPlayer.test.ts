@@ -443,6 +443,21 @@ describe("get_recommended_games", () => {
     assert.ok(!mock.calls.some((c) => c.url.includes("IStoreQueryService/Query")));
   });
 
+  // The dictionary failing is Steam's, not the input's: a hidden library's
+  // own verdict still comes first.
+  test("get_recommended_games: a hidden library is found:false even with the dictionary down", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      if (url.includes("GetTagList")) return jsonResponse({}, { status: 503 });
+      if (url.includes("GetOwnedGames")) return jsonResponse({ response: {} });
+      return recoRouter(url);
+    });
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930" },
+    });
+    assert.equal((res.structuredContent as { found: boolean }).found, false);
+  });
+
   test("get_recommended_games: a failed dictionary says recommendations need it, not `tags`", async (t) => {
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
       url.includes("GetTagList") ? jsonResponse({}, { status: 500 }) : recoRouter(url),

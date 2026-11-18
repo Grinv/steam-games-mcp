@@ -129,10 +129,10 @@ export function toolOutput(logger: Logger): ToolOutput {
       // itself — every abort path raises it — so a bug that happens to land
       // alongside a cancel is still logged.
       if (err instanceof CallCancelled) return problemResult(ownProblem("cancelled"));
+      // The log gets the gaps met on the way, whatever failed the call (their
+      // notes have no result to ride in).
+      gapNotes(state);
       if (err instanceof ApiError) {
-        // The agent gets the error; the log gets it too, with the gaps met
-        // on the way (their notes have no result to ride in).
-        gapNotes(state);
         logger.warn(`tool call failed: ${line(err)}`);
         // The error may rest on a cached copy (an old "no such app"), or not
         // (a later required request failed): which isn't known here, so the
