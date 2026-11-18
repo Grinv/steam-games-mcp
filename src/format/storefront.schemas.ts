@@ -71,7 +71,7 @@ export const getGameOutput = z.strictObject({
   store_url: z.string().nullable(),
 });
 
-// summarizePrices' three literal row shapes.
+// summarizePrices' four literal row shapes (unknown, unavailable, unpriced, priced).
 export const getPricesOutput = z.strictObject({
   count: z.number(),
   prices: z.array(

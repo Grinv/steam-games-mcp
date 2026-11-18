@@ -443,6 +443,18 @@ describe("get_recommended_games", () => {
     assert.ok(!mock.calls.some((c) => c.url.includes("IStoreQueryService/Query")));
   });
 
+  test("get_recommended_games: a failed dictionary says recommendations need it, not `tags`", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+      url.includes("GetTagList") ? jsonResponse({}, { status: 500 }) : recoRouter(url),
+    );
+    const res = await client.callTool({
+      name: "get_recommended_games",
+      arguments: { steamid: "76561197960287930", exclude_tags: ["RPG"] },
+    });
+    assertToolError(res, /recommendations can't be computed/);
+    assert.doesNotMatch((res.content as { text: string }[])[0]!.text, /`tags`/);
+  });
+
   test("get_recommended_games: an unknown exclude tag is refused even for a hidden library", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetOwnedGames") ? jsonResponse({ response: {} }) : recoRouter(url),
@@ -454,9 +466,11 @@ describe("get_recommended_games", () => {
     assertToolError(res, /Not a Steam tag in english: "Not A Tag"\./);
   });
 
+  // recoRouter elsewhere: the dictionary is read alongside the library, and a
+  // real Steam always has one.
   test("get_recommended_games reports found:false for a private profile", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("GetOwnedGames") ? jsonResponse({ response: {} }) : jsonResponse({}),
+      url.includes("GetOwnedGames") ? jsonResponse({ response: {} }) : recoRouter(url),
     );
     const res = await client.callTool({
       name: "get_recommended_games",
@@ -475,7 +489,7 @@ describe("get_recommended_games", () => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetOwnedGames")
         ? jsonResponse({ response: { game_count: 0, games: [] } })
-        : jsonResponse({}),
+        : recoRouter(url),
     );
     const res = await client.callTool({
       name: "get_recommended_games",
@@ -1622,6 +1636,18 @@ describe("STEAM_ID default / vanity resolution", () => {
       assert.doesNotMatch(text, /check the spelling/);
     });
   }
+
+  // Only the two answers seen live settle it; an outage's HTML 200 doesn't.
+  test("a community page that is neither answer isn't read as 'no such profile'", async (t) => {
+    const { client } = await setupServer(t, { STEAM_ID: "gabe", HTTP_RETRIES: "0" }, (url) =>
+      url.includes("steamcommunity.com")
+        ? htmlResponse("<html>Busy</html>", { status: 200 })
+        : router(url),
+    );
+    const res = await client.callTool({ name: "get_followed_games", arguments: {} });
+    assertToolError(res, /unusable/);
+    assert.doesNotMatch((res.content as { text: string }[])[0]!.text, /check the spelling/);
+  });
 
   test("a definitive 'no such profile' wins over a keyed attempt that hit a 429", async (t) => {
     const { client } = await setupServer(

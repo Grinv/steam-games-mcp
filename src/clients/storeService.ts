@@ -108,18 +108,20 @@ function reviewScoreFloor(threshold: number): number {
   return 1;
 }
 
-// Case-insensitive tag name → tagid (undefined for a name Steam doesn't have).
-function tagIdLookup(tagMap: TagMap): (name: string) => number | undefined {
-  const byName = new Map(Object.entries(tagMap).map(([id, n]) => [n.toLowerCase(), Number(id)]));
-  return (name) => byName.get(name.toLowerCase());
-}
-
-// Tag names → tagids. Steam would take a name it doesn't have without a word
-// (it matches or excludes nothing), and the dictionary is in hand, so such a
-// name is refused here, naming it.
-function tagIdsFor(names: string[], tagMap: TagMap, language: string): number[] {
-  const idOf = tagIdLookup(tagMap);
-  const unknown = names.filter((n) => idOf(n) === undefined);
+// Tag names → each name's tagids, case-insensitively. A name isn't unique: in
+// 10 of Steam's 31 languages two tags share one (French "combat" is 1743 and
+// 3993, Dutch "snooker" 4852 and 363767; every dictionary checked live
+// 2026-11-19), so a name means any of its tags. Steam would take a name it
+// doesn't have without a word (it matches or excludes nothing), and the
+// dictionary is in hand, so such a name is refused here, naming it.
+function tagIdsFor(names: string[], tagMap: TagMap, language: string): number[][] {
+  const byName = new Map<string, number[]>();
+  for (const [id, n] of Object.entries(tagMap)) {
+    const key = n.toLowerCase();
+    byName.set(key, [...(byName.get(key) ?? []), Number(id)]);
+  }
+  const idsOf = (name: string) => byName.get(name.toLowerCase()) ?? [];
+  const unknown = names.filter((n) => idsOf(n).length === 0);
   if (unknown.length) {
     throw new ApiError({
       code: "bad_request",
@@ -129,7 +131,7 @@ function tagIdsFor(names: string[], tagMap: TagMap, language: string): number[] 
         "are Steam's own, in the call's language; get_items shows a game's tags.",
     });
   }
-  return names.map((n) => idOf(n)!);
+  return names.map(idsOf);
 }
 
 // Query's price_filters for a discount floor. Steam ignores min_discount_percent
@@ -148,7 +150,7 @@ function catalogFilters(
     releasedAfter?: number;
     minReview?: number;
   } & CompatFilters,
-  tagIds: number[] | undefined,
+  tagIds: number[][] | undefined,
 ): Record<string, unknown> {
   const filters: Record<string, unknown> = { type_filters: { include_games: true } };
   if (typeof p.minDiscount === "number") filters.price_filters = queryDiscountFilter(p.minDiscount);
@@ -164,9 +166,9 @@ function catalogFilters(
       device: compat[1],
       categories: COMPAT_CATEGORIES[p[compat[0]]!],
     };
-  // One group per tag: groups are ANDed (each tag required), a group's own
-  // tagids are ORed (verified live).
-  if (tagIds?.length) filters.tagids_must_match = tagIds.map((id) => ({ tagids: [id] }));
+  // One group per tag name: groups are ANDed (each name required), a group's
+  // own tagids are ORed (verified live) — a name's every tag.
+  if (tagIds?.length) filters.tagids_must_match = tagIds.map((ids) => ({ tagids: ids }));
   return filters;
 }
 
@@ -191,6 +193,13 @@ export const PRICE_LOOKUP_CHUNK = 150;
 export const FAVORITE_TAG_SAMPLE_SIZE = 30;
 const BASED_ON_TAGS_LIMIT = 6;
 export const RECOMMENDATION_POOL_SIZE = 300;
+
+/** get_recommended_games' dictionary and its exclude_tags ids (every tag of
+ *  each name), from recommendationTags. */
+export interface RecommendationTags {
+  tagMap: TagMap;
+  excludeIds: number[];
+}
 
 export class StoreServiceClient {
   readonly #call: Call;
@@ -237,11 +246,19 @@ export class StoreServiceClient {
     });
   }
 
-  // Refuses a tag name Steam doesn't have (or fails with the dictionary), for
-  // a caller that must check its input before any verdict about the player
-  // (get_recommended_games' exclude_tags, before the library is read).
-  async checkTags(tags: string[] | undefined, language?: string): Promise<void> {
-    await this.#resolveTagFilter(tags, language ?? this.#l);
+  // get_recommended_games' dictionary, read once and alongside the library
+  // (clients/web.ts), so its input — exclude_tags — is checked before any
+  // verdict about that library. Recommendations can't be computed without it.
+  async recommendationTags(
+    excludeTags: string[] | undefined,
+    language?: string,
+  ): Promise<RecommendationTags> {
+    const l = language ?? this.#l;
+    const tagMap = await this.#tagNames(l);
+    if (tagMap instanceof ApiError) {
+      throw this.#tagsUnavailable(tagMap, "recommendations can't be computed", l);
+    }
+    return { tagMap, excludeIds: tagIdsFor(excludeTags ?? [], tagMap, l).flat() };
   }
 
   // Tag names → ids for a server-side tag filter, which needs the dictionary
@@ -250,7 +267,7 @@ export class StoreServiceClient {
   async #resolveTagFilter(
     tags: string[] | undefined,
     language: string,
-  ): Promise<{ tagMap: TagMap | undefined; tagIds: number[] | undefined }> {
+  ): Promise<{ tagMap: TagMap | undefined; tagIds: number[][] | undefined }> {
     if (!tags?.length) return { tagMap: undefined, tagIds: undefined };
     const tagMap = this.#requireTagMapIfFiltering(tags, await this.#tagNames(language), language)!;
     return { tagMap, tagIds: tagIdsFor(tags, tagMap, language) };
@@ -528,43 +545,27 @@ export class StoreServiceClient {
       count?: number;
       country?: string;
       language?: string;
-      excludeTags?: string[];
       minDiscount?: number;
-    } = {},
+    },
+    tags: RecommendationTags,
   ): Promise<Record<string, unknown>> {
     if (ownedGames.length === 0) {
       return noGamesToRecommendFrom();
     }
     const l = opts.language ?? this.#l;
     const cc = opts.country ?? this.#country;
-    // The tag dictionary and the favorite-tag sample don't depend on each
-    // other, so they run concurrently; a missing dictionary still wins over a
-    // failed sample (checked first).
-    const tagMapPromise = this.#tagNames(l);
+    const { tagMap, excludeIds } = tags;
     const sample = ownedGames
       .slice()
       .sort((a, b) => b.playtimeMinutes - a.playtimeMinutes)
       .slice(0, FAVORITE_TAG_SAMPLE_SIZE);
-    const [tagMap, sampleRes] = await Promise.all([
-      tagMapPromise,
-      orFailure(
-        this.#call(Steam.GetItems, {
-          input_json: JSON.stringify({
-            ids: sample.map((g) => ({ appid: g.appid })),
-            context: { language: l, country_code: cc },
-            data_request: storeCardDataRequest(),
-          }),
-        }),
-      ),
-    ]);
-    if (tagMap instanceof ApiError) {
-      // Same "fail loudly, don't silently degrade" rule as
-      // #requireTagMapIfFiltering — recommendations are meaningless without it.
-      throw this.#tagsUnavailable(tagMap, "recommendations can't be computed", l);
-    }
-    // Already checked before the library (checkTags); same cached dictionary.
-    const excludeIds = tagIdsFor(opts.excludeTags ?? [], tagMap, l);
-    if (sampleRes instanceof ApiError) throw sampleRes;
+    const sampleRes = await this.#call(Steam.GetItems, {
+      input_json: JSON.stringify({
+        ids: sample.map((g) => ({ appid: g.appid })),
+        context: { language: l, country_code: cc },
+        data_request: storeCardDataRequest(),
+      }),
+    });
     const tagWeights = computeFavoriteTagWeights(
       sampleRes.response?.store_items ?? [],
       new Map(sample.map((g) => [g.appid, g.playtimeMinutes])),
@@ -587,7 +588,7 @@ export class StoreServiceClient {
     // dictionary itself, so each has an id.
     const filters: Record<string, unknown> = {
       type_filters: { include_games: true },
-      tagids_must_match: [{ tagids: tagIdsFor(basedOnTags, tagMap, l) }],
+      tagids_must_match: [{ tagids: tagIdsFor(basedOnTags, tagMap, l).flat() }],
     };
     if (typeof opts.minDiscount === "number")
       filters.price_filters = queryDiscountFilter(opts.minDiscount);
@@ -718,7 +719,22 @@ export class StoreServiceClient {
     // that storeItemFilter re-checks against the app's own package.
     const { tagMap: filterTagMap, tagIds } = await this.#resolveTagFilter(opts.tags, l);
     const server: Record<string, unknown> = {};
-    if (tagIds?.length) server.tagids_must_match = tagIds;
+    if (tagIds?.length) {
+      // The wishlist ANDs a flat id list (verified live: 197 and 142 entries
+      // alone, 63 together), so a name with two tags can't mean "either".
+      const shared = opts.tags!.filter((_, i) => tagIds[i]!.length > 1);
+      if (shared.length) {
+        throw new ApiError({
+          code: "bad_request",
+          message: `wishlist tags shared by two Steam tags in ${l}: ${shared.join(", ")}`,
+          detail:
+            `In ${l}, ${shared.map((n) => `"${n}"`).join(", ")} names more than one Steam tag, ` +
+            "and the wishlist filter can only require each tag it's given. Filter with the " +
+            "tag's name in another language, or by tag with discover_games.",
+        });
+      }
+      server.tagids_must_match = tagIds.flat();
+    }
     if (opts.steamDeck)
       server.steam_deck_filters =
         opts.steamDeck === "verified"

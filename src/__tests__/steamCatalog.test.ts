@@ -1049,6 +1049,39 @@ describe("discover_games", () => {
     assert.deepEqual(queryFilters(mock).price_filters, { min_discount_percent: 50 });
   });
 
+  // In 10 of Steam's 31 languages two tags share a name (French "combat":
+  // 1743 and 3993, seen live). A name means either: one ORed group in the
+  // catalog; the wishlist ANDs its ids, so there it's refused, naming it.
+  const SHARED = (url: string) =>
+    url.includes("GetTagList")
+      ? jsonResponse({
+          response: {
+            tags: [
+              { tagid: 1743, name: "Combat" },
+              { tagid: 3993, name: "Combat" },
+            ],
+          },
+        })
+      : router(url);
+  test("discover_games: a tag name two tags share matches either", async (t) => {
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, SHARED);
+    await client.callTool({
+      name: "discover_games",
+      arguments: { tags: ["combat"], language: "french" },
+    });
+    const q = mock.calls.find((c) => c.url.includes("IStoreQueryService/Query"))!;
+    const input = JSON.parse(new URL(q.url).searchParams.get("input_json")!);
+    assert.deepEqual(input.query.filters.tagids_must_match, [{ tagids: [1743, 3993] }]);
+  });
+  test("get_wishlist: a tag name two tags share is refused, naming it", async (t) => {
+    const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, SHARED);
+    const res = await client.callTool({
+      name: "get_wishlist",
+      arguments: { steamid: "76561198028121353", tags: ["combat"], language: "french" },
+    });
+    assertToolError(res, /In french, "combat" names more than one Steam tag/);
+  });
+
   // Steam would take it and match nothing, which reads as "no such games".
   for (const [tool, args] of [
     ["discover_games", { tags: ["Puzzle", "Not A Real Tag"] }],

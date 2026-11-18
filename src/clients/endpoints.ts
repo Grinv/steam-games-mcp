@@ -514,7 +514,8 @@ export const Steam = {
     keyless: true,
     validate: (body, query) => {
       const ids = String(query.appids).split(",");
-      const missing = ids.filter((id) => !(id in body));
+      // An object each: a null entry would read as "Steam failed this row".
+      const missing = ids.filter((id) => typeof body[id] !== "object" || body[id] === null);
       if (missing.length === 0) return;
       throw new ApiError({
         code: "bad_response",

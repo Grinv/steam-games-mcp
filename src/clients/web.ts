@@ -40,7 +40,6 @@ import {
   RECENTLY_PLAYED_MAX,
   summarizeVanity,
   summarizeWishlist,
-  type CurrentPlayersResponse,
   type OwnedGamesSort,
   type FollowedGamesCountResponse,
   type FollowedGamesResponse,
@@ -173,7 +172,7 @@ export class SteamWebClient {
       // Code and status only: never a player identifier in the log.
       else this.#logger.debug(`STEAM_ID vanity lookup failed: ${res.code} ${res.status ?? ""}`);
     }
-    if (steamid === undefined) steamid = (await this.#vanityViaCommunity(raw)) ?? null;
+    if (steamid === undefined) steamid = await this.#vanityViaCommunity(raw);
     if (!steamid) {
       throw new ApiError({
         code: "not_found",
@@ -194,14 +193,22 @@ export class SteamWebClient {
    *  (get_wishlist, get_followed_games) their independence from the key — with a
    *  numeric STEAM_ID they work without one, and they should either way.
    *  Matched with a regex rather than parsed: one known element in a
-   *  fixed-shape document isn't worth an XML dependency. A missing profile
-   *  answers HTTP 200 with an <error> body and no steamID64, which simply
-   *  yields undefined. */
-  async #vanityViaCommunity(vanity: string): Promise<string | undefined> {
+   *  fixed-shape document isn't worth an XML dependency. The two answers, both
+   *  HTTP 200 (seen live): the steamID64, or an <error> "The specified profile
+   *  could not be found." (null here). Any other page — an outage's HTML, an
+   *  interstitial — says nothing about the name: an unusable answer. */
+  async #vanityViaCommunity(vanity: string): Promise<string | null> {
     const xml = await this.#community.getText(`id/${encodeURIComponent(vanity)}/`, {
       query: { xml: 1 },
     });
-    return /<steamID64>(\d{17})<\/steamID64>/.exec(xml)?.[1];
+    const id = /<steamID64>(\d{17})<\/steamID64>/.exec(xml)?.[1];
+    if (id) return id;
+    if (/<error>.*profile could not be found/s.test(xml)) return null;
+    throw new ApiError({
+      code: "bad_response",
+      message: `community profile page has neither a steamID64 nor a not-found error (${xml.length} bytes)`,
+      retryable: true,
+    });
   }
 
   // ---- player data (key required) -------------------------------------------
@@ -274,7 +281,7 @@ export class SteamWebClient {
       minDiscount?: number;
     } = {},
   ): Promise<Record<string, unknown>> {
-    const [res] = await Promise.all([
+    const [res, tags] = await Promise.all([
       this.#ownedGamesRaw(steamid, {
         include_appinfo: false,
         // Without this, Steam omits free-to-play games from the owned list
@@ -284,13 +291,13 @@ export class SteamWebClient {
       }),
       // The input before any verdict about the library: an unknown exclude
       // tag is refused whatever that library turns out to be.
-      this.#store.checkTags(opts.excludeTags, opts.language),
+      this.#store.recommendationTags(opts.excludeTags, opts.language),
     ]);
     if (ownedGamesNotShown(res)) return libraryNotShown();
     const games = (res.response?.games ?? [])
       .filter((g): g is { appid: number; playtime_forever?: number } => typeof g.appid === "number")
       .map((g) => ({ appid: g.appid, playtimeMinutes: g.playtime_forever ?? 0 }));
-    return this.#store.getRecommendedGames(games, opts);
+    return this.#store.getRecommendedGames(games, opts, tags);
   }
 
   // Shared games between two players' FULL libraries, unlike get_owned_games
@@ -533,16 +540,15 @@ export class SteamWebClient {
   // `result` is Steam's own success flag: 1 = ok, anything else means the appid
   // wasn't found — as a 200, or as the endpoint's "no_app" answer (a 404).
   async getCurrentPlayers(appid: number): Promise<Record<string, unknown>> {
-    const answered = await this.#call(Steam.GetNumberOfCurrentPlayers, { appid });
-    const res: CurrentPlayersResponse = answered.answer ? {} : answered.data;
-    if (res.response?.result !== 1) {
+    const res = await this.#call(Steam.GetNumberOfCurrentPlayers, { appid });
+    if (res.answer || res.data.response?.result !== 1) {
       throw new ApiError({
         code: "not_found",
-        message: `GetNumberOfCurrentPlayers result ${res.response?.result} for appid ${appid}`,
+        message: `GetNumberOfCurrentPlayers ${res.answer ?? `result ${res.data.response?.result}`} for appid ${appid}`,
         detail: `No Steam app with id ${appid}.`,
       });
     }
-    return summarizeCurrentPlayers(res, appid);
+    return summarizeCurrentPlayers(res.data, appid);
   }
 
   // The modern store-browse/query card services (get_items, discover_games) live

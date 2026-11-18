@@ -20,6 +20,8 @@ src/
   server.ts       # buildServer() + start(); registers everything
   config.ts       # env → validated Config (zod)
   version.ts      # VERSION/USER_AGENT, kept in sync with package.json by a test
+  steam.ts        # what Steam's inputs can be (SteamID64 range, language names),
+                  #   checked by config, tools and clients alike
   format/         # raw Steam payloads → trimmed, agent-facing shapes: storefront.ts,
                   #   web.ts + webAchievements.ts (official Web API: player data /
                   #   achievement lists), store.ts (keyless store-service summarizers:
@@ -131,8 +133,9 @@ npm run inspector      # run under the MCP Inspector
     wraps it as `cause`. Facts true of every Steam endpoint are classified
     once, at the source: a bad key is `invalid_key` (in `SteamWebClient`'s `classify`),
     and "is this transient" is only ever `err.retryable` — never a code list
-    re-derived at a call site. A client method maps only its own endpoint's
-    quirks (e.g. GetFriendList's 401 = private), and only by `code`.
+    re-derived at a call site. An endpoint's own plain answers are declared
+    on it in `clients/endpoints.ts` (e.g. GetFriendList's 401 → "not_shown"),
+    keyed by the HTTP status seen.
   - **Exactly one place turns a non-`ApiError` into an `ApiError`**:
     `HttpClient#once`, for `fetch`'s own rejection (network/timeout) and a
     failed body read; a body that isn't JSON is Steam's answer, read as
