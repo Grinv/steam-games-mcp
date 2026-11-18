@@ -1778,6 +1778,16 @@ describe("a SteamID64 that can't name an account is refused before any call", ()
     assert.equal(mock.calls.length, 0);
   });
 
+  test("so is a configured STEAM_ID default", async (t) => {
+    const { client, mock } = await setupServer(t, { ...ENV, STEAM_ID: "76561197960265728" });
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { appid: 620 },
+    });
+    assertToolError(res, /STEAM_ID .*from 76561197960265729 to 76561202255233023/);
+    assert.equal(mock.calls.length, 0);
+  });
+
   test("the account range's own ends are accepted", async (t) => {
     const { client } = await setupServer(t, ENV);
     for (const id of ["76561197960265729", "76561202255233023"]) {

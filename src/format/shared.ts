@@ -42,6 +42,17 @@ export const NO_SUCH_ACCOUNT_REASON =
 // the regex can't drift between the two.
 export const STEAMID64_RE = /^\d{17}$/;
 
+// A 17-digit string that can name an account: accountid (the low 32 bits) is
+// 1..2^32-1. BigInt keeps the comparison exact past Number.MAX_SAFE_INTEGER.
+export function isSteamId64(s: string): boolean {
+  if (!STEAMID64_RE.test(s)) return false;
+  const accountid = BigInt(s) - 76561197960265728n;
+  return accountid >= 1n && accountid <= 0xffffffffn;
+}
+
+export const STEAMID64_RANGE =
+  "A SteamID64 is a 17-digit number from 76561197960265729 to 76561202255233023.";
+
 export function names(list: { description?: string; name?: string }[] | undefined): string[] {
   // Dedup: Steam repeats entries in some lists (e.g. a game's `categories`
   // carries "Steam Workshop"/controller-support labels twice), which would

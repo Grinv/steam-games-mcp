@@ -141,11 +141,12 @@ export class HttpClient {
         const apiErr = err;
         if (!apiErr.retryable || attempt >= retries) throw apiErr;
         const backoff = backoffMs(attempt, apiErr);
-        // Log the path only, never the query string — it can carry player
-        // identifiers (steamid/vanity) that redact() (credentials-only) leaves
-        // untouched. The endpoint alone is enough to debug a retry.
+        // Never log a player identifier (steamid/vanity), which redact()
+        // (credentials-only) leaves untouched: it rides in the query string,
+        // or in a community profile path. The endpoint is enough to debug.
+        const where = url.split("?")[0]!.replace(/\/(id|profiles)\/[^/]+/, "/$1/…");
         this.#opts.logger.debug(
-          `retrying ${url.split("?")[0]} after ${backoff}ms (attempt ${attempt + 1}/${retries}, ${apiErr.code})`,
+          `retrying ${where} after ${backoff}ms (attempt ${attempt + 1}/${retries}, ${apiErr.code})`,
         );
         try {
           await timers.setTimeout(backoff, undefined, { signal });

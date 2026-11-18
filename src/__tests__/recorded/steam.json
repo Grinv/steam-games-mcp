@@ -79,6 +79,11 @@
     "contentType": "application/json; charset=UTF-8",
     "body": "{\"playerstats\":{\"error\":\"Profile is not public\",\"success\":false}}"
   },
+  "GetPlayerAchievements/unknown-appid": {
+    "status": 400,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{\"playerstats\":{\"error\":\"Requested app has no stats\",\"success\":false}}"
+  },
   "GetPlayerBans/accountid-0": {
     "status": 200,
     "contentType": "application/json; charset=UTF-8",

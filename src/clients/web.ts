@@ -19,7 +19,13 @@ import {
 import { Steam, classifySteamApiError } from "./endpoints.ts";
 import { noteDegraded, optional, optionalParts, orFailure } from "../lib/call.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
-import { notFound, notShown, STEAMID64_RE } from "../format/shared.ts";
+import {
+  isSteamId64,
+  notFound,
+  notShown,
+  STEAMID64_RANGE,
+  STEAMID64_RE,
+} from "../format/shared.ts";
 import {
   FRIENDS_CHECKED_MAX,
   friendIdsToEnrich,
@@ -62,6 +68,8 @@ import type { Config } from "../config.ts";
 // this server otherwise talks to, and there's nothing to point elsewhere.
 const STEAM_COMMUNITY_BASE_URL = "https://steamcommunity.com";
 
+const NO_SCHEMA =
+  "Steam has no achievement schema for this appid; get_game shows whether the appid exists.";
 const ACHIEVEMENTS_NOT_SHOWN = notShown(
   "this player's achievements for this game",
   "get_owned_games with check_appids shows whether they own the game.",
@@ -152,7 +160,14 @@ export class SteamWebClient {
           "STEAM_ID (a SteamID64 or vanity name) in the server config.",
       });
     }
-    if (STEAMID64_RE.test(raw)) return raw;
+    if (STEAMID64_RE.test(raw)) {
+      if (isSteamId64(raw)) return raw;
+      throw new ApiError({
+        code: "bad_request",
+        message: "STEAM_ID is 17 digits but names no account",
+        detail: `STEAM_ID in the server config can't name an account. ${STEAMID64_RANGE}`,
+      });
+    }
     if (this.#resolvedDefault) return this.#resolvedDefault;
     // The official lookup when a key is set, the keyless community profile
     // otherwise — and as a backstop when the keyed attempt fails, since a
@@ -339,9 +354,7 @@ export class SteamWebClient {
     const schema = await this.#call(Steam.GetSchemaForGame, { appid, l }, { cache: true });
     if (schema.answer) {
       // Steam's own error text only classifies (above), never reaches the agent.
-      return notFound(
-        "Steam has no achievement schema for this appid; get_game shows whether the appid exists.",
-      );
+      return notFound(NO_SCHEMA);
     }
     return notFound(
       hasAchievements(schema.data) ? ACHIEVEMENTS_NOT_SHOWN : "This game has no achievements.",
@@ -651,8 +664,7 @@ export class SteamWebClient {
         code: "not_found",
         status: 400,
         message: `GetSchemaForGame has no schema for appid ${appid}`,
-        detail:
-          "Steam has no achievement schema for this appid; get_game shows whether the appid exists.",
+        detail: NO_SCHEMA,
       });
     }
     return summarizeGameSchema(schema.data, rarity?.data ?? {});

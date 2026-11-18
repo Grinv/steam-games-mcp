@@ -5,7 +5,7 @@
 // too) — `steamid` and the steamid-resolving helper below are Web-API-specific.
 import { z } from "zod";
 import { ownProblem, type Problem } from "../lib/result.ts";
-import { STEAMID64_RE } from "../format/shared.ts";
+import { isSteamId64, STEAMID64_RANGE, STEAMID64_RE } from "../format/shared.ts";
 
 // Appended to the key-gate message, but only for the tools that ALSO need the
 // target profile's privacy opened up. Four key-gated tools don't:
@@ -43,14 +43,9 @@ export const keyGate =
 // account by construction (accountid 0 is Steam's own 400), so it is refused
 // here rather than sent and read back as an answer. .trim() first so a copy-pasted id with stray whitespace is
 // accepted, matching the vanity field and the STEAM_ID env var (commit e86eb29).
-// BigInt keeps the comparison exact (the value exceeds Number.MAX_SAFE_INTEGER);
-// the refine is runtime-only and drops out of the generated JSON Schema, so it
+// The refine is runtime-only and drops out of the generated JSON Schema, so it
 // never trips z.toJSONSchema()'s unrepresentable guard (see AGENTS.md).
-const STEAMID64_BASE = 76561197960265728n;
-const ACCOUNTID_MAX = 0xffffffffn;
-const STEAMID64_MSG =
-  "A SteamID64 is a 17-digit number from 76561197960265729 to 76561202255233023. " +
-  "Use resolve_vanity_url to convert a custom profile name.";
+const STEAMID64_MSG = STEAMID64_RANGE + " Use resolve_vanity_url to convert a custom profile name.";
 // Exported so tools/prompts.ts can reuse the same validation for its own
 // steamid argument under a prompt-specific .describe() — AGENTS.md's "one shared
 // steamid schema" rule covers every surface that takes one, prompts included.
@@ -58,16 +53,9 @@ export const steamId64Base = z
   .string()
   .trim()
   .regex(STEAMID64_RE, STEAMID64_MSG)
-  // zod runs .refine() even when .regex() above already failed, so the range
-  // check must itself be safe on any string: BigInt() THROWS on a non-digit
-  // value (e.g. a vanity name passed by mistake) instead of returning false.
-  // When the value isn't 17 digits, defer to the regex issue (pass here) so its
-  // message wins; only BigInt-compare a value that is actually all digits.
-  .refine((s) => {
-    if (!STEAMID64_RE.test(s)) return true;
-    const accountid = BigInt(s) - STEAMID64_BASE;
-    return accountid >= 1n && accountid <= ACCOUNTID_MAX;
-  }, STEAMID64_MSG);
+  // zod runs .refine() even when .regex() above already failed: defer to the
+  // regex issue for a value that isn't 17 digits, so its message wins.
+  .refine((s) => !STEAMID64_RE.test(s) || isSteamId64(s), STEAMID64_MSG);
 
 export const steamid = steamId64Base
   .describe(

@@ -1,6 +1,6 @@
 // Every Steam endpoint this server calls, with what we know about it — the
 // single place a fact about Steam is stated (lib/endpoint.ts says how it's
-// used). Each answer, ambiguity and body rule has a probe: a live call that
+// used). Each answer and body rule has a probe: a live call that
 // shows it, run by `npm run check:api`. A fact here without a probe is a
 // guess; a probe that starts failing means Steam changed.
 //
@@ -205,7 +205,8 @@ export const Steam = {
   }),
   // Hidden game details are always a 403 "Profile is not public" — never a 401
   // or 404 (44 of 44 sampled live 2026-11-17), and so is an id with no account
-  // (3 of 3); an unknown appid is a 400.
+  // (3 of 3). A 400 ("Requested app has no stats") comes for an app without
+  // stats and for an unknown appid alike; the schema tells them apart.
   GetPlayerAchievements: endpoint<PlayerAchievementsResponse, "not_shown" | "no_stats">({
     path: "ISteamUserStats/GetPlayerAchievements/v1/",
     host: "api",
@@ -233,6 +234,12 @@ export const Steam = {
         expect: "no_stats",
         shows: "an app without stats is a 400",
         situation: "app-without-stats",
+      },
+      {
+        query: { steamid: PUBLIC, appid: 99999999 },
+        expect: "no_stats",
+        shows: "an unknown appid is the same 400",
+        situation: "unknown-appid",
       },
     ],
   }),

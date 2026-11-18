@@ -544,3 +544,23 @@ test("an error body that can't be read is an I/O failure, not a 403 to read off 
     (err: unknown) => err instanceof ApiError && err.code === "network" && err.retryable,
   );
 });
+
+// A community profile path is itself a player identifier (STEAM_ID's vanity).
+test("a retry is logged without the player identifier", async (t) => {
+  let n = 0;
+  installFetch(
+    t,
+    mockFetch(() => (n++ === 0 ? jsonResponse({}, { status: 503 }) : jsonResponse({ ok: 1 }))),
+  );
+  const lines: string[] = [];
+  const log = (m: string) => void lines.push(m);
+  const c = new HttpClient({
+    baseUrl: "https://steamcommunity.com",
+    logger: { debug: log, info: log, warn: log, error: log },
+    retries: 1,
+  });
+  await c.getJson("id/someone/", { query: { xml: 1, steamid: "76561197960287930" } });
+  assert.equal(lines.length, 1);
+  assert.match(lines[0]!, /retrying https:\/\/steamcommunity\.com\/id\/…\//);
+  assert.doesNotMatch(lines[0]!, /someone|7656/);
+});
