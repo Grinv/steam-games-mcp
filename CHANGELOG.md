@@ -19,7 +19,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Stop Steam requests for a tool call the client cancels, instead of letting them run on (including the retry backoff and the store rate-limit wait).
 - Build the bundle with tsdown instead of tsup, shrinking `dist/index.js` from 890 kB to 527 kB.
 - Report a server bug as "Internal error in steam-games-mcp" and log its stack, instead of showing the agent the raw exception text.
-- Keep a Steam failure's own cause in a tool error: a rate-limited or failed tag dictionary now says so and whether to retry, and an unrecognized `language` is named as the cause instead of advising a retry.
+- Keep a Steam failure's own cause in a tool error: a rate-limited or failed tag dictionary now says so and whether to retry.
 - Drop the made-up "(404)" from not-found errors that had no HTTP 404 behind them.
 - Report a rejected `STEAM_API_KEY` as its own error ("Steam rejected the configured STEAM_API_KEY … retrying won't help") on every key-gated tool. This includes the library tools (`get_owned_games`, `get_recently_played`), where Steam sends that page as a 401, not the 403 elsewhere.
 - Word `resolve_vanity_url`'s and `get_player_achievements`' `found: false` reasons ourselves instead of passing on Steam's own text (e.g. a bare "No match").

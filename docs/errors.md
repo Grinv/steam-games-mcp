@@ -90,7 +90,8 @@ waiting for finishes for that call (and the cache) instead.
 
 The request can't be served as given: Steam rejected it (HTTP 400/405/422),
 or something it needs is missing (e.g. no `steamid` and no `STEAM_ID` default).
-`detail` says what to change. An input Steam would misread (a SteamID64 that
+`detail` says what to change when that is known (a bare Steam 400 carries
+none). An input Steam would misread (a SteamID64 that
 names no account, a language that isn't one of Steam's names) is refused
 before any call, with a validation message instead.
 

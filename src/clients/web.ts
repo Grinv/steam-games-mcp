@@ -174,32 +174,23 @@ export class SteamWebClient {
     // otherwise — and as a backstop when the keyed attempt fails, since a
     // mistyped key 403ing here would otherwise take get_wishlist and
     // get_followed_games down with it, and neither needs a key of its own.
-    // The community profile is always the last word: if it answers "no such
-    // profile", that's definitive even when the keyed attempt hit a 429. Only
-    // when that final attempt itself failed transiently (429/5xx/timeout, which
-    // says nothing about the name) is the error rethrown rather than reported
-    // as "check the spelling" of a STEAM_ID that may well be fine.
-    let transient: ApiError | undefined;
-    // Only an upstream failure means "try the next lookup"; a bug isn't one.
-    const attempt = async (p: Promise<string | undefined>) => {
-      const res = await orFailure(p);
-      if (!(res instanceof ApiError)) return res;
-      // Code and status only: the message can hold Steam's page for the
-      // profile path, i.e. the vanity.
-      this.#logger.debug(`STEAM_ID vanity lookup failed: ${res.code} ${res.status ?? ""}`);
-      if (res.retryable) transient = res;
-      return undefined;
-    };
-    let steamid = this.configured ? await attempt(this.#vanityViaApi(raw)) : undefined;
-    if (!steamid) {
-      transient = undefined;
-      steamid = await attempt(this.#vanityViaCommunity(raw));
+    // The community profile is the last word, and only its answer — a page
+    // with no steamID64 — says the name resolves to nothing. Its failure, of
+    // any status, says nothing about the name, so it is the error.
+    let steamid: string | undefined;
+    if (this.configured) {
+      // Only an upstream failure means "ask the community profile"; a bug isn't one.
+      const res = await orFailure(this.#vanityViaApi(raw));
+      if (!(res instanceof ApiError)) steamid = res;
+      // Code and status only: never a player identifier in the log.
+      else this.#logger.debug(`STEAM_ID vanity lookup failed: ${res.code} ${res.status ?? ""}`);
     }
-    if (!steamid && transient) throw transient;
+    steamid ??= await this.#vanityViaCommunity(raw);
     if (!steamid) {
       throw new ApiError({
         code: "not_found",
-        message: `STEAM_ID vanity name "${raw}" did not resolve`,
+        // No vanity here: the message is logged.
+        message: "the STEAM_ID vanity name did not resolve",
         detail:
           `Could not resolve the STEAM_ID vanity name "${raw}" to a SteamID64 — check the ` +
           "spelling (it's the part after /id/ in the profile URL, and the profile must exist), " +
@@ -340,23 +331,18 @@ export class SteamWebClient {
     if (res.answer) return this.#explainNoPlayerAchievements(appid, l);
     if (res.data.playerstats?.success) return summarizePlayerAchievements(res.data);
     // 200 but success:false: the schema settles what it can.
-    return this.#explainNoPlayerAchievements(appid, l, res.data.playerstats?.error);
+    return this.#explainNoPlayerAchievements(appid, l);
   }
 
   // No achievements came back. Whether the game has any is a fact the
   // (cached) schema states; why a player's aren't shown is not Steam's to
   // say, so that case gets the tools that establish it.
-  async #explainNoPlayerAchievements(
-    appid: number,
-    l: string,
-    apiError?: string,
-  ): Promise<Record<string, unknown>> {
-    if (apiError && /not public|private/i.test(apiError)) return notFound(ACHIEVEMENTS_NOT_SHOWN);
+  // Never from Steam's error wording: that is unprobed text, the schema a fact.
+  async #explainNoPlayerAchievements(appid: number, l: string): Promise<Record<string, unknown>> {
     // The same cached request get_game_achievements makes. Only Steam's
     // answer reads as a verdict; a failure (or a bug, a cancel) propagates.
     const schema = await this.#call(Steam.GetSchemaForGame, { appid, l }, { cache: true });
     if (schema.answer) {
-      // Steam's own error text only classifies (above), never reaches the agent.
       return notFound(NO_SCHEMA);
     }
     return notFound(

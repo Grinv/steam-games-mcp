@@ -89,9 +89,8 @@ export function registerPlayerWebTools(
         "List a game's achievements by appid with their names, descriptions, hidden flag and " +
         `global unlock % (rarity), in the game's own definition order (capped at the first ${GAME_SCHEMA_ACHIEVEMENTS_MAX}; ` +
         "check `returned` vs `total` — most games have far fewer). An empty `achievements` list " +
-        "with total:0 means this appid has no achievement schema at all — a DLC, soundtrack, tool " +
-        "or demo, or an appid that doesn't exist; the two are not reported separately here, so use " +
-        "get_game to confirm the appid is a real base game. Requires STEAM_API_KEY (the " +
+        "with total:0 means the app has a schema with no achievements (e.g. a DLC); an appid Steam " +
+        "has no schema for at all is an error (get_game shows whether it exists). Requires STEAM_API_KEY (the " +
         "achievement schema needs a key). For just the rarity by internal id without a key, use " +
         "get_global_achievements; for a few named highlights, see get_game's achievements_highlighted; " +
         "for a specific player's own unlock progress instead of the catalog-wide list, use " +
@@ -338,8 +337,9 @@ export function registerPlayerWebTools(
         `For the all-time library by playtime instead (capped at ${OWNED_GAMES_MAX} entries by default, either end ` +
         "of that ordering via `sort`), use get_owned_games. " +
         "Requires STEAM_API_KEY and a public profile with game-details visibility (same requirement " +
-        "as get_owned_games) — otherwise, or for a SteamID64 with no account behind it, it returns " +
-        "found:false.",
+        "as get_owned_games). found:false means Steam returned no list, which it does for a hidden " +
+        "profile, a SteamID64 with no account, and some public profiles too, without saying why; " +
+        "`reason` names the tools that tell these apart.",
       inputSchema: z.strictObject({ steamid }),
       outputSchema: getRecentlyPlayedOutput,
       annotations: READ_ONLY,

@@ -159,9 +159,10 @@ that point rather than reconstructing it from scratch.
 
 - Distinguish "genuinely zero results" from "silently filtered out by a
   bad/unrecognized input" wherever the upstream API doesn't error on a
-  mismatch — an unrecognized `tags` name in `discover_games`, an
-  out-of-range `appid` that Steam just omits from a batch response, an
-  unresolvable vanity name. Apply this **consistently across every sibling
+  mismatch — an out-of-range `appid` that Steam just omits from a batch
+  response, an unresolvable vanity name. (An unrecognized `tags` name used
+  to be one; it is now refused, per AGENTS.md's input rule — prefer that
+  fix where the valid set is known.) Apply this **consistently across every sibling
   field of the same shape** — if one filter says "an invalid value just
   filters to nothing, not an error," every other field with the identical
   underlying behavior needs the same sentence, not just the one you

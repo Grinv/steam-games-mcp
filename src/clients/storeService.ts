@@ -554,6 +554,9 @@ export class StoreServiceClient {
       // #requireTagMapIfFiltering — recommendations are meaningless without it.
       throw this.#tagsUnavailable(tagMap, "recommendations can't be computed", l);
     }
+    // The input first, as soon as the dictionary allows: an unknown exclude
+    // tag is refused whatever the player's library turns out to say.
+    const excludeIds = tagIdsFor(opts.excludeTags ?? [], tagMap, l);
     if (sampleRes instanceof ApiError) throw sampleRes;
     const tagWeights = computeFavoriteTagWeights(
       sampleRes.response?.store_items ?? [],
@@ -581,7 +584,6 @@ export class StoreServiceClient {
     };
     if (typeof opts.minDiscount === "number")
       filters.price_filters = queryDiscountFilter(opts.minDiscount);
-    const excludeIds = tagIdsFor(opts.excludeTags ?? [], tagMap, l);
     if (excludeIds.length) filters.tagids_exclude = excludeIds;
     // The tool schema's own min(1).max(25) already bounds this — no need to
     // re-clamp here, just fall back for direct (non-tool) callers.

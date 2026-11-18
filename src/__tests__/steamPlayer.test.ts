@@ -645,25 +645,24 @@ describe("get_player_achievements", () => {
     assertToolError(res, /^Steam rejected the configured STEAM_API_KEY/);
   });
 
-  test("get_player_achievements: 200 + success:false with a 'not public' error → private reason (no schema lookup needed)", async (t) => {
-    // Distinct from the 403 case above: here the HTTP call itself succeeds
-    // (200), so #getPlayerAchievements never throws/catches — the private
-    // disambiguation instead comes from #explainNoPlayerAchievements' OWN
-    // apiError-message regex, short-circuiting before it ever calls
-    // GetSchemaForGame (unlike the no-achievements/hidden tests below).
-    const { client, mock } = await setupServer(t, ENV, (url) =>
-      url.includes("GetPlayerAchievements")
-        ? jsonResponse({ playerstats: { success: false, error: "Profile is not public" } })
-        : jsonResponse({}),
-    );
+  // A 200 with success:false is decided by the schema (a fact), never by
+  // Steam's error wording (unprobed text that once short-circuited it).
+  test("get_player_achievements: success:false's error text doesn't decide, the schema does", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, (url) => {
+      if (url.includes("GetPlayerAchievements"))
+        return jsonResponse({ playerstats: { success: false, error: "Profile is not public" } });
+      if (url.includes("GetSchemaForGame"))
+        return jsonResponse({ game: { availableGameStats: { achievements: [] } } });
+      return jsonResponse({});
+    });
     const res = await client.callTool({
       name: "get_player_achievements",
       arguments: { steamid: "76561197960287930", appid: 620 },
     });
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assertNotShown(s.reason);
-    assert.ok(!mock.calls.some((c) => c.url.includes("GetSchemaForGame")));
+    assert.equal(s.reason, "This game has no achievements.");
+    assert.ok(mock.calls.some((c) => c.url.includes("GetSchemaForGame")));
   });
 
   test("get_player_achievements: success:false + game has no achievements", async (t) => {
@@ -1583,15 +1582,19 @@ describe("STEAM_ID default / vanity resolution", () => {
     assertToolError(res, /17-digit SteamID64/);
   });
 
-  test("a vanity STEAM_ID that Steam couldn't be reached for isn't blamed on its spelling", async (t) => {
-    const { client } = await setupServer(t, { STEAM_ID: "gabe", HTTP_RETRIES: "0" }, (url) =>
-      url.includes("steamcommunity.com") ? jsonResponse({}, { status: 503 }) : router(url),
-    ); // no key: the community profile is the only attempt
-    const res = await client.callTool({ name: "get_followed_games", arguments: {} });
-    assert.equal(res.isError, true);
-    const text = (res.content as { text: string }[])[0]!.text;
-    assert.doesNotMatch(text, /check the spelling/);
-  });
+  // Only a page without a steamID64 speaks to the name; a failure of any
+  // status (a 403 edge block as much as a 503) says nothing about it.
+  for (const status of [503, 403]) {
+    test(`a vanity STEAM_ID whose profile lookup failed (${status}) isn't blamed on its spelling`, async (t) => {
+      const { client } = await setupServer(t, { STEAM_ID: "gabe", HTTP_RETRIES: "0" }, (url) =>
+        url.includes("steamcommunity.com") ? jsonResponse({}, { status }) : router(url),
+      ); // no key: the community profile is the only attempt
+      const res = await client.callTool({ name: "get_followed_games", arguments: {} });
+      assert.equal(res.isError, true);
+      const text = (res.content as { text: string }[])[0]!.text;
+      assert.doesNotMatch(text, /check the spelling/);
+    });
+  }
 
   test("a definitive 'no such profile' wins over a keyed attempt that hit a 429", async (t) => {
     const { client } = await setupServer(

@@ -73,14 +73,16 @@ settings.
   own memory only (never written to disk), as raw Steam responses keyed by
   request URL, fresh for a short configurable TTL (`CACHE_TTL_MS`, default 5
   minutes) to cut latency and avoid hammering the Storefront/Web APIs. An
-  expired copy is kept (bounded to ~32 MB, oldest evicted first) and used only
+  expired copy is kept until evicted (bounded to ~32 MB per Steam host the
+  server caches for — two today, the Web API and the store — oldest first),
+  possibly for the process's lifetime, and used only
   to answer a call while Steam is failing, flagged in the result. Not every endpoint is cached (e.g. reviews, the
   `get_prices` batch and `get_current_players`' count are always fetched
   fresh, while `get_charts`' rankings, live chart included, can be up to one
   TTL old); player-specific data is never cached, with two exceptions:
-  `get_player_summary`'s numeric Steam level is cached for up to
-  `CACHE_TTL_MS`, keyed by SteamID, since it's non-sensitive and rarely
-  changes; and a vanity-name `STEAM_ID` from the server config is remembered
+  `get_player_summary`'s numeric Steam level is cached, keyed by SteamID
+  (fresh for `CACHE_TTL_MS`, then kept as an expired copy like any other
+  entry), since it's non-sensitive and rarely changes; and a vanity-name `STEAM_ID` from the server config is remembered
   as its resolved SteamID64 until the process exits. The cache is cleared entirely when
   the process exits and is never shared across machines or users.
 - **Logging**: operational logs go to stderr only (never a file, never a
@@ -90,8 +92,8 @@ settings.
   plain query parameter on the wire. Log verbosity is controlled by
   `LOG_LEVEL` (default `info`); logs live only as long as your MCP client
   keeps that stderr stream around.
-- Beyond the cache TTL (and, for the resolved `STEAM_ID` above, the running
-  process's lifetime), `steam-games-mcp` retains nothing. There is no persistent storage layer of any kind.
+- Beyond the in-memory cache above (and, for the resolved `STEAM_ID`, the
+  running process's lifetime), `steam-games-mcp` retains nothing. There is no persistent storage layer of any kind.
 
 ## Changes to this policy
 

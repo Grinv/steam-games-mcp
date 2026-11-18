@@ -24,7 +24,8 @@
   the client (see `src/lib/errors.ts`'s `redact`).
 - **No data is kept between requests beyond a small in-memory cache** of raw
   Steam responses, fresh for `CACHE_TTL_MS` (default 5 minutes); an expired
-  copy is kept (bounded to ~32 MB, oldest evicted first) only to answer while
+  copy is kept until evicted (~32 MB per cached Steam host, two today; oldest
+  first), possibly for the process's lifetime, only to answer while
   Steam is failing, and such a result says so. It holds non-personal
   store/catalog responses (game details,
   review histogram, tag dictionary, the featured/specials payload, the
@@ -32,8 +33,8 @@
   correction, global achievement percentages and a game's achievement
   schema). Player-specific responses (profile, library,
   achievements, friends) are never cached, with two exceptions:
-  `get_player_summary`'s numeric Steam level is cached for up to
-  `CACHE_TTL_MS` keyed by SteamID, since it's non-sensitive and rarely
+  `get_player_summary`'s numeric Steam level is cached keyed by SteamID
+  (fresh for `CACHE_TTL_MS`, then kept as an expired copy like any entry), since it's non-sensitive and rarely
   changes; and a vanity-name `STEAM_ID` from the server config, once resolved,
   is remembered as its SteamID64 for the life of the process (it's the
   operator's own configured default, and resolving it again on every call
