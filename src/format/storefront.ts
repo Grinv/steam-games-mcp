@@ -189,7 +189,8 @@ export function detailApp(a: StoreApp, override?: PriceOverride): z.infer<typeof
       ids: a.content_descriptors?.ids ?? [],
       notes: a.content_descriptors?.notes ?? null,
     },
-    // Present only for DLC: the base game it belongs to.
+    // Steam's `fullgame`: the game a DLC, soundtrack or demo belongs to, its
+    // appid a numeric string (seen live 2026-11-19 on 2778580, 1206340, 219).
     base_game: a.fullgame?.appid
       ? { appid: Number(a.fullgame.appid), name: a.fullgame.name ?? null }
       : null,

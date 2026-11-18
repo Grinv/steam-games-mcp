@@ -62,7 +62,10 @@ export const getGameOutput = z.strictObject({
   dlc_total: z.number().describe("How many DLC this game has in total, before the `dlc` cap."),
   demos: z.array(z.number()),
   content_descriptors: z.strictObject({ ids: z.array(z.number()), notes: z.string().nullable() }),
-  base_game: z.strictObject({ appid: z.number(), name: z.string().nullable() }).nullable(),
+  base_game: z
+    .strictObject({ appid: z.number(), name: z.string().nullable() })
+    .nullable()
+    .describe("The game this DLC, soundtrack or demo belongs to; null for a base game."),
   drm_notice: z.string().nullable(),
   account_notice: z.string().nullable(),
   pc_requirements_min: z.string().nullable(),
