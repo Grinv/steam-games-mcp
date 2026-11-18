@@ -14,9 +14,10 @@ import { ApiError } from "../lib/errors.ts";
 import type { Answered, CallOptions, Endpoint, Query } from "../lib/endpoint.ts";
 import { Steam } from "./endpoints.ts";
 import { noteDegraded, optionalParts, orFailure } from "../lib/call.ts";
-import { notFound } from "../format/shared.ts";
 import {
   computeFavoriteTagWeights,
+  noGamesToRecommendFrom,
+  noTasteToRecommendFrom,
   summarizeDiscover,
   summarizeItems,
   summarizePurchasePrices,
@@ -525,7 +526,7 @@ export class StoreServiceClient {
     } = {},
   ): Promise<Record<string, unknown>> {
     if (ownedGames.length === 0) {
-      return notFound("This player's library has no games to base recommendations on.");
+      return noGamesToRecommendFrom();
     }
     const l = opts.language ?? this.#l;
     const cc = opts.country ?? this.#country;
@@ -564,7 +565,7 @@ export class StoreServiceClient {
       tagMap,
     );
     if (tagWeights.size === 0) {
-      return notFound("Not enough played games with resolvable tags to build recommendations.");
+      return noTasteToRecommendFrom();
     }
     const basedOnTags = [...tagWeights.entries()]
       .sort((a, b) => b[1] - a[1])

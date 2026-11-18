@@ -21,7 +21,10 @@ export default defineConfig(
   // only through clients/endpoints.ts and lib/call.ts's primitives — a
   // hand-written catch there is how a cancel, a bug or a bad key got read as
   // an answer; and they touch no schemas or lib/result.ts (a client words only
-  // the detail of an error it classifies).
+  // the detail of an error it classifies). A found:false reason is a client's
+  // decision (it alone knows when to stop fetching), but its words are
+  // format/'s, one function per case: two layers wording one case is how they
+  // drifted apart.
   {
     files: ["src/clients/**/*.ts"],
     rules: {
@@ -42,6 +45,12 @@ export default defineConfig(
             {
               group: ["**/lib/result.ts"],
               message: "Agent-facing text is built in format/ and tools/.",
+            },
+            {
+              group: ["**/format/shared.ts"],
+              importNames: ["notFound", "notShown"],
+              message:
+                "A found:false reason is worded in format/, one function per case; return that.",
             },
           ],
         },

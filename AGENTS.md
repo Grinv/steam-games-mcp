@@ -232,7 +232,10 @@ npm run inspector      # run under the MCP Inspector
   card), or the endpoint's declared `answers`. ESLint enforces it: no `catch`
   in `src/clients/`, no schemas or `lib/result.ts` there (a client words only
   an `ApiError`'s `detail`, where it classifies), and no fetching
-  or transport in `src/format/` (`eslint.config.js`). A formatter renders `undefined` as unknown (`null`/empty),
+  or transport in `src/format/` (`eslint.config.js`). A client decides
+  when a tool stops at `found:false` (only it knows whether another request
+  is needed) but never words it: each case is one function in `format/`
+  (e.g. `friendsNotShown()`), so a case has one wording wherever it's reached. A formatter renders `undefined` as unknown (`null`/empty),
   never as a negative fact. `guard` turns the call's notes (and any stale
   fallback) into `structuredContent.notes` — the only place the model looks
   (verified: Claude Code feeds it structuredContent alone, not other content

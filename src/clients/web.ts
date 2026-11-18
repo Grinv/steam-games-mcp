@@ -19,16 +19,12 @@ import {
 import { Steam, classifySteamApiError } from "./endpoints.ts";
 import { noteDegraded, optional, optionalParts, orFailure } from "../lib/call.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
-import {
-  isSteamId64,
-  notFound,
-  notShown,
-  STEAMID64_RANGE,
-  STEAMID64_RE,
-} from "../format/shared.ts";
+import { isSteamId64, STEAMID64_RANGE, STEAMID64_RE } from "../format/shared.ts";
 import {
   FRIENDS_CHECKED_MAX,
   friendIdsToEnrich,
+  friendsNotShown,
+  libraryNotShown,
   ownedGamesNotShown,
   summarizeComparePlayers,
   summarizeCurrentPlayers,
@@ -57,7 +53,9 @@ import {
   summarizeGameSchema,
   summarizeGlobalAchievements,
   summarizePlayerAchievements,
-  type GameSchemaResponse,
+  NO_ACHIEVEMENT_SCHEMA,
+  playerAchievementsMissing,
+  playerAchievementsNotShown,
 } from "../format/webAchievements.ts";
 import { StoreServiceClient } from "./storeService.ts";
 import type { Logger } from "../lib/logger.ts";
@@ -67,16 +65,6 @@ import type { Config } from "../config.ts";
 // without a key (see #vanityViaCommunity). Not a config knob — it isn't an API
 // this server otherwise talks to, and there's nothing to point elsewhere.
 const STEAM_COMMUNITY_BASE_URL = "https://steamcommunity.com";
-
-const NO_SCHEMA =
-  "Steam has no achievement schema for this appid; get_game shows whether the appid exists.";
-const ACHIEVEMENTS_NOT_SHOWN = notShown(
-  "this player's achievements for this game",
-  "get_owned_games with check_appids shows whether they own the game.",
-);
-
-const hasAchievements = (schema: GameSchemaResponse) =>
-  (schema.game?.availableGameStats?.achievements?.length ?? 0) > 0;
 
 function friendIdsOf(r: FriendListResponse): string[] {
   return (r.friendslist?.friends ?? [])
@@ -298,9 +286,7 @@ export class SteamWebClient {
       // get excluded as "already owned" and could be recommended back.
       include_played_free_games: true,
     });
-    if (ownedGamesNotShown(res)) {
-      return notFound(notShown("a game library for this SteamID64"));
-    }
+    if (ownedGamesNotShown(res)) return libraryNotShown();
     const games = (res.response?.games ?? [])
       .filter((g): g is { appid: number; playtime_forever?: number } => typeof g.appid === "number")
       .map((g) => ({ appid: g.appid, playtimeMinutes: g.playtime_forever ?? 0 }));
@@ -327,27 +313,20 @@ export class SteamWebClient {
   ): Promise<Record<string, unknown>> {
     const l = language ?? this.#l;
     const res = await this.#call(Steam.GetPlayerAchievements, { steamid, appid, l });
-    if (res.answer === "not_shown") return notFound(ACHIEVEMENTS_NOT_SHOWN);
+    if (res.answer === "not_shown") return playerAchievementsNotShown();
     if (res.answer) return this.#explainNoPlayerAchievements(appid, l);
     if (res.data.playerstats?.success) return summarizePlayerAchievements(res.data);
     // 200 but success:false: the schema settles what it can.
     return this.#explainNoPlayerAchievements(appid, l);
   }
 
-  // No achievements came back. Whether the game has any is a fact the
-  // (cached) schema states; why a player's aren't shown is not Steam's to
-  // say, so that case gets the tools that establish it.
-  // Never from Steam's error wording: that is unprobed text, the schema a fact.
+  // No achievements came back: the (cached) schema is the one fact that
+  // speaks to why — never Steam's error wording, which is unprobed text.
   async #explainNoPlayerAchievements(appid: number, l: string): Promise<Record<string, unknown>> {
     // The same cached request get_game_achievements makes. Only Steam's
     // answer reads as a verdict; a failure (or a bug, a cancel) propagates.
     const schema = await this.#call(Steam.GetSchemaForGame, { appid, l }, { cache: true });
-    if (schema.answer) {
-      return notFound(NO_SCHEMA);
-    }
-    return notFound(
-      hasAchievements(schema.data) ? ACHIEVEMENTS_NOT_SHOWN : "This game has no achievements.",
-    );
+    return playerAchievementsMissing(schema.answer ? undefined : schema.data);
   }
 
   async resolveVanityUrl(vanity: string): Promise<Record<string, unknown>> {
@@ -388,7 +367,7 @@ export class SteamWebClient {
   // via GetPlayerSummaries.
   async getFriendList(steamid: string): Promise<Record<string, unknown>> {
     const res = await this.#friendsRaw(steamid);
-    if (res === null) return notFound(notShown("a friends list for this SteamID64"));
+    if (res === null) return friendsNotShown();
     return summarizeFriendList(res, await this.#playerSummaries(friendIdsToEnrich(res)));
   }
 
@@ -409,7 +388,7 @@ export class SteamWebClient {
     // report every owner twice in each of two identical matches.
     const appids = [...new Set(requested)];
     const res = await this.#friendsRaw(steamid);
-    if (res === null) return notFound(notShown("a friends list for this SteamID64"));
+    if (res === null) return friendsNotShown();
     const allIds = friendIdsOf(res);
     if (allIds.length === 0) return summarizeFriendsWhoOwn(appids, [], [], {});
     // Two bounds, both measured live on a 634-friend account:
@@ -652,7 +631,7 @@ export class SteamWebClient {
       throw new ApiError({
         code: "not_found",
         message: `GetSchemaForGame has no schema for appid ${appid}`,
-        detail: NO_SCHEMA,
+        detail: NO_ACHIEVEMENT_SCHEMA,
       });
     }
     return summarizeGameSchema(schema.data, rarity?.data ?? {});

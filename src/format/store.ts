@@ -13,7 +13,7 @@
 
 import { z } from "zod";
 import { ApiError } from "../lib/errors.ts";
-import { capList, isoDay, notShown, storeUrl } from "./shared.ts";
+import { capList, isoDay, notFound, notShown, storeUrl } from "./shared.ts";
 import { wishlistNotFound } from "./shared.schemas.ts";
 import {
   discoverGamesOutput,
@@ -353,6 +353,12 @@ export function computeFavoriteTagWeights(
   }
   return weights;
 }
+
+// get_recommended_games stops before any pool when there's no taste to read.
+export const noGamesToRecommendFrom = () =>
+  notFound("This player's library has no games to base recommendations on.");
+export const noTasteToRecommendFrom = () =>
+  notFound("Not enough played games with resolvable tags to build recommendations.");
 
 // Ranks unowned catalog items by overlap with the player's weighted tag
 // preferences, discounted by how well-reviewed each candidate is — a locally

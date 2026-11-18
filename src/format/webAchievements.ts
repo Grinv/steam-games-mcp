@@ -7,7 +7,7 @@
 // rarity data (get_game_achievements merges it into the schema), and the
 // finitePercent coercion.
 import { z } from "zod";
-import { capList, isoDay, notFound } from "./shared.ts";
+import { capList, isoDay, notFound, notShown } from "./shared.ts";
 import { notFoundReason } from "./shared.schemas.ts";
 import {
   getGameAchievementsOutput,
@@ -43,15 +43,12 @@ export const ACHIEVEMENTS_MAX = 200;
 // with — that case must not start getting truncated here.
 export const GAME_SCHEMA_ACHIEVEMENTS_MAX = 150;
 
+// The list Steam returned (success:true); a missing one is worded below.
 export function summarizePlayerAchievements(
   r: PlayerAchievementsResponse,
   max = ACHIEVEMENTS_MAX,
-): z.infer<typeof notFoundReason> | z.infer<typeof playerAchievementsFound> {
-  const ps = r.playerstats;
-  if (!ps?.success) {
-    // Our own wording, never Steam's `error` (the client classifies that).
-    return notFound("No achievement stats");
-  }
+): z.infer<typeof playerAchievementsFound> {
+  const ps = r.playerstats ?? {};
   const all = ps.achievements ?? [];
   const unlocked = all.filter((a) => a.achieved === 1);
   // Some games (e.g. long-running live-service titles) ship 1000+ achievements
@@ -78,6 +75,29 @@ export function summarizePlayerAchievements(
       unlocked_at: a.achieved === 1 ? isoDay(a.unlocktime) : null,
     })),
   });
+}
+
+// Why a player's achievements didn't come back, worded once. Steam's answer
+// never says which case it is (AGENTS.md: "Tell the agent what Steam
+// returned"); the one fact the server has is the game's schema.
+export const NO_ACHIEVEMENT_SCHEMA =
+  "Steam has no achievement schema for this appid; get_game shows whether the appid exists.";
+
+export const playerAchievementsNotShown = () =>
+  notFound(
+    notShown(
+      "this player's achievements for this game",
+      "get_owned_games with check_appids shows whether they own the game.",
+    ),
+  );
+
+/** `schema` undefined: Steam has none for the appid. */
+export function playerAchievementsMissing(
+  schema: GameSchemaResponse | undefined,
+): z.infer<typeof notFoundReason> {
+  if (!schema) return notFound(NO_ACHIEVEMENT_SCHEMA);
+  const has = (schema.game?.availableGameStats?.achievements?.length ?? 0) > 0;
+  return has ? playerAchievementsNotShown() : notFound("This game has no achievements.");
 }
 
 // ---- Web API: global achievement percentages --------------------------------

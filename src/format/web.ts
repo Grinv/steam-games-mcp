@@ -197,6 +197,11 @@ export function summarizeOwnedGames(
 // summarizeOwnedGames — comparing needs the whole list, not just the top N by
 // playtime), each with its own playtime. Sorted by combined playtime desc.
 export const COMPARE_SHARED_MAX = 50;
+// Found:false reasons a client returns when it stops early (nothing left to
+// fetch or shape), worded here like every other.
+export const libraryNotShown = () => notFound(notShown("a game library for this SteamID64"));
+export const friendsNotShown = () => notFound(notShown("a friends list for this SteamID64"));
+
 export function summarizeComparePlayers(
   a: OwnedGamesResponse,
   b: OwnedGamesResponse,
