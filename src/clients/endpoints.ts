@@ -51,6 +51,10 @@ import type { FeaturedResponse, ReviewHistogramResponse, StoreApp } from "../for
 import { ApiError } from "../lib/errors.ts";
 
 const PUBLIC = "76561198028121353";
+// Stands for the maintainer's STEAM_ID, filled in by check:api from the
+// environment: a probe that needs a profile in a state the maintainer
+// controls, without putting that id in the repo.
+export const MAINTAINER = "$STEAM_ID";
 const ACCOUNT_0 = "76561197960265728";
 const json = (o: unknown) => JSON.stringify(o);
 const ctx = { language: "english", country_code: "US" };
@@ -172,32 +176,32 @@ export const Steam = {
   // A private list and a missing account answer alike, so one answer for both.
   // Never a plain 403 (only the bad-key page): 36 of 36 non-public profiles
   // sampled live 2026-11-17 answered 401.
-  GetFriendList: endpoint<FriendListResponse, "private_or_missing">({
+  GetFriendList: endpoint<FriendListResponse, "not_shown">({
     path: "ISteamUser/GetFriendList/v1/",
     host: "api",
     keyless: false,
     answers: {
-      unauthorized: "private_or_missing",
-      bad_request: "private_or_missing",
-      not_found: "private_or_missing",
+      unauthorized: "not_shown",
+      bad_request: "not_shown",
+      not_found: "not_shown",
     },
     probes: [
       badKeyProbe({ steamid: PUBLIC, relationship: "friend" }),
       {
         query: { steamid: "76561197960287930", relationship: "friend" },
-        expect: "private_or_missing",
+        expect: "not_shown",
         shows: "a friends-only list is a 401",
         situation: "friends-only",
       },
       {
         query: { steamid: "76561199999999999", relationship: "friend" },
-        expect: "private_or_missing",
+        expect: "not_shown",
         shows: "no such account is a 404",
         situation: "no-account",
       },
       {
         query: { steamid: ACCOUNT_0, relationship: "friend" },
-        expect: "private_or_missing",
+        expect: "not_shown",
         shows: "accountid 0 is a 400",
         situation: "accountid-0",
       },
@@ -206,18 +210,27 @@ export const Steam = {
   // Hidden game details are always a 403 "Profile is not public" — never a 401
   // or 404 (44 of 44 sampled live 2026-11-17), and so is an id with no account
   // (3 of 3); an unknown appid is a 400.
-  GetPlayerAchievements: endpoint<PlayerAchievementsResponse, "private" | "no_stats">({
+  GetPlayerAchievements: endpoint<PlayerAchievementsResponse, "not_shown" | "no_stats">({
     path: "ISteamUserStats/GetPlayerAchievements/v1/",
     host: "api",
     keyless: false,
-    answers: { forbidden: "private", bad_request: "no_stats" },
+    answers: { forbidden: "not_shown", bad_request: "no_stats" },
     probes: [
       badKeyProbe({ steamid: PUBLIC, appid: 620 }),
       {
         query: { steamid: "76561197960435530", appid: 620 },
-        expect: "private",
+        expect: "not_shown",
         shows: "private game details are a 403",
         situation: "private-game-details",
+      },
+      {
+        // The maintainer's own public profile (STEAM_ID, never committed),
+        // which doesn't own ELDEN RING: Steam's 403 says "Profile is not
+        // public" for a game the player simply doesn't have.
+        query: { steamid: MAINTAINER, appid: 1245620 },
+        expect: "not_shown",
+        shows: "a public profile without the game is the same 403",
+        situation: "game-not-owned",
       },
       {
         query: { steamid: PUBLIC, appid: 228980 },

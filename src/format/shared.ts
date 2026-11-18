@@ -12,16 +12,20 @@ export function notFound(reason: string): z.infer<typeof notFoundReason> {
   return notFoundReason.parse({ found: false, reason });
 }
 
-// Shared wording for "profile or game-details are private" — used by every
-// summarizer/client that hits this exact Steam condition (a private profile
-// answering with no game_count/games), so the agent sees one consistent
-// explanation regardless of which tool surfaced it. Steam answers a SteamID64
-// with no account behind it the same way (verified live 2026-11-05 on
-// 76561199999999999 and accountid 0), so both causes are named.
-export const PRIVATE_PROFILE_REASON =
-  "Profile or game-details are private, or there is no Steam account with that SteamID64. " +
-  "Check the id (resolve a vanity name with resolve_vanity_url), or ask the owner to set " +
-  "Steam → Privacy → Game details = Public.";
+// What Steam returned when it didn't show a player's data — never a guessed
+// cause. Steam answers alike for situations it doesn't tell apart (its 403
+// "Profile is not public" covers a private profile, private game details, a
+// game the player doesn't own and an account that doesn't exist — all
+// recorded in clients/endpoints.ts), so the agent gets the tools that
+// establish which, not one of them picked for it.
+export function notShown(what: string, ...howToTell: string[]): string {
+  return [
+    `Steam didn't return ${what}.`,
+    "To find out why: get_player_summary shows whether the account exists and whether its " +
+      "profile is public (game details and the friends list have their own privacy settings).",
+    ...howToTell,
+  ].join(" ");
+}
 
 // The two tools that read a profile regardless of its privacy setting
 // (get_player_summary, get_player_bans) can only fail one way, so they say which

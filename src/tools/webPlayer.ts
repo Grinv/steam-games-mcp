@@ -427,9 +427,10 @@ export function registerPlayerWebTools(
         "(names, descriptions, global rarity) independent of any player, use get_game_achievements " +
         "instead; for just the rarity without a key, use get_global_achievements. Requires " +
         "STEAM_API_KEY and a public profile with game-details visibility — otherwise it returns " +
-        "found:false — which is also what a SteamID64 with no account behind it, an appid with no " +
-        "achievements, or no such appid at all returns; these are not always told apart, so " +
-        "confirm the appid with get_game. ",
+        "found:false — which is also what a game the player doesn't own, a SteamID64 with no " +
+        "account behind it, an appid with no achievements, or no such appid at all returns. " +
+        "Steam doesn't tell most of these apart, so `reason` says what it didn't return and which " +
+        "tools establish why (get_player_summary, get_owned_games' check_appids, get_game). ",
       inputSchema: z.strictObject({
         steamid,
         appid,

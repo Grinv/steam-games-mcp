@@ -1,3 +1,4 @@
+import { assertNotShown } from "./helpers.ts";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -177,7 +178,7 @@ describe("summarizeWishlistDetailed", () => {
     };
     assert.equal(s.found, false);
     assert.equal(s.total, 0);
-    assert.match(s.reason, /private/i);
+    assertNotShown(s.reason);
   });
 
   test("nothing matching a non-empty wishlist is found:true with matched 0, not 'private'", () => {

@@ -28,6 +28,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Stop swallowing server bugs as "upstream unavailable" in the Steam level, followed-games count, tag dictionary and vanity `STEAM_ID` lookups.
 - Report an unreadable achievement-schema answer from Steam as a retryable error, not as "this game has no achievements".
 - Report an empty or non-object answer from Steam (e.g. `null`) as a retryable error, or a noted gap when it was an optional part, instead of an internal error.
+- Stop telling the agent a profile is private when Steam only declined to show something: `get_player_achievements` said so for a public player who simply doesn't own the game. A `found:false` reason now says what Steam didn't return and which tools establish why (`get_player_summary`, `get_owned_games`' `check_appids`), instead of naming a cause Steam doesn't give.
 - Stop telling the agent its API key is probably invalid on a 401/403: a rejected key is reported as such, so those errors now say the key isn't the cause.
 - Report a game with no reviews as an unknown review % (`review_percent: null`) instead of 0%.
 - Keep `get_game` and `get_prices` answering, with a noted gap, when Steam's price-correction payload is unusable, instead of failing the call.

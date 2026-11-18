@@ -26,7 +26,7 @@ import { HttpClient } from "../src/lib/http.ts";
 import { call, type Endpoint, type Probe } from "../src/lib/endpoint.ts";
 import { ApiError } from "../src/lib/errors.ts";
 import { createLogger } from "../src/lib/logger.ts";
-import { Steam, classifySteamApiError } from "../src/clients/endpoints.ts";
+import { MAINTAINER, Steam, classifySteamApiError } from "../src/clients/endpoints.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const STORE = process.env.STEAM_STORE_BASE_URL ?? "https://store.steampowered.com";
@@ -602,8 +602,11 @@ async function outcomeOf(ep: Endpoint<unknown, string>, probe: Probe): Promise<s
   // A keyless endpoint is probed without the key: "works without one" is
   // the fact it states, and the situation a keyless server is in.
   const key = probe.badKey ? BAD_KEY : ep.host === "api" && !ep.keyless ? KEY : undefined;
+  const query = Object.fromEntries(
+    Object.entries(probe.query).map(([k, v]) => [k, v === MAINTAINER ? process.env.STEAM_ID : v]),
+  );
   try {
-    const res = await call(hosts[ep.host], ep, probe.query, {}, key ? { key } : {});
+    const res = await call(hosts[ep.host], ep, query, {}, key ? { key } : {});
     return ep.answers ? ((res as { answer?: string }).answer ?? "data") : "data";
   } catch (err) {
     if (!(err instanceof ApiError)) throw err;
@@ -616,7 +619,13 @@ for (const [name, ep] of Object.entries(Steam) as [string, Endpoint<unknown, str
     checks.push({
       name: `probe ${name}: ${probe.shows}`,
       // A bad-key probe brings its own key; a keyed fact needs a real one.
-      skip: !ep.keyless && !probe.badKey && !KEY ? "needs STEAM_API_KEY" : undefined,
+      skip:
+        !ep.keyless && !probe.badKey && !KEY
+          ? "needs STEAM_API_KEY"
+          : Object.values(probe.query).includes(MAINTAINER) &&
+              !/^\d{17}$/.test(process.env.STEAM_ID ?? "")
+            ? "needs STEAM_ID: a public profile in the state the probe names"
+            : undefined,
       run: async () => {
         lastResponse = undefined;
         const got = await outcomeOf(ep, probe);

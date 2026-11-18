@@ -12,6 +12,7 @@ import {
   recorded,
   assertToolError,
   textOf,
+  assertNotShown,
 } from "./helpers.ts";
 import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.ts";
 import { FRIENDS_CHECKED_MAX, FRIENDS_MAX } from "../format/web.ts";
@@ -92,7 +93,7 @@ describe("get_owned_games", () => {
     };
     assert.equal(s.found, false);
     assert.equal(s.game_count, null);
-    assert.match(s.reason, /private/i);
+    assertNotShown(s.reason);
   });
 
   test("get_owned_games: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
@@ -106,7 +107,7 @@ describe("get_owned_games", () => {
     assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /private/i);
+    assertNotShown(s.reason);
   });
 
   // Regression: a steamid pasted with surrounding whitespace (e.g. copied from a
@@ -473,7 +474,7 @@ describe("get_recommended_games", () => {
     });
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /private/i);
+    assertNotShown(s.reason);
   });
 
   test("get_recommended_games: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
@@ -487,7 +488,7 @@ describe("get_recommended_games", () => {
     assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /private/i);
+    assertNotShown(s.reason);
   });
 
   test("get_recommended_games reports found:false for a PUBLIC profile with zero games (distinct from private)", async (t) => {
@@ -573,7 +574,25 @@ describe("get_player_achievements", () => {
     assert.match(u, /l=russian/);
   });
 
-  test("get_player_achievements: private profile (403) → clear private reason", async (t) => {
+  test("get_player_achievements: a game the player doesn't own is Steam's same 403 — no cause is picked", async (t) => {
+    // Recorded on a public profile without the game: Steam's body says
+    // "Profile is not public", which is exactly the guess not to repeat.
+    const { client } = await setupServer(t, ENV, (url) =>
+      url.includes("GetPlayerAchievements")
+        ? recorded("GetPlayerAchievements/game-not-owned")
+        : jsonResponse({}),
+    );
+    const res = await client.callTool({
+      name: "get_player_achievements",
+      arguments: { steamid: "76561197960287930", appid: 1245620 },
+    });
+    const s = res.structuredContent as { found: boolean; reason: string };
+    assert.equal(s.found, false);
+    assertNotShown(s.reason);
+    assert.match(s.reason, /check_appids shows whether they own the game/);
+  });
+
+  test("get_player_achievements: private game details (403) → not shown, no cause picked", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
       url.includes("GetPlayerAchievements")
         ? recorded("GetPlayerAchievements/private-game-details")
@@ -585,7 +604,7 @@ describe("get_player_achievements", () => {
     });
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /private/i);
+    assertNotShown(s.reason);
   });
 
   // A bad/revoked key gets Steam's "verify your key=" page on every key-gated
@@ -667,7 +686,7 @@ describe("get_player_achievements", () => {
     });
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /private/i);
+    assertNotShown(s.reason);
     assert.ok(!mock.calls.some((c) => c.url.includes("GetSchemaForGame")));
   });
 
@@ -701,7 +720,7 @@ describe("get_player_achievements", () => {
     });
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /hidden|private/i);
+    assertNotShown(s.reason);
   });
 
   // A genuine upstream failure (not a private/no-stats disambiguation signal)
@@ -770,7 +789,7 @@ describe("get_player_achievements", () => {
     assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /no achievements or stats/);
+    assert.match(s.reason, /no achievement schema/);
     assert.doesNotMatch(s.reason, /Steam's own words/);
   });
 
@@ -807,7 +826,7 @@ describe("get_player_achievements", () => {
     assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /no achievements or stats/);
+    assert.match(s.reason, /no achievement schema/);
   });
 });
 
@@ -1322,7 +1341,7 @@ describe("compare_players", () => {
     });
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /private/i);
+    assertNotShown(s.reason);
   });
 
   test("compare_players: a malformed/out-of-range other_steamid reports found:false, not a raw HTML error", async (t) => {
@@ -1338,7 +1357,7 @@ describe("compare_players", () => {
     assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /private/i);
+    assertNotShown(s.reason);
   });
 
   test("compare_players succeeds (found:true, 0 shared) when a profile is public but genuinely empty", async (t) => {

@@ -5,7 +5,7 @@
 // (Storefront tools) and steamPlayer.test.ts (key-gated player tools).
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { setupServer, jsonResponse, recorded, assertToolError } from "./helpers.ts";
+import { setupServer, jsonResponse, recorded, assertToolError, assertNotShown } from "./helpers.ts";
 import {
   ENV,
   FOLLOWED,
@@ -366,7 +366,7 @@ describe("get_wishlist", () => {
     assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /private/i);
+    assertNotShown(s.reason);
   });
 
   test("get_wishlist on_sale_only keeps only discounted items, ranked by discount", async (t) => {
@@ -493,7 +493,7 @@ describe("get_wishlist", () => {
     });
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /private/);
+    assertNotShown(s.reason);
   });
 
   test("get_wishlist: a malformed/out-of-range steamid reports found:false, not a raw HTML error", async (t) => {
@@ -507,7 +507,7 @@ describe("get_wishlist", () => {
     assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /private/i);
+    assertNotShown(s.reason);
   });
 
   test("get_wishlist: tags filter errors clearly when GetTagList is unavailable (no silent empty result)", async (t) => {

@@ -14,7 +14,7 @@ import type { ApiError } from "../lib/errors.ts";
 import { problemDetail } from "../lib/result.ts";
 import {
   NO_SUCH_ACCOUNT_REASON,
-  PRIVATE_PROFILE_REASON,
+  notShown,
   capList,
   hours,
   isoDay,
@@ -120,7 +120,7 @@ export interface OwnedGamesResponse {
 // Strictly GetOwnedGames: its sibling GetRecentlyPlayedGames answers with its
 // own `total_count` field instead, which is exactly the mix-up that once
 // reported a public profile with no recent playtime as private.
-export function isPrivateOwnedGames(r: OwnedGamesResponse): boolean {
+export function ownedGamesNotShown(r: OwnedGamesResponse): boolean {
   return r.response?.game_count === undefined && r.response?.games === undefined;
 }
 
@@ -144,13 +144,16 @@ export function summarizeOwnedGames(
   r: OwnedGamesResponse,
   opts: { max?: number; checkAppids?: number[]; sort?: OwnedGamesSort } = {},
 ): z.infer<typeof getOwnedGamesOutput> {
-  if (isPrivateOwnedGames(r)) {
+  if (ownedGamesNotShown(r)) {
     // No `owns` here even if checkAppids was given: a private profile means
     // ownership is genuinely unknown, not false — reporting owned:false would
     // misrepresent "can't check" as "doesn't own it".
     return getOwnedGamesOutput.parse({
       found: false,
-      reason: PRIVATE_PROFILE_REASON,
+      reason: notShown(
+        "a game library for this SteamID64",
+        "get_owned_games' check_appids can't help here: it reads the same library.",
+      ),
       game_count: null,
       games: [],
     });
@@ -190,10 +193,6 @@ export function summarizeOwnedGames(
   });
 }
 
-const COMPARE_PRIVATE_REASON =
-  "One or both profiles/game-details are private, or a SteamID64 has no Steam account behind " +
-  "it. Check the ids, or ask the owner(s) to set Steam → Privacy → Game details = Public.";
-
 // Shared games between two players' FULL libraries (not capped like
 // summarizeOwnedGames — comparing needs the whole list, not just the top N by
 // playtime), each with its own playtime. Sorted by combined playtime desc.
@@ -203,8 +202,14 @@ export function summarizeComparePlayers(
   b: OwnedGamesResponse,
   max = COMPARE_SHARED_MAX,
 ): z.infer<typeof notFoundReason> | z.infer<typeof comparePlayersFound> {
-  if (isPrivateOwnedGames(a) || isPrivateOwnedGames(b)) {
-    return notFound(COMPARE_PRIVATE_REASON);
+  if (ownedGamesNotShown(a) || ownedGamesNotShown(b)) {
+    const missing =
+      [a, b].filter(ownedGamesNotShown).length === 2
+        ? "either"
+        : ownedGamesNotShown(a)
+          ? "the first"
+          : "the second";
+    return notFound(notShown(`a game library for ${missing} SteamID64`));
   }
   const gamesA = new Map((a.response?.games ?? []).map((g) => [g.appid, g]));
   const gamesB = new Map((b.response?.games ?? []).map((g) => [g.appid, g]));
@@ -244,7 +249,7 @@ export interface RecentlyPlayedResponse {
   response?: { total_count?: number; games?: OwnedGame[] };
 }
 
-function isPrivateRecentlyPlayed(r: RecentlyPlayedResponse): boolean {
+function recentlyPlayedNotShown(r: RecentlyPlayedResponse): boolean {
   return r.response?.total_count === undefined && r.response?.games === undefined;
 }
 
@@ -256,10 +261,12 @@ export const RECENTLY_PLAYED_MAX = 50;
 export function summarizeRecentlyPlayed(
   r: RecentlyPlayedResponse,
 ): z.infer<typeof getRecentlyPlayedOutput> {
-  if (isPrivateRecentlyPlayed(r)) {
+  if (recentlyPlayedNotShown(r)) {
     return getRecentlyPlayedOutput.parse({
       found: false,
-      reason: PRIVATE_PROFILE_REASON,
+      // A public profile with a large library got this too (sampled live
+      // 2026-11-18), for a reason Steam doesn't give: no cause is offered.
+      reason: notShown("recently played games for this SteamID64"),
       total: 0,
       games: [],
     });
@@ -409,7 +416,7 @@ export function summarizeWishlist(
   if (items.length === 0) {
     return wishlistNotFound.parse({
       found: false,
-      reason: "Empty wishlist, or the profile/wishlist is private.",
+      reason: notShown("any wishlist items for this SteamID64"),
       total: 0,
       items: [],
     });
@@ -492,7 +499,7 @@ export function summarizeFollowedGames(
   if (appids.length === 0) {
     return getFollowedGamesOutput.parse({
       found: false,
-      reason: "No followed games, or the profile is private.",
+      reason: notShown("any followed games for this SteamID64"),
       total: 0,
       games: [],
     });

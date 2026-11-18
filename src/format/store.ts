@@ -13,7 +13,7 @@
 
 import { z } from "zod";
 import { ApiError } from "../lib/errors.ts";
-import { capList, isoDay, storeUrl } from "./shared.ts";
+import { capList, isoDay, notShown, storeUrl } from "./shared.ts";
 import { wishlistNotFound } from "./shared.schemas.ts";
 import {
   discoverGamesOutput,
@@ -282,7 +282,7 @@ export function summarizeWishlistDetailed(
   if (ctx.total === 0) {
     return wishlistNotFound.parse({
       found: false,
-      reason: "Empty wishlist, or the profile/wishlist is private.",
+      reason: notShown("any wishlist items for this SteamID64"),
       total: 0,
       items: [],
     });

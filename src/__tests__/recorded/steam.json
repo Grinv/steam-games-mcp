@@ -69,6 +69,11 @@
     "contentType": "text/html; charset=UTF-8",
     "body": "<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>Access is denied. Retrying will not help. Please verify your <pre>key=</pre> parameter.</body></html>"
   },
+  "GetPlayerAchievements/game-not-owned": {
+    "status": 403,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{\"playerstats\":{\"error\":\"Profile is not public\",\"success\":false}}"
+  },
   "GetPlayerAchievements/private-game-details": {
     "status": 403,
     "contentType": "application/json; charset=UTF-8",

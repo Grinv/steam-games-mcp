@@ -19,11 +19,11 @@ import {
 import { Steam, classifySteamApiError } from "./endpoints.ts";
 import { noteDegraded, optional, optionalParts, orFailure } from "../lib/call.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
-import { notFound, PRIVATE_PROFILE_REASON, STEAMID64_RE } from "../format/shared.ts";
+import { notFound, notShown, STEAMID64_RE } from "../format/shared.ts";
 import {
   FRIENDS_CHECKED_MAX,
   friendIdsToEnrich,
-  isPrivateOwnedGames,
+  ownedGamesNotShown,
   summarizeComparePlayers,
   summarizeCurrentPlayers,
   summarizeFollowedGames,
@@ -62,16 +62,10 @@ import type { Config } from "../config.ts";
 // this server otherwise talks to, and there's nothing to point elsewhere.
 const STEAM_COMMUNITY_BASE_URL = "https://steamcommunity.com";
 
-// GetFriendList answers the same way for a private list and for a SteamID64
-// with no account behind it at all (Steam.GetFriendList's answers in
-// clients/endpoints.ts fold them into one deliberately). Naming only the privacy case told the caller to
-// go change a setting on an account that doesn't exist — confirmed live on
-// 76561197960265728, which get_player_summary correctly reports as no such
-// account. Both causes, like every sibling that can fail two ways.
-const PRIVATE_FRIENDS_REASON =
-  "Friends list is private, or there is no Steam account with that SteamID64. Check the id " +
-  "(resolve a vanity name with resolve_vanity_url), or ask the owner to set Steam → Privacy → " +
-  "Friends List = Public.";
+const ACHIEVEMENTS_NOT_SHOWN = notShown(
+  "this player's achievements for this game",
+  "get_owned_games with check_appids shows whether they own the game.",
+);
 
 const hasAchievements = (schema: GameSchemaResponse) =>
   (schema.game?.availableGameStats?.achievements?.length ?? 0) > 0;
@@ -297,8 +291,8 @@ export class SteamWebClient {
       // get excluded as "already owned" and could be recommended back.
       include_played_free_games: true,
     });
-    if (isPrivateOwnedGames(res)) {
-      return notFound(PRIVATE_PROFILE_REASON);
+    if (ownedGamesNotShown(res)) {
+      return notFound(notShown("a game library for this SteamID64"));
     }
     const games = (res.response?.games ?? [])
       .filter((g): g is { appid: number; playtime_forever?: number } => typeof g.appid === "number")
@@ -326,41 +320,33 @@ export class SteamWebClient {
   ): Promise<Record<string, unknown>> {
     const l = language ?? this.#l;
     const res = await this.#call(Steam.GetPlayerAchievements, { steamid, appid, l });
-    if (res.answer) {
-      return res.answer === "private"
-        ? notFound(PRIVATE_PROFILE_REASON)
-        : this.#explainNoPlayerAchievements(appid, l);
-    }
+    if (res.answer === "not_shown") return notFound(ACHIEVEMENTS_NOT_SHOWN);
+    if (res.answer) return this.#explainNoPlayerAchievements(appid, l);
     if (res.data.playerstats?.success) return summarizePlayerAchievements(res.data);
-    // 200 but success:false — disambiguate private vs no-achievements.
+    // 200 but success:false: the schema settles what it can.
     return this.#explainNoPlayerAchievements(appid, l, res.data.playerstats?.error);
   }
 
-  // On failure, check the game's schema: if it HAS achievements the player data
-  // is hidden (private/not owned); if it has none, the game simply has no
-  // achievements. Only runs on the failure path, so the happy path stays 1 call.
+  // No achievements came back. Whether the game has any is a fact the
+  // (cached) schema states; why a player's aren't shown is not Steam's to
+  // say, so that case gets the tools that establish it.
   async #explainNoPlayerAchievements(
     appid: number,
     l: string,
     apiError?: string,
   ): Promise<Record<string, unknown>> {
-    if (apiError && /not public|private/i.test(apiError)) {
-      return notFound(PRIVATE_PROFILE_REASON);
-    }
+    if (apiError && /not public|private/i.test(apiError)) return notFound(ACHIEVEMENTS_NOT_SHOWN);
     // The same cached request get_game_achievements makes. Only Steam's
     // answer reads as a verdict; a failure (or a bug, a cancel) propagates.
     const schema = await this.#call(Steam.GetSchemaForGame, { appid, l }, { cache: true });
     if (schema.answer) {
       // Steam's own error text only classifies (above), never reaches the agent.
       return notFound(
-        "No achievement data for this appid: the game has no achievements or stats, or the " +
-          "appid doesn't exist.",
+        "Steam has no achievement schema for this appid; get_game shows whether the appid exists.",
       );
     }
     return notFound(
-      hasAchievements(schema.data)
-        ? "This game has achievements, but the player's data is hidden (private game-details, or they don't own it)."
-        : "This game has no achievements.",
+      hasAchievements(schema.data) ? ACHIEVEMENTS_NOT_SHOWN : "This game has no achievements.",
     );
   }
 
@@ -402,7 +388,7 @@ export class SteamWebClient {
   // via GetPlayerSummaries.
   async getFriendList(steamid: string): Promise<Record<string, unknown>> {
     const res = await this.#friendsRaw(steamid);
-    if (res === null) return notFound(PRIVATE_FRIENDS_REASON);
+    if (res === null) return notFound(notShown("a friends list for this SteamID64"));
     return summarizeFriendList(res, await this.#playerSummaries(friendIdsToEnrich(res)));
   }
 
@@ -423,7 +409,7 @@ export class SteamWebClient {
     // report every owner twice in each of two identical matches.
     const appids = [...new Set(requested)];
     const res = await this.#friendsRaw(steamid);
-    if (res === null) return notFound(PRIVATE_FRIENDS_REASON);
+    if (res === null) return notFound(notShown("a friends list for this SteamID64"));
     const allIds = friendIdsOf(res);
     if (allIds.length === 0) return summarizeFriendsWhoOwn(appids, [], [], {});
     // Two bounds, both measured live on a 634-friend account:
@@ -486,13 +472,13 @@ export class SteamWebClient {
     // whole library (~40 KB for 1009 games), per friend checked. A public
     // profile owning none of them still answers {game_count: 0}, while a
     // private one answers {} as before (both verified live), so
-    // isPrivateOwnedGames tells them apart unchanged.
+    // ownedGamesNotShown tells them apart unchanged.
     const res = await this.#ownedGamesRaw(steamid, {
       include_appinfo: false,
       include_played_free_games: true,
       ...Object.fromEntries(appids.map((appid, i) => [`appids_filter[${i}]`, appid])),
     });
-    if (isPrivateOwnedGames(res)) return null;
+    if (ownedGamesNotShown(res)) return null;
     const wanted = new Set(appids);
     const playtimes = new Map<number, number>();
     for (const g of res.response?.games ?? []) {

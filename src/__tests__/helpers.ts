@@ -125,3 +125,11 @@ export function assertToolError(res: unknown, re: RegExp): void {
   assert.equal((res as { isError?: boolean }).isError, true);
   assert.match(textOf(res), re);
 }
+
+/** A "Steam didn't show it" reason: says what Steam didn't return and which
+ *  tools establish why — never a cause picked for the agent ("is private"),
+ *  since Steam answers alike for situations it doesn't tell apart. */
+export function assertNotShown(reason: string): void {
+  assert.match(reason, /^Steam didn't return .+ To find out why: get_player_summary/);
+  assert.doesNotMatch(reason, /\b(is|are) private\b/i);
+}

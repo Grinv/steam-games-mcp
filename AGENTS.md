@@ -195,6 +195,14 @@ npm run inspector      # run under the MCP Inspector
   query is the URL); never read `ApiError.message` for a decision (it is log
   text); never let a rendered string stand for identity (dedupe, count or
   key by the data, not its wording).
+- **Tell the agent what Steam returned, not a cause it didn't give.** Steam
+  answers alike for situations it doesn't tell apart: GetPlayerAchievements'
+  403 "Profile is not public" comes for a private profile, private game
+  details, an account that doesn't exist and a game a public player doesn't
+  own. A `found:false` reason states what wasn't returned and which tool
+  establishes why (`notShown()` in `format/shared.ts`); a cause is stated
+  only when the server established it (the schema says a game has no
+  achievements; GetPlayerSummaries' empty list says no account exists).
 - **A tool's answer is a required core plus optional parts** (a price
   correction, rarity, a Steam level, names, tags). A required part is a plain
   `await`: its failure is the tool's error. An optional one goes through
