@@ -45,7 +45,8 @@ export function registerStorefrontTools(
         "get_items for names and prices), PC requirements and a " +
         "small highlighted-achievements sample (achievements_highlighted). " +
         "Identify the game by appid (from search_games) OR by name — a title is resolved to the " +
-        "closest store match. Both forms error rather than returning an empty result when nothing " +
+        "store item with exactly that title (ignoring case and punctuation), else to Steam's " +
+        "closest search match, so check the returned name. Both forms error rather than returning an empty result when nothing " +
         "matches, and an appid can fail for different reasons: it may not exist or have been " +
         "removed from the store, or it may not be sold in the given `country`. The error names the " +
         "country and these causes — retry with another `country` before concluding the game is " +
@@ -60,7 +61,8 @@ export function registerStorefrontTools(
             .trim()
             .nonempty()
             .describe(
-              "Game title to look up instead of an appid — resolved to the closest store match. " +
+              "Game title to look up instead of an appid — the exact title if Steam has it, else its " +
+                "closest match. " +
                 "Provide appid OR name; appid wins if both are given.",
             )
             .optional(),

@@ -241,7 +241,7 @@ describe("get_game", () => {
     assert.equal(s.appid, 620); // the same search search_games uses, top match
     assert.equal(s.price.final, "$1.99");
     const lookup = searchInput(mock);
-    assert.equal(lookup.max_results, 1);
+    assert.equal(lookup.max_results, 10);
     // Every item type: a DLC looked up by its own name must resolve to the DLC.
     assert.equal(lookup.filters, undefined);
   });
@@ -266,6 +266,24 @@ describe("get_game", () => {
     // — the SDK wraps the message in its own "Input validation error: ..."
     // prefix, so this intentionally matches loosely rather than the exact string.
     assertToolError(res, /appid or name/i);
+  });
+
+  // Steam ranks by popularity: "portal" lists Portal 2 first, Portal second
+  // (seen live). The exact title wins; with none, the top match does.
+  test("get_game by name takes the exact title over Steam's top match", async (t) => {
+    const suggest = (items: { appid: number; name: string }[]) =>
+      jsonResponse({ response: { store_items: items } });
+    const { client, mock } = await setupServer(t, ENV, (url) =>
+      url.includes("SearchSuggestions")
+        ? suggest([
+            { appid: 620, name: "Portal 2" },
+            { appid: 400, name: "Portal" },
+          ])
+        : router(url),
+    );
+    await client.callTool({ name: "get_game", arguments: { name: "PORTAL" } });
+    const asked = mock.calls.find((c) => c.url.includes("appdetails"))!.url;
+    assert.match(asked, /appids=400\b/);
   });
 
   test("get_game reports no match when the title resolves to nothing", async (t) => {

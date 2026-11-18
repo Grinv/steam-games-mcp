@@ -108,6 +108,15 @@ function reviewScoreFloor(threshold: number): number {
   return 1;
 }
 
+// A title as matched by name: case, punctuation and marks (®, ™) don't count,
+// so "half life" names Half-Life and "civilization vi" Civilization® VI.
+function titleKey(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
 // Tag names → each name's tagids, case-insensitively. A name isn't unique: in
 // 10 of Steam's 31 languages two tags share one (French "combat" is 1743 and
 // 3993, Dutch "snooker" 4852 and 363767; every dictionary checked live
@@ -353,21 +362,26 @@ export class StoreServiceClient {
     return summarizeSearchSuggestions(res);
   }
 
-  // get_game's name → appid: the same search's top match, so get_game({name})
-  // and search_games agree. Every item type, unlike search_games' games-only
-  // default — a DLC looked up by its own name must resolve to the DLC
-  // (verified live: games-only turned "shadow of the erdtree" into Shadow of the
-  // Tomb Raider). Returns null when nothing matches.
+  // get_game's name → appid: the item named exactly that (ignoring case and
+  // punctuation), else the search's top match. Steam ranks by popularity, not
+  // by name: "portal" puts Portal 2 above Portal, "doom" DOOM: The Dark Ages
+  // above DOOM (seen live 2026-11-19), so the top hit alone answered for the
+  // wrong game. Every item type, unlike search_games' games-only default — a
+  // DLC looked up by its own name must resolve to the DLC (verified live:
+  // games-only turned "shadow of the erdtree" into Shadow of the Tomb Raider).
+  // Returns null when nothing matches.
   async resolveAppId(term: string, country?: string, language?: string): Promise<number | null> {
     const res = await this.#call(Steam.SearchSuggestions, {
       input_json: JSON.stringify({
         search_term: term,
-        max_results: 1,
+        max_results: 10,
         context: { language: language ?? this.#l, country_code: country ?? this.#country },
         data_request: {},
       }),
     });
-    return res.response?.store_items?.find((it) => typeof it.appid === "number")?.appid ?? null;
+    const items = (res.response?.store_items ?? []).filter((it) => typeof it.appid === "number");
+    const wanted = titleKey(term);
+    return (items.find((it) => titleKey(it.name ?? "") === wanted) ?? items[0])?.appid ?? null;
   }
 
   // Batch store card (price+discount, review %, compat, popular tags, release) for
