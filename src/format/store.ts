@@ -33,9 +33,10 @@ import {
   ownPurchaseOption,
   nativePlatforms,
   priceFields,
-  resolveTags,
   shownHere,
   storeCard,
+  tagNames,
+  topTagIds,
   storeItemFilter,
   type StoreFilters,
   type StoreItem,
@@ -367,19 +368,19 @@ export function summarizeWishlistDetailed(
 // Turns a sample of the player's owned games (already fetched as store items,
 // so their tags can be resolved) into weighted tag preferences: each game's
 // tags gain its own playtime (hours) as weight, so heavily-played games
-// dominate. Zero/unknown playtime contributes nothing. Used by
-// clients/storeService.ts#getRecommendedGames.
+// dominate. Zero/unknown playtime contributes nothing. Keyed by tagid (see
+// topTagIds). Used by clients/storeService.ts#getRecommendedGames.
 export function computeFavoriteTagWeights(
   ownedItems: StoreItem[],
   playtimeMinutesByAppid: Map<number, number>,
   tagMap: TagMap,
-): Map<string, number> {
-  const weights = new Map<string, number>();
+): Map<number, number> {
+  const weights = new Map<number, number>();
   for (const it of ownedItems) {
     if (typeof it.appid !== "number") continue;
     const hoursPlayed = (playtimeMinutesByAppid.get(it.appid) ?? 0) / 60;
     if (hoursPlayed <= 0) continue;
-    for (const tag of resolveTags(it.tags, tagMap)) {
+    for (const tag of topTagIds(it.tags, tagMap)) {
       weights.set(tag, (weights.get(tag) ?? 0) + hoursPlayed);
     }
   }
@@ -399,9 +400,9 @@ export const noTasteToRecommendFrom = () =>
 // to my library" ranking, and doesn't rank by review quality either.
 export function summarizeRecommendations(
   candidates: StoreItem[],
-  tagWeights: Map<string, number>,
+  tagWeights: Map<number, number>,
   ownedAppids: Set<number>,
-  tagMap: TagMap | undefined,
+  tagMap: TagMap,
   max: number,
   basedOnTags: string[],
   minDiscount?: number,
@@ -421,16 +422,19 @@ export function summarizeRecommendations(
         (minDiscount === undefined || (ownPurchaseOption(it)?.discount_pct ?? 0) >= minDiscount),
     )
     .map((it) => {
-      const tags = resolveTags(it.tags, tagMap);
-      const matchedTags = tags.filter((t) => tagWeights.has(t));
-      const tagScore = matchedTags.reduce((sum, t) => sum + (tagWeights.get(t) ?? 0), 0);
+      const matched = topTagIds(it.tags, tagMap).filter((id) => tagWeights.has(id));
+      const tagScore = matched.reduce((sum, id) => sum + tagWeights.get(id)!, 0);
       // Discount by review quality so a tag match on a poorly-received game
       // doesn't outrank a better one. A game with no reviews has no reception
       // to weigh, so it isn't recommended (score 0, dropped below): in the
       // live pool those are mostly coming-soon games (7 of 10 sampled), which
       // any made-up multiplier would rank above every reviewed match.
       const reviewMultiplier = (reviewPercent(it) ?? 0) / 100;
-      return { it, matchedTags, matchScore: tagScore * reviewMultiplier };
+      return {
+        it,
+        matchedTags: tagNames(matched, tagMap),
+        matchScore: tagScore * reviewMultiplier,
+      };
     })
     .filter((x) => x.matchScore > 0)
     .sort((a, b) => b.matchScore - a.matchScore)

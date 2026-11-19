@@ -36,6 +36,7 @@ import {
 import type { ChartName } from "../format/charts.ts";
 import {
   summarizeTagList,
+  tagNames,
   type CompatFilters,
   type TagMap,
   TAG_LIMIT,
@@ -53,7 +54,7 @@ type Call = <T, A extends string>(
 // native platforms + compat, popular tags). Not include_basic_info: no card
 // field reads it (name and is_free come with every item), and it was ~14% of
 // the payload — verified live that items are otherwise identical without it. TAG_LIMIT tags: every card
-// and the recommendation scoring read only that many (resolveTags), Steam
+// and the recommendation scoring read only that many (storeCard.ts), Steam
 // returns the most-weighted ones first (verified live), and tag FILTERING runs
 // server-side, so a longer list was only ever discarded.
 // Exported for scripts/check-api.ts, which checks the fields cards read off it.
@@ -644,21 +645,20 @@ export class StoreServiceClient {
     if (tagWeights.size === 0) {
       return noTasteToRecommendFrom();
     }
-    const basedOnTags = [...tagWeights.entries()]
+    const favoriteIds = [...tagWeights.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, BASED_ON_TAGS_LIMIT)
-      .map(([tag]) => tag);
+      .map(([id]) => id);
 
     // The pool waits for the favorite tags, so its 300 slots go to games that
     // carry at least one of them: one tagids_must_match group ORs its ids
     // (verified live — a niche visual-novel/puzzle taste went from 84 to 163
     // relevant candidates of 300). Plus, as #queryCatalog: games only, the
     // price floor and exclude_tags, all server-side; summarizeRecommendations
-    // still scores and re-checks every candidate. basedOnTags come from the
-    // dictionary itself, so each has an id.
+    // still scores and re-checks every candidate.
     const filters: Record<string, unknown> = {
       type_filters: { include_games: true },
-      tagids_must_match: [{ tagids: tagIdsFor(basedOnTags, tagMap, l).flat() }],
+      tagids_must_match: [{ tagids: favoriteIds }],
     };
     if (typeof opts.minDiscount === "number")
       filters.price_filters = queryDiscountFilter(opts.minDiscount);
@@ -680,7 +680,7 @@ export class StoreServiceClient {
       ownedAppids,
       tagMap,
       count,
-      basedOnTags,
+      tagNames(favoriteIds, tagMap),
       opts.minDiscount,
     );
   }

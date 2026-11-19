@@ -314,8 +314,8 @@ test("computeFavoriteTagWeights: weights tags by hours played, ignores zero/no p
     [30, 0],
   ]);
   const weights = computeFavoriteTagWeights(items, playtime, RECO_TAG_MAP);
-  assert.equal(weights.get("Roguelike"), 3); // 2h (appid 10) + 1h (appid 20)
-  assert.equal(weights.get("Horror"), 1); // only appid 20's 1h; appid 30 ignored
+  assert.equal(weights.get(1), 3); // 2h (appid 10) + 1h (appid 20)
+  assert.equal(weights.get(2), 1); // only appid 20's 1h; appid 30 ignored
 });
 
 describe("summarizeRecommendations", () => {
@@ -338,7 +338,7 @@ describe("summarizeRecommendations", () => {
       },
       { appid: 400, visible: true, name: "No overlap", tags: [{ tagid: 2, weight: 900 }] },
     ];
-    const tagWeights = new Map([["Roguelike", 10]]);
+    const tagWeights = new Map([[1, 10]]);
     const s = summarizeRecommendations(
       candidates,
       tagWeights,
@@ -384,7 +384,7 @@ describe("summarizeRecommendations", () => {
         reviews: { summary_filtered: { review_count: 100, percent_positive: 90 } },
       },
     ];
-    const tagWeights = new Map([["Roguelike", 10]]);
+    const tagWeights = new Map([[1, 10]]);
     const s = summarizeRecommendations(
       candidates,
       tagWeights,

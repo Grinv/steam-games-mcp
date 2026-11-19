@@ -32,6 +32,7 @@ import {
   purchaseOptionsRule,
   summarizePurchasePrices,
   summarizeItems,
+  computeFavoriteTagWeights,
   summarizeRecommendations,
   summarizeSearchSuggestions,
 } from "../format/store.ts";
@@ -851,7 +852,7 @@ describe("a game with no reviews", () => {
     };
     const s = summarizeRecommendations(
       [unreviewed, reviewed],
-      new Map([["Puzzle", 5]]),
+      new Map([[1, 5]]),
       new Set(),
       tagMap,
       10,
@@ -902,16 +903,33 @@ describe("GetItems' list must account for every id asked", () => {
 });
 
 // Two Steam tags share a name in some languages (French "combat": 1743, 3993).
-test("a tag name two of a game's tags share is listed once", () => {
-  assert.deepEqual(
-    resolveTags(
-      [
-        { tagid: 1743, weight: 900 },
-        { tagid: 3993, weight: 800 },
-        { tagid: 19, weight: 700 },
-      ],
-      { 1743: "combat", 3993: "combat", 19: "action" },
-    ),
-    ["combat", "action"],
-  );
+describe("two tags with one name", () => {
+  const tagMap = { 1743: "combat", 3993: "combat", 19: "action" };
+
+  test("the name is listed once", () => {
+    assert.deepEqual(
+      resolveTags(
+        [
+          { tagid: 1743, weight: 900 },
+          { tagid: 3993, weight: 800 },
+          { tagid: 19, weight: 700 },
+        ],
+        tagMap,
+      ),
+      ["combat", "action"],
+    );
+  });
+
+  test("are still two tags to recommendations: one doesn't match the other", () => {
+    const owned = [{ appid: 1, visible: true, tags: [{ tagid: 1743, weight: 900 }] }];
+    const weights = computeFavoriteTagWeights(owned, new Map([[1, 600]]), tagMap);
+    const candidate = {
+      appid: 2,
+      visible: true,
+      tags: [{ tagid: 3993, weight: 900 }],
+      reviews: { summary_filtered: { review_count: 50, percent_positive: 95 } },
+    };
+    const s = summarizeRecommendations([candidate], weights, new Set([1]), tagMap, 10, []);
+    assert.deepEqual(s.recommendations, []);
+  });
 });

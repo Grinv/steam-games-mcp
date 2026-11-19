@@ -100,21 +100,27 @@ export function summarizeTagList(r: GetTagListResponse): TagMap {
 // How many resolved tag names to surface per card (most-weighted first). Bounded
 // to keep batch responses (up to 100 items) token-efficient.
 export const TAG_LIMIT = 8;
-export function resolveTags(
-  tags: { tagid?: number; weight?: number }[] | undefined,
-  tagMap: TagMap | undefined,
-): string[] {
+type ItemTags = { tagid?: number; weight?: number }[] | undefined;
+// The item's tags the dictionary names, most-weighted first.
+function namedTagIds(tags: ItemTags, tagMap: TagMap | undefined): number[] {
   if (!tags || !tagMap) return [];
-  return (
-    tags
-      .slice()
-      .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
-      .map((t) => (t.tagid !== undefined ? tagMap[t.tagid] : undefined))
-      // Two tags can share a name in a language (French "combat" is 1743 and
-      // 3993): one name, listed and weighed once.
-      .filter((name, i, all): name is string => Boolean(name) && all.indexOf(name) === i)
-      .slice(0, TAG_LIMIT)
-  );
+  return tags
+    .slice()
+    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
+    .map((t) => t.tagid)
+    .filter((id): id is number => id !== undefined && tagMap[id] !== undefined);
+}
+// A tag's identity is its id: two tags can share a name in a language
+// (French "combat" is 1743 and 3993), so whatever weighs or matches tags
+// (recommendations) reads ids, and names are only shown.
+export const topTagIds = (tags: ItemTags, tagMap: TagMap | undefined): number[] =>
+  namedTagIds(tags, tagMap).slice(0, TAG_LIMIT);
+/** Tag names for display, each listed once. */
+export const tagNames = (ids: number[], tagMap: TagMap): string[] => [
+  ...new Set(ids.map((id) => tagMap[id]!)),
+];
+export function resolveTags(tags: ItemTags, tagMap: TagMap | undefined): string[] {
+  return tagMap ? tagNames(namedTagIds(tags, tagMap), tagMap).slice(0, TAG_LIMIT) : [];
 }
 
 // ---- compatibility + native platforms ---------------------------------------
