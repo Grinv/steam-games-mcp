@@ -222,6 +222,7 @@ export const WISHLIST_DETAILED = {
         priority: 2,
         date_added: 1397058887,
         store_item: {
+          visible: true,
           appid: 660,
           name: "Full Price Game",
           best_purchase_option: {
@@ -245,6 +246,7 @@ export const WISHLIST_DETAILED = {
         priority: 1,
         date_added: 1400000000,
         store_item: {
+          visible: true,
           appid: 620,
           name: "Portal 2",
           best_purchase_option: {

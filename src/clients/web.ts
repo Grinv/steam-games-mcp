@@ -46,6 +46,7 @@ import {
   type FriendListResponse,
   type OwnedGamesResponse,
   type PlayerSummariesResponse,
+  RESULT_OK,
 } from "../format/web.ts";
 import {
   summarizeGameSchema,
@@ -162,7 +163,8 @@ export class SteamWebClient {
     if (this.configured) {
       // Only an upstream failure means "ask the community profile"; a bug isn't one.
       const res = await orFailure(this.#call(Steam.ResolveVanityURL, { vanityurl: raw }));
-      if (!(res instanceof ApiError)) steamid = res.response?.steamid ?? null;
+      if (!(res instanceof ApiError))
+        steamid = res.response.success === RESULT_OK ? res.response.steamid : null;
       // Code and status only: never a player identifier in the log.
       else this.#logger.debug(`STEAM_ID vanity lookup failed: ${res.code} ${res.status ?? ""}`);
     }
@@ -523,7 +525,8 @@ export class SteamWebClient {
       ...(kind === "official" ? { feeds: "steam_community_announcements" } : {}),
       ...(kind === "patch_notes" ? { tags: "patchnotes" } : {}),
     });
-    // A nonexistent appid's answer: a clean empty result.
+    // Steam's 403 for no news (a nonexistent appid, or an app without any):
+    // an empty list either way.
     return summarizeNews(res.answer ? { appnews: { newsitems: [] } } : res.data);
   }
 
@@ -539,15 +542,14 @@ export class SteamWebClient {
   }
 
   // Current concurrent player count for a game. Not cached — it's a live number.
-  // `result` is Steam's own success flag: 1 = ok, anything else means the appid
-  // wasn't found — as a 200, or as the endpoint's "no_app" answer (a 404).
+  // "No such app" is the endpoint's 404 answer (result 42); a 200 always
+  // carries result 1 (its body rule), so there's nothing else to read here.
   async getCurrentPlayers(appid: number): Promise<Record<string, unknown>> {
     const res = await this.#call(Steam.GetNumberOfCurrentPlayers, { appid });
-    // `result` is in every body (the endpoint's rule); 1 is the app's count.
-    if (res.answer || res.data.response?.result !== 1) {
+    if (res.answer) {
       throw new ApiError({
         code: "not_found",
-        message: `GetNumberOfCurrentPlayers ${res.answer ?? `result ${res.data.response?.result}`} for appid ${appid}`,
+        message: `GetNumberOfCurrentPlayers ${res.answer} for appid ${appid}`,
         detail: `No Steam app with id ${appid}.`,
       });
     }

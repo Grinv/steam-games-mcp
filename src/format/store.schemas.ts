@@ -197,13 +197,12 @@ export const purchasePricesSchema = z.record(
 export const discoverGamesOutput = z.strictObject({
   total_matching: z
     .number()
-    .nullable()
     .describe(
       "Steam's count of catalog games matching the server-side filters (min_discount, release " +
         "date, tags, min_review's rating bucket, one hardware filter). Filters with no " +
         "server-side form (steam_os, platform, min_reviews, a second hardware filter) and the " +
         "exact review-% check are not reflected, so this can overstate; `matched` is exact for " +
-        "the fetched page. null when Steam reports no count.",
+        "the fetched page.",
     ),
   matched: z
     .number()

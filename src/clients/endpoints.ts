@@ -4,6 +4,19 @@
 // shows it, run by `npm run check:api`. A fact here without a probe is a
 // guess; a probe that starts failing means Steam changed.
 //
+// How Steam writes "none" depends on which kind of API answers, so an empty
+// answer is recorded per endpoint, never assumed:
+// - Protobuf service methods (I…Service/…: IStoreQueryService,
+//   ISteamChartsService, IWishlistService, IPlayerService, …) serialize
+//   Steam's proto2 messages (SteamDatabase/Protobufs: no `syntax`, `[default]`
+//   options): an empty repeated field is left out, and an optional scalar is
+//   sent only when set (game_count 0 when set, nothing when not). So a list
+//   there is never required: absent is empty.
+// - The older Web API interfaces (ISteamUser, ISteamNews, ISteamUserStats)
+//   write their lists out: none is [] (players, newsitems, seen live).
+// - store.steampowered.com/api (the storefront) has its own forms: `data: []`
+//   for an empty object, a featured section without `items` when it has none.
+//
 // Probe ids, all public: 620 Portal 2; 1206340 a DLC with no achievement
 // schema; 99999999 no such app; 76561197960265728 accountid 0 (no account,
 // the one SteamID64 Steam answers 400 for); 76561197960287930 a friends-only
@@ -374,17 +387,19 @@ export const Steam = {
       },
     ],
   }),
-  GetNewsForApp: endpoint<NewsResponse, "unknown_appid">({
+  // 403 {} for a nonexistent appid and for an app without news alike (228980,
+  // seen live); an app with news but none matching a filter is a 200 with [].
+  GetNewsForApp: endpoint<NewsResponse, "no_news">({
     path: "ISteamNews/GetNewsForApp/v2/",
     host: "api",
     keyless: true,
     validate: newsRule,
-    answers: { 403: "unknown_appid" },
+    answers: { 403: "no_news" },
     probes: [
       { query: { appid: 620, count: 1 }, expect: "data", shows: "news" },
       {
         query: { appid: 99999999, count: 1 },
-        expect: "unknown_appid",
+        expect: "no_news",
         shows: "no such app is a 403",
         situation: "no-app",
       },
@@ -516,6 +531,18 @@ export const Steam = {
         expect: "data",
         shows: "a page",
       },
+      {
+        // A tag id no game carries: the proto answer for "none".
+        query: {
+          input_json: json({
+            query: { count: 1, filters: { tagids_must_match: [{ tagids: [999999999] }] } },
+            context: ctx,
+          }),
+        },
+        expect: "data",
+        shows: "no match is a total of 0 and no store_items",
+        situation: "no-match",
+      },
     ],
   }),
   SearchSuggestions: endpoint<SearchSuggestionsResponse>({
@@ -541,6 +568,12 @@ export const Steam = {
         query: { input_json: json({ context: ctx, page_count: 1 }) },
         expect: "data",
         shows: "a chart",
+      },
+      {
+        query: { input_json: json({ context: ctx, country_code: "XX", page_count: 1 }) },
+        expect: "data",
+        shows: "no chart (an unsupported country) is a response without ranks",
+        situation: "no-chart",
       },
     ],
   }),
@@ -617,6 +650,14 @@ export const Steam = {
     host: "store",
     keyless: true,
     validate: featuredRule,
-    probes: [{ query: { cc: "US" }, expect: "data", shows: "store sections" }],
+    probes: [
+      { query: { cc: "US" }, expect: "data", shows: "store sections" },
+      {
+        query: { cc: "KP" },
+        expect: "data",
+        shows: "a region with no specials sends that section without items",
+        situation: "no-specials",
+      },
+    ],
   }),
 };

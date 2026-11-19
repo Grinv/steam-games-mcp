@@ -184,7 +184,12 @@ describe("summarizeWishlistDetailed", () => {
   const mk = (appid: number, priority = 1, discount_pct = 0) => ({
     appid,
     priority,
-    store_item: { appid, name: `Game ${appid}`, best_purchase_option: { discount_pct } },
+    store_item: {
+      appid,
+      visible: true,
+      name: `Game ${appid}`,
+      best_purchase_option: { discount_pct },
+    },
   });
 
   test("empty wishlist → found:false with a private/empty reason", () => {

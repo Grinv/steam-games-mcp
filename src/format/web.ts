@@ -48,6 +48,7 @@ import {
   visibilitySchema,
   wishlistLightFound,
 } from "./web.schemas.ts";
+export { RESULT_OK } from "./web.schemas.ts";
 
 // ---- Web API: player summary ------------------------------------------------
 

@@ -180,9 +180,15 @@ export class StorefrontClient {
     // Per row: an entry Steam sent without a boolean `success` is that price's
     // gap alone, noted like a failed chunk's — dropped here, decided once, so
     // summarizePrices reads it as no entry (available:null).
-    const odd = chunks.flatMap((chunk, i) =>
-      settled[i]!.status === "fulfilled" ? chunk.filter((id) => !usableAppEntry(merged[id])) : [],
-    );
+    const odd = [
+      ...new Set(
+        chunks.flatMap((chunk, i) =>
+          settled[i]!.status === "fulfilled"
+            ? chunk.filter((id) => !usableAppEntry(merged[id]))
+            : [],
+        ),
+      ),
+    ];
     for (const id of odd) delete merged[id];
     if (odd.length) {
       noteDegraded(

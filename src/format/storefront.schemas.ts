@@ -184,7 +184,12 @@ interface FeaturedItem {
   final_price?: number;
   currency?: string;
 }
-const featuredSection = z.looseObject({ items: z.array(unchecked<FeaturedItem>()) });
+// Each section's object is on every answer; its items are left out when it
+// has none (specials under cc=KP or XX, seen live 2026-11-19), so absent is
+// empty, not unusable.
+const featuredSection = z.looseObject({
+  items: z.array(unchecked<FeaturedItem>()).optional(),
+});
 export const featuredInput = z.looseObject({
   specials: featuredSection,
   top_sellers: featuredSection,

@@ -263,7 +263,7 @@ export function summarizePrices(
 
 export type FeaturedResponse = z.infer<typeof featuredInput>;
 export const featuredRule = bodyRule(featuredInput, "featuredcategories");
-type FeaturedItem = FeaturedResponse["specials"]["items"][number];
+type FeaturedItem = NonNullable<FeaturedResponse["specials"]["items"]>[number];
 
 // Not `.parse()`d per item — see formattedPrice()'s comment; the enclosing
 // summarizeFeatured()/summarizeSpecials() validates the whole result once.

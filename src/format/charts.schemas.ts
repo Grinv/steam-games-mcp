@@ -68,7 +68,7 @@ export const getChartsOutput = z.discriminatedUnion("chart", [
 
 // ---- Steam's answers (input) -------------------------------------------------
 // Body rules, as in web.schemas.ts: the response types in charts.ts are
-// inferred from these. Only `response.ranks` is checked, as an array.
+// inferred from these. Only `response` is checked, as an object.
 
 // Names ride along on `item` when the request carries a data_request.
 interface Rank {
@@ -90,24 +90,27 @@ interface DeckRank extends Rank {
   last_period_rank?: number;
 }
 
+// A chart's `response` is on every answer; its ranks are left out when there
+// is no chart (top sellers for cc=XX, or a week before Steam's history: seen
+// live 2026-11-19), so absent is an empty chart, not an unusable answer.
 export const topSellersInput = z.looseObject({
   response: z.looseObject({
     start_date: unchecked<number>().optional(),
-    ranks: z.array(unchecked<TopSellerRank>()),
+    ranks: z.array(unchecked<TopSellerRank>()).optional(),
   }),
 });
 export const mostPlayedInput = z.looseObject({
   response: z.looseObject({
     rollup_date: unchecked<number>().optional(),
-    ranks: z.array(unchecked<PlayerRank>()),
+    ranks: z.array(unchecked<PlayerRank>()).optional(),
   }),
 });
 export const concurrentPlayersInput = z.looseObject({
   response: z.looseObject({
     last_update: unchecked<number>().optional(),
-    ranks: z.array(unchecked<PlayerRank>()),
+    ranks: z.array(unchecked<PlayerRank>()).optional(),
   }),
 });
 export const deckMostPlayedInput = z.looseObject({
-  response: z.looseObject({ ranks: z.array(unchecked<DeckRank>()) }),
+  response: z.looseObject({ ranks: z.array(unchecked<DeckRank>()).optional() }),
 });

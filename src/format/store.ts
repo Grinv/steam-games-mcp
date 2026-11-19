@@ -142,7 +142,7 @@ export function summarizeDiscover(
   // cap keeps the best deals; `matched` still reports the true pre-cap count.
   const { included, returned } = capList(rows, DISCOVER_MAX);
   return discoverGamesOutput.parse({
-    total_matching: r.response?.metadata?.total_matching_records ?? null,
+    total_matching: r.response.metadata.total_matching_records,
     matched: rows.length,
     returned,
     deals: included,
@@ -280,7 +280,10 @@ export function summarizeWishlistDetailed(
   const cards = enriched
     .filter(
       (i): i is typeof i & { store_item: StoreItemWithAppid } =>
-        typeof i.store_item.appid === "number" && (ctx.exact || keep(i.store_item)),
+        typeof i.store_item.appid === "number" &&
+        // Steam's own verdict, as on every card (seen live: visible:true).
+        shownHere(i.store_item) &&
+        (ctx.exact || keep(i.store_item)),
     )
     .map((i) => ({
       ...storeCard(i.store_item, tagMap),
