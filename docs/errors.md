@@ -83,8 +83,8 @@ Steam did not answer within `HTTP_TIMEOUT_MS` (headers and body).
 ## cancelled
 
 The client cancelled the call (MCP `notifications/cancelled`). The server
-stops its outstanding Steam requests for it; a request another call is also
-waiting for finishes for that call (and the cache) instead.
+stops the call's uncached Steam requests. A cached request finishes anyway,
+into the cache: another call may be waiting for it, or ask for it next.
 
 ## bad_request
 

@@ -1167,18 +1167,23 @@ test("an appid past 32 bits is refused before any call", async (t) => {
   assert.equal(mock.calls.length, 0);
 });
 
-// Turkish "İ" lowercases to "i" plus U+0307: the same key on both sides.
-test("discover_games: a Turkish tag matches without its dotted capital", async (t) => {
-  const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
-    url.includes("GetTagList")
-      ? jsonResponse({ response: { tags: [{ tagid: 5851, name: "İzometrik" }] } })
-      : router(url),
-  );
-  await client.callTool({
-    name: "discover_games",
-    arguments: { tags: ["izometrik"], language: "turkish" },
+// Turkish case doesn't map between its i's outside a Turkish locale: "İ"
+// lowercases to "i" plus U+0307, "I" to "i" (not "ı"). One key for all.
+for (const [typed, name, tagid] of [
+  ["izometrik", "İzometrik", 5851],
+  ["BAĞIMSIZ", "Bağımsız", 492],
+] as const)
+  test(`discover_games: the Turkish tag ${name} matches "${typed}"`, async (t) => {
+    const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
+      url.includes("GetTagList")
+        ? jsonResponse({ response: { tags: [{ tagid, name }] } })
+        : router(url),
+    );
+    await client.callTool({
+      name: "discover_games",
+      arguments: { tags: [typed], language: "turkish" },
+    });
+    const q = mock.calls.find((c) => c.url.includes("IStoreQueryService/Query"))!;
+    const input = JSON.parse(new URL(q.url).searchParams.get("input_json")!);
+    assert.deepEqual(input.query.filters.tagids_must_match, [{ tagids: [tagid] }]);
   });
-  const q = mock.calls.find((c) => c.url.includes("IStoreQueryService/Query"))!;
-  const input = JSON.parse(new URL(q.url).searchParams.get("input_json")!);
-  assert.deepEqual(input.query.filters.tagids_must_match, [{ tagids: [5851] }]);
-});

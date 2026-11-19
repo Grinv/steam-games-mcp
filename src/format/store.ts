@@ -362,9 +362,12 @@ export function summarizeWishlistDetailed(
             `${enriched.length} were checked against the rest (review %, own-package discount, ` +
             "compat/platform) — narrow the filters to cover them all."
           : "",
+        // Capped like the cards: a whole wishlist is carded when checks run here.
         hidden.length > 0
-          ? `Not shown in this country (removed from the store, or not sold there), so ` +
-            `without a card: appids ${hidden.join(", ")}.`
+          ? `${hidden.length} not shown in this country (removed from the store, or not ` +
+            `sold there), so without a card: appids ` +
+            `${hidden.slice(0, WISHLIST_DETAIL_MAX).join(", ")}` +
+            `${hidden.length > WISHLIST_DETAIL_MAX ? ", …" : ""}.`
           : "",
       ]
         .filter(Boolean)

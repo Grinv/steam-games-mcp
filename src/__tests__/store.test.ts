@@ -246,7 +246,22 @@ describe("summarizeWishlistDetailed", () => {
       [1],
     );
     assert.equal(s.matched, 2); // the shown one and the uncarded one
-    assert.match(s.note ?? "", /Not shown in this country.*1174180/);
+    assert.match(s.note ?? "", /^1 not shown in this country.*1174180/);
+  });
+
+  test("the entries not shown are listed up to the card cap, and counted", () => {
+    const hidden = Array.from({ length: 60 }, (_, i) => ({
+      appid: 1000 + i,
+      store_item: { appid: 1000 + i, visible: false },
+    }));
+    const s = summarizeWishlistDetailed(
+      { response: { items: hidden } },
+      undefined,
+      {},
+      { total: 60, exact: true },
+    ) as { note?: string };
+    assert.match(s.note ?? "", /^60 not shown/);
+    assert.equal(s.note?.match(/\d{4}/g)?.length, 50);
   });
 
   test("unranked entries (priority 0) come after ranked ones, in Steam's order", () => {

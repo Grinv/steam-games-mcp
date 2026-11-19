@@ -138,15 +138,17 @@ function titleKey(s: string): string {
 // doesn't have without a word (it matches or excludes nothing), and the
 // dictionary is in hand, so such a name is refused here, naming it.
 function tagIdsFor(names: string[], tagMap: TagMap, language: string): number[][] {
-  // Lowercase without U+0307: Turkish "İ" lowercases to "i" plus that dot, so
-  // "izometrik" missed İzometrik (14 Turkish tags carry an İ, seen live).
-  // NFC first: an accented name typed decomposed (some macOS input) is
-  // the same name.
+  // Turkish has four i's, and case doesn't map between them outside a Turkish
+  // locale: "İ" lowercases to "i" plus U+0307 (so "izometrik" missed
+  // İzometrik), "I" to "i" (so "BAĞIMSIZ" missed Bağımsız). One "i" for all
+  // (14 Turkish tags carry an İ, 90 an ı, seen live). NFC first: an accented
+  // name typed decomposed (some macOS input) is the same name.
   const key = (n: string) =>
     n
       .normalize("NFC")
       .toLowerCase()
-      .replace(/\u0307/g, "");
+      .replace(/\u0307/g, "")
+      .replace(/ı/g, "i");
   const byName = new Map<string, number[]>();
   for (const [id, n] of Object.entries(tagMap)) {
     byName.set(key(n), [...(byName.get(key(n)) ?? []), Number(id)]);
