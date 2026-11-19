@@ -105,12 +105,16 @@ export function resolveTags(
   tagMap: TagMap | undefined,
 ): string[] {
   if (!tags || !tagMap) return [];
-  return tags
-    .slice()
-    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
-    .map((t) => (t.tagid !== undefined ? tagMap[t.tagid] : undefined))
-    .filter((name): name is string => Boolean(name))
-    .slice(0, TAG_LIMIT);
+  return (
+    tags
+      .slice()
+      .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
+      .map((t) => (t.tagid !== undefined ? tagMap[t.tagid] : undefined))
+      // Two tags can share a name in a language (French "combat" is 1743 and
+      // 3993): one name, listed and weighed once.
+      .filter((name, i, all): name is string => Boolean(name) && all.indexOf(name) === i)
+      .slice(0, TAG_LIMIT)
+  );
 }
 
 // ---- compatibility + native platforms ---------------------------------------

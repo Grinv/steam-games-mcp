@@ -1,4 +1,5 @@
 import { ApiError } from "../lib/errors.ts";
+import { resolveTags } from "../format/storeCard.ts";
 import { mostPlayedRule, topSellersRule } from "../format/charts.ts";
 import { vanityRule } from "../format/web.ts";
 import { describe, test } from "node:test";
@@ -898,4 +899,19 @@ describe("GetItems' list must account for every id asked", () => {
     assert.throws(() => gamePurchaseOptionsRule(odd as never, q([1])), ApiError);
     assert.doesNotThrow(() => purchaseOptionsRule(odd as never, q([1])));
   });
+});
+
+// Two Steam tags share a name in some languages (French "combat": 1743, 3993).
+test("a tag name two of a game's tags share is listed once", () => {
+  assert.deepEqual(
+    resolveTags(
+      [
+        { tagid: 1743, weight: 900 },
+        { tagid: 3993, weight: 800 },
+        { tagid: 19, weight: 700 },
+      ],
+      { 1743: "combat", 3993: "combat", 19: "action" },
+    ),
+    ["combat", "action"],
+  );
 });
