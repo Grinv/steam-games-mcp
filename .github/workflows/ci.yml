@@ -43,7 +43,9 @@ jobs:
         run: npm run test:coverage
       - name: Validate .mcpb manifest
         run: npx mcpb validate manifest.json
-      - name: Audit (production deps)
-        run: npm audit --omit=dev
+      # The bundled packages are devDependencies (npm installs none of them),
+      # so --omit=dev would audit nothing: audit what the bundle inlines.
+      - name: Audit (bundled packages)
+        run: npm audit --json | node scripts/audit-bundle.ts
       - name: Verify dependency signatures
         run: npm audit signatures

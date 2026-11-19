@@ -28,6 +28,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Drop the made-up "(404)" from not-found errors that had no HTTP 404 behind them.
 - Report a rejected `STEAM_API_KEY` as its own error ("Steam rejected the configured STEAM_API_KEY … retrying won't help") on every key-gated tool. This includes the library tools (`get_owned_games`, `get_recently_played`), where Steam sends that page as a 401, not the 403 elsewhere.
 - Word `resolve_vanity_url`'s and `get_player_achievements`' `found: false` reasons ourselves instead of passing on Steam's own text (e.g. a bare "No match").
+- Install nothing but the package itself with `npx`: zod and the MCP SDK were already inlined in `dist/index.js`, yet npm downloaded them too (~14.5 MB, ~1,000 files, never loaded); the install is now ~0.6 MB. CI audits the inlined packages instead.
 
 ### Fixed
 

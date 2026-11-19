@@ -57,7 +57,8 @@ src/
                   #   (MCP Prompts)
   __tests__/      # node:test (*.test.ts) + helpers.ts
 scripts/          # run-tests.ts, sync-version.ts (generic), check-api.ts
-                  #   (domain), preversion-check.ts (CHANGELOG gate) — plain
+                  #   (domain), preversion-check.ts (CHANGELOG gate),
+                  #   audit-bundle.ts (npm audit of the bundled packages) — plain
                   #   .ts run directly by Node's type stripping, no build step
 .agents/skills/   # reusable agent workflows for this repo (e.g. live-audit/) —
                   #   plain Markdown with a YAML frontmatter name/description,
