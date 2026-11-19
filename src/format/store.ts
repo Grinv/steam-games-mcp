@@ -320,7 +320,14 @@ export function summarizeWishlistDetailed(
       items: [],
     });
   }
-  const items = r.response?.items ?? [];
+  // Steam lists every entry, and cards one it doesn't show in this country
+  // as not visible (9 of a wishlist's first 50 under RU, seen live): with no
+  // card to show, it is named in the note, not left out without a word.
+  const listed = r.response?.items ?? [];
+  const items = listed.filter((i) => !i.store_item || shownHere(i.store_item));
+  const hidden = listed.flatMap((i) =>
+    i.store_item && !shownHere(i.store_item) && typeof i.appid === "number" ? [i.appid] : [],
+  );
   const enriched = items.filter(
     (i): i is typeof i & { store_item: StoreItem } => i.store_item !== undefined,
   );
@@ -328,10 +335,7 @@ export function summarizeWishlistDetailed(
   const cards = enriched
     .filter(
       (i): i is typeof i & { store_item: StoreItemWithAppid } =>
-        typeof i.store_item.appid === "number" &&
-        // Steam's own verdict, as on every card (seen live: visible:true).
-        shownHere(i.store_item) &&
-        (ctx.exact || keep(i.store_item)),
+        typeof i.store_item.appid === "number" && (ctx.exact || keep(i.store_item)),
     )
     .map((i) => ({
       ...storeCard(i.store_item, tagMap),
@@ -352,11 +356,19 @@ export function summarizeWishlistDetailed(
     total: ctx.total,
     enriched: enriched.length,
     note:
-      unchecked > 0
-        ? `${items.length} wishlist items passed Steam's own filters, but only the first ` +
-          `${enriched.length} were checked against the rest (review %, own-package discount, ` +
-          "compat/platform) — narrow the filters to cover them all."
-        : undefined,
+      [
+        unchecked > 0
+          ? `${items.length} wishlist items passed Steam's own filters, but only the first ` +
+            `${enriched.length} were checked against the rest (review %, own-package discount, ` +
+            "compat/platform) — narrow the filters to cover them all."
+          : "",
+        hidden.length > 0
+          ? `Not shown in this country (removed from the store, or not sold there), so ` +
+            `without a card: appids ${hidden.join(", ")}.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ") || undefined,
     matched: ctx.exact ? items.length : cards.length,
     returned,
     items: included,

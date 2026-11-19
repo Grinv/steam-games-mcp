@@ -221,9 +221,10 @@ export const wishlistDetailedFound = z.strictObject({
   total: z
     .number()
     .describe(
-      "The player's full wishlist size, before any filter. Includes games since removed from " +
-        "the Steam store, which never appear in this detailed list, so `matched` can be lower " +
-        "than `total` even with no filter set.",
+      "The player's full wishlist size, before any filter. Includes games Steam doesn't show " +
+        "in `country` (removed from the store, or not sold there), which get no card here " +
+        "(`note` names those Steam carded), so `matched` can be lower than `total` even with " +
+        "no filter set.",
     ),
   enriched: z
     .number()

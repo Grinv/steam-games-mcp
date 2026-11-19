@@ -228,6 +228,27 @@ describe("summarizeWishlistDetailed", () => {
     assert.equal(s.items[0]!.appid, 1); // priority 1 sorts before priority 5
   });
 
+  test("an entry Steam doesn't show in the country is named in the note, not lost", () => {
+    // As seen live under RU: listed, carded not visible.
+    const hidden = {
+      appid: 1174180,
+      priority: 2,
+      store_item: { appid: 1174180, visible: false, success: 15, name: "Red Dead Redemption 2" },
+    };
+    const s = summarizeWishlistDetailed(
+      { response: { items: [mk(1, 1), hidden, { appid: 9, priority: 3 }] } },
+      undefined,
+      {},
+      { total: 3, exact: true },
+    ) as { matched: number; returned: number; note?: string; items: { appid: number }[] };
+    assert.deepEqual(
+      s.items.map((i) => i.appid),
+      [1],
+    );
+    assert.equal(s.matched, 2); // the shown one and the uncarded one
+    assert.match(s.note ?? "", /Not shown in this country.*1174180/);
+  });
+
   test("unranked entries (priority 0) come after ranked ones, in Steam's order", () => {
     // Steam's sort_order 0 lists ranked items first, then unranked oldest-first.
     const s = summarizeWishlistDetailed(
