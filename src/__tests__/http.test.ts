@@ -299,6 +299,55 @@ describe("response cache (cache: true)", () => {
     await assert.rejects(() => c.getJson("thing", { cache: true }), { code: "server_error" });
   });
 
+  test("two endpoints on one URL never serve each other's cached body", async (t) => {
+    // The cache is keyed by endpoint too: a body that passed a looser rule
+    // isn't handed to a caller with a stricter one.
+    installFetch(
+      t,
+      mockFetch(() => jsonResponse({ items: [] })),
+    );
+    const c = client({ cacheTtlMs: 60_000, retries: 0 });
+    const loose = endpoint<{ items: unknown[] }>({
+      path: "thing",
+      host: "api",
+      keyless: true,
+      probes: [],
+    });
+    const strict = endpoint<{ items: unknown[] }>({
+      path: "thing",
+      host: "api",
+      keyless: true,
+      probes: [],
+      validate: (b) => {
+        if (b.items.length === 0)
+          throw new ApiError({ code: "bad_response", message: "empty", retryable: true });
+      },
+    });
+    assert.deepEqual(await call(c, loose, {}, { cache: true }), { items: [] });
+    await assert.rejects(() => call(c, strict, {}, { cache: true }), { code: "bad_response" });
+  });
+
+  test("a gateway's page is no answer: the copy before it still stands in", async (t) => {
+    // An edge's HTML 404 says nothing about the resource, unlike the method's JSON.
+    let mode: "good" | "page" | "down" = "good";
+    installFetch(
+      t,
+      mockFetch(() =>
+        mode === "good"
+          ? jsonResponse({ v: 1 })
+          : mode === "page"
+            ? htmlResponse("<html>Not Found</html>", { status: 404 })
+            : jsonResponse({}, { status: 503 }),
+      ),
+    );
+    const c = client({ cacheTtlMs: 1, retries: 0 });
+    await warmThenExpire(c);
+    mode = "page";
+    await assert.rejects(() => c.getJson("thing", { cache: true }), { code: "not_found" });
+    mode = "down";
+    assert.deepEqual(await c.getJson("thing", { cache: true }), { v: 1 });
+  });
+
   test("a body the call's validate rejects is never cached over a good one", async (t) => {
     let mode: "good" | "empty" | "down" = "good";
     installFetch(

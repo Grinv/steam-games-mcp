@@ -885,6 +885,17 @@ describe("a game with no reviews", () => {
 describe("body rules held to what was seen", () => {
   // The three global player charts always rank 100 games: no ranks is no
   // answer. Top sellers leaves its ranks out when there is no chart (recorded).
+  // One null element would crash the formatter (an internal error): the list
+  // is no answer instead, retried and never cached.
+  test("a list holding a null is an unusable body, not a crash", () => {
+    assert.throws(
+      () => mostPlayedRule({ response: { ranks: [null, { rank: 1, appid: 5 }] } } as never),
+      {
+        code: "bad_response",
+      },
+    );
+  });
+
   test("a global chart without ranks is unusable; top sellers without them is empty", () => {
     assert.throws(() => mostPlayedRule({ response: {} }), /unusable|ranks/);
     assert.doesNotThrow(() => topSellersRule({ response: {} }));

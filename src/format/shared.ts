@@ -37,6 +37,11 @@ export function bodyRule(schema: z.ZodType, what: string): (body: unknown) => vo
 export const responseEnvelopeRule = (what: string) =>
   bodyRule(z.looseObject({ response: z.looseObject({}) }), what);
 
+// A list element: an object, its fields typed but not checked (`unchecked`).
+// A list holding anything else (a null) is no answer, never a row to crash on.
+export const row = <T>() =>
+  z.custom<T>((v) => typeof v === "object" && v !== null && !Array.isArray(v));
+
 // Typed, not checked: Steam's optional fields and list elements are
 // hand-written types never verified live. Only a body rule's required fields
 // are checked, so one odd item can't cost the whole body.

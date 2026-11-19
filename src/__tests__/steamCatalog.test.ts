@@ -1193,3 +1193,29 @@ for (const [language, typed, name, tagid] of [
     const input = JSON.parse(new URL(q.url).searchParams.get("input_json")!);
     assert.deepEqual(input.query.filters.tagids_must_match, [{ tagids: [tagid] }]);
   });
+
+// A card that doesn't say whether Steam shows it here (no `visible`, no failed
+// `success`) is left out of the results, and said: never dropped silently.
+test("discover_games notes a card that doesn't say whether it's shown here", async (t) => {
+  const items = [
+    { appid: 620, name: "Portal 2", visible: true },
+    { appid: 400, name: "Portal" },
+  ];
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("IStoreQueryService/Query")
+      ? jsonResponse({
+          response: {
+            metadata: { total_matching_records: 2, start: 0, count: 2 },
+            store_items: items,
+          },
+        })
+      : router(url),
+  );
+  const res = await client.callTool({ name: "discover_games", arguments: { count: 2 } });
+  const s = res.structuredContent as { deals: { appid: number }[]; notes?: string[] };
+  assert.deepEqual(
+    s.deals.map((d) => d.appid),
+    [620],
+  );
+  assert.match(s.notes?.[0] ?? "", /^Store data of 1 games unavailable/);
+});

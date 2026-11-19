@@ -37,6 +37,7 @@ import type { ChartName } from "../format/charts.ts";
 import {
   summarizeTagList,
   tagNames,
+  unsettledItems,
   type CompatFilters,
   type TagMap,
   TAG_LIMIT,
@@ -49,6 +50,21 @@ type Call = <T, A extends string>(
   query: Query,
   opts?: CallOptions,
 ) => Promise<Answered<T, A>>;
+
+// Cards Steam's answer doesn't settle (shownHere undefined) are left out of
+// a list or marked unknown, and said here, never dropped without a word.
+function noteUnsettled(n: number): void {
+  if (!n) return;
+  noteDegraded(
+    `Store data of ${n} games`,
+    new ApiError({
+      code: "bad_response",
+      message: `${n} store items didn't say whether they're shown here`,
+      detail: "Steam's answer didn't say whether they're shown in this country.",
+      retryable: true,
+    }),
+  );
+}
 
 // The include_* flags every store-service card call needs (reviews, release,
 // native platforms + compat, popular tags). Not include_basic_info: no card
@@ -418,18 +434,10 @@ export class StoreServiceClient {
         data_request: {},
       }),
     });
-    // "No game" is Steam's own count (0, recorded: no-match), never an empty
-    // or unusable list beside a count: that is no answer.
-    const total = res.response.metadata.total_matching_records;
-    if (total === 0) return null;
+    // "No game" is Steam's own count (0, recorded: no-match); a count beside
+    // nothing usable fails the body rule (searchSuggestionsRule).
+    if (res.response.metadata.total_matching_records === 0) return null;
     const items = (res.response.store_items ?? []).filter((it) => typeof it.appid === "number");
-    if (items.length === 0) {
-      throw new ApiError({
-        code: "bad_response",
-        message: `SearchSuggestions counted ${total} matches but listed none with an appid`,
-        retryable: true,
-      });
-    }
     const wanted = titleKey(term);
     const exact = wanted ? items.find((it) => titleKey(it.name ?? "") === wanted) : undefined;
     return (exact ?? items[0])?.appid ?? null;
@@ -459,18 +467,7 @@ export class StoreServiceClient {
     );
     const out = summarizeItems(res, appids, tagMap);
     // A row Steam's item didn't settle (available:null) is that row's gap.
-    const unknown = out.items.filter((i) => i.available === null).length;
-    if (unknown) {
-      noteDegraded(
-        `Store data of ${unknown} appids`,
-        new ApiError({
-          code: "bad_response",
-          message: `GetItems didn't say whether ${unknown} appids are shown here`,
-          detail: "Steam's answer didn't say whether they're shown in this country.",
-          retryable: true,
-        }),
-      );
-    }
+    noteUnsettled(out.items.filter((i) => i.available === null).length);
     return out;
   }
 
@@ -710,6 +707,7 @@ export class StoreServiceClient {
       }),
     });
     const ownedAppids = new Set(ownedGames.map((g) => g.appid));
+    noteUnsettled(unsettledItems(poolRes.response?.store_items ?? []));
     return summarizeRecommendations(
       poolRes.response?.store_items ?? [],
       tagWeights,
@@ -775,6 +773,7 @@ export class StoreServiceClient {
       l,
       filterTagMap,
     );
+    noteUnsettled(unsettledItems(res.response.store_items ?? []));
     return summarizeDiscover(res, { ...post, tagMap });
   }
 

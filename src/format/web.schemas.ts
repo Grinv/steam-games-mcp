@@ -11,7 +11,7 @@
 import { z } from "zod";
 import { isSteamId64 } from "../steam.ts";
 import { gamesNotFound } from "./shared.schemas.ts";
-import { unchecked } from "./shared.ts";
+import { unchecked, row } from "./shared.ts";
 
 // Steam's `personastate` is a small fixed index (0-6, per the Web API docs);
 // format/web.ts's summarizers map it through this same list, so the two
@@ -270,7 +270,7 @@ interface PlayerSummary {
   gameid?: string;
 }
 export const playerSummariesInput = z.looseObject({
-  response: z.looseObject({ players: z.array(unchecked<PlayerSummary>()) }),
+  response: z.looseObject({ players: z.array(row<PlayerSummary>()) }),
 });
 
 interface PlayerBan {
@@ -282,7 +282,7 @@ interface PlayerBan {
   DaysSinceLastBan?: number;
   EconomyBan?: string;
 }
-export const playerBansInput = z.looseObject({ players: z.array(unchecked<PlayerBan>()) });
+export const playerBansInput = z.looseObject({ players: z.array(row<PlayerBan>()) });
 
 interface Friend {
   steamid?: string;
@@ -292,7 +292,7 @@ interface Friend {
 // ISteamUser writes its list out: an empty public friends list is
 // {"friends":[]} (seen live 2026-11-20 on new accounts), so it's required.
 export const friendListInput = z.looseObject({
-  friendslist: z.looseObject({ friends: z.array(unchecked<Friend>()) }),
+  friendslist: z.looseObject({ friends: z.array(row<Friend>()) }),
 });
 
 interface NewsItem {
@@ -305,7 +305,7 @@ interface NewsItem {
   date?: number;
 }
 export const newsInput = z.looseObject({
-  appnews: z.looseObject({ newsitems: z.array(unchecked<NewsItem>()) }),
+  appnews: z.looseObject({ newsitems: z.array(row<NewsItem>()) }),
 });
 
 // ResolveVanityURL reports an EResult in `response.success`: 1 (OK) on a hit,

@@ -69,8 +69,8 @@ export type Answered<T, A extends string> = [A] extends [never]
   : { data: T; answer?: undefined } | { answer: A; data?: undefined };
 
 /** Per-call choices, about this use rather than the endpoint. A body rule
- *  isn't one: the cache is keyed by URL, so a rule must hold for every use of
- *  it — it belongs on the Endpoint. */
+ *  isn't one: the cache is keyed by endpoint and URL, so a rule must hold for
+ *  every use of the endpoint — it belongs on the Endpoint. */
 export interface CallOptions {
   /** Cache the response (see RequestOptions.cache). */
   cache?: boolean;
@@ -82,6 +82,17 @@ export interface CallOptions {
  * answer comes back as `{ answer }`; any other failure, a bug or the call's
  * cancellation propagates as thrown.
  */
+// Each endpoint's cache scope: a body is cached under the rule it passed, so
+// two endpoints on one URL (one appid's GetItems purchase options, under
+// get_prices' rule and get_game's stricter one) never serve each other's.
+const scopes = new WeakMap<object, string>();
+const scopeOf = (ep: object) => {
+  let scope = scopes.get(ep);
+  if (scope === undefined) scopes.set(ep, (scope = `#${String(nextScope++)}`));
+  return scope;
+};
+let nextScope = 1;
+
 export async function call<T, A extends string>(
   http: HttpClient,
   ep: Endpoint<T, A>,
@@ -95,6 +106,7 @@ export async function call<T, A extends string>(
     query: { ...extraQuery, ...rest },
     cache: opts.cache,
     validate,
+    cacheScope: scopeOf(ep),
   };
   if (!ep.answers) return (await http.getJson<T>(path, request)) as Answered<T, A>;
   let data: T;

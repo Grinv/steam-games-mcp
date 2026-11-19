@@ -277,9 +277,9 @@ export const Steam = {
     path: "ISteamUser/GetFriendList/v1/",
     host: "api",
     keyless: false,
-    // `friendslist` is on every 200 seen; its `friends` was an array on all 9
-    // sampled, but no public list without friends was seen, so an absent one
-    // reads as none (protobuf-backed APIs omit an empty repeated field).
+    // ISteamUser writes its list out: `friends` is [] for a public list
+    // without friends (seen live 2026-11-20 on new accounts), so the rule
+    // requires it and a body without it is no answer.
     validate: friendListRule,
     answers: {
       401: "not_shown",
@@ -319,6 +319,14 @@ export const Steam = {
     validate: playerAchievementsRule,
     probes: [
       badKeyProbe({ steamid: PUBLIC, appid: 620 }),
+      {
+        // A game with no achievements (Dota 2): a success without the list,
+        // which the summary reads as none, not a lost field.
+        query: { steamid: PUBLIC, appid: 570 },
+        expect: "data",
+        shows: "a game without achievements is a success with no achievements list",
+        situation: "no-achievements",
+      },
       {
         query: { steamid: PRIVATE_DETAILS, appid: 620 },
         expect: "not_shown",
@@ -620,8 +628,6 @@ export const Steam = {
   // list short of the ids asked for is no answer (retried, never cached); an
   // item that doesn't fit the price shape costs its own correction, noted.
   // Its own entry because the rule holds for that query, not every GetItems.
-  // Never cached: for one appid its URL is GamePurchaseOptions', whose
-  // stricter rule a body cached under this one would skip.
   GetPurchaseOptions: endpoint<StoreItemsResponse>({
     path: "IStoreBrowseService/GetItems/v1/",
     host: "api",
@@ -703,7 +709,15 @@ export const Steam = {
         situation: "no-match",
       },
       {
-        query: { input_json: json({ search_term: "portal", max_results: 1, context: ctx }) },
+        // As the server asks (data_request): without one Steam lists only `ids`.
+        query: {
+          input_json: json({
+            search_term: "portal",
+            max_results: 1,
+            context: ctx,
+            data_request: {},
+          }),
+        },
         expect: "data",
         shows: "suggestions",
       },
@@ -808,6 +822,9 @@ export const Steam = {
       },
     ],
   }),
+  // One endpoint for get_featured and get_specials: they share one cached
+  // answer, so its rule is both tools' needs — all four sections, which Steam
+  // sends in every answer recorded (US, and KP with no specials).
   FeaturedCategories: endpoint<FeaturedResponse>({
     path: "api/featuredcategories",
     host: "store",

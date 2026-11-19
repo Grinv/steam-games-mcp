@@ -3,7 +3,7 @@
 // `getChartsOutput.parse({...})`, so this is the single source of truth for the
 // shape and the tool's outputSchema.
 import { z } from "zod";
-import { unchecked } from "./shared.ts";
+import { unchecked, row } from "./shared.ts";
 
 export const CHART_NAMES = [
   "top_sellers",
@@ -98,21 +98,21 @@ interface DeckRank extends Rank {
 export const topSellersInput = z.looseObject({
   response: z.looseObject({
     start_date: unchecked<number>().optional(),
-    ranks: z.array(unchecked<TopSellerRank>()).optional(),
+    ranks: z.array(row<TopSellerRank>()).optional(),
   }),
 });
 export const mostPlayedInput = z.looseObject({
   response: z.looseObject({
     rollup_date: unchecked<number>().optional(),
-    ranks: z.array(unchecked<PlayerRank>()),
+    ranks: z.array(row<PlayerRank>()),
   }),
 });
 export const concurrentPlayersInput = z.looseObject({
   response: z.looseObject({
     last_update: unchecked<number>().optional(),
-    ranks: z.array(unchecked<PlayerRank>()),
+    ranks: z.array(row<PlayerRank>()),
   }),
 });
 export const deckMostPlayedInput = z.looseObject({
-  response: z.looseObject({ ranks: z.array(unchecked<DeckRank>()) }),
+  response: z.looseObject({ ranks: z.array(row<DeckRank>()) }),
 });

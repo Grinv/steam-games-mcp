@@ -183,14 +183,22 @@ function discountEnd(bp: StoreItem["best_purchase_option"]): string | null {
   return ends.length ? isoDateTime(Math.min(...ends)) : null;
 }
 
-/** Whether Steam shows this item here — its own per-item verdict, decided
- *  per row (a batch holds items of every kind): `visible:true` (success 1);
- *  `visible:false` when not shown in this country (RDR2 1174180 under cc=RU,
- *  success 15); no flag at all on an item Steam returned no card for (appid
- *  4294967295, success 8). All seen live 2026-11-19. */
-export function shownHere(it: StoreItem): boolean {
-  return it.visible === true;
+/** Whether Steam shows this item here, as it said it — per row (a batch
+ *  holds items of every kind): true for `visible:true` (success 1); false for
+ *  `visible:false` (not shown in this country: RDR2 1174180 under cc=RU,
+ *  success 15) or a failed `success` without it (appid 4294967295: 8,
+ *  invalid); undefined for an item that says neither — that row's unknown,
+ *  which every caller notes, never reads as hidden. Seen live 2026-11-20. */
+export function shownHere(it: StoreItem): boolean | undefined {
+  if (it.visible === true) return true;
+  if (it.visible === false || (it.success !== undefined && it.success !== 1)) return false;
+  return undefined;
 }
+
+/** The appids of items Steam's answer doesn't settle (shownHere undefined),
+ *  for the client to note. */
+export const unsettledItems = (items: StoreItem[]): number =>
+  items.filter((it) => shownHere(it) === undefined).length;
 
 /** Whether best_purchase_option prices THIS app rather than a bundle containing
  *  it. Valve's "best" option is whatever it considers the best value, which is

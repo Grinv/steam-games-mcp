@@ -22,6 +22,10 @@ export interface RequestOptions {
    *  never cached over a good one, and fails like any other request (a stale
    *  copy stands in if the error is retryable). */
   validate?: (body: unknown) => void;
+  /** Who the cached body is for, with the URL: a body is kept under the rule
+   *  it passed, so a caller with another rule on the same URL never gets it
+   *  (lib/endpoint.ts passes the endpoint's). */
+  cacheScope?: string;
 }
 
 interface HttpClientOptions {
@@ -88,14 +92,15 @@ export class HttpClient {
   // other waiters still get its answer, and so does the cache.
   // Resolves to the parsed body (checked before it was cached, so an object).
   async #cached(url: string, options: RequestOptions, signal?: AbortSignal): Promise<unknown> {
+    const key = options.cacheScope ? `${options.cacheScope} ${url}` : url;
     // Before starting a request nobody would wait for (or handle the failure of).
     if (signal?.aborted) throw cancelled(signal);
-    const stale = this.#cache.getStale(url);
+    const stale = this.#cache.getStale(key);
     // The caller whose request this is keeps the body its check parsed;
     // anyone answered from cache (or sharing that request) parses the text.
     let parsed: object | undefined;
     try {
-      const shared = this.#cache.wrap(url, async () => {
+      const shared = this.#cache.wrap(key, async () => {
         // With a stale copy to fall back on, a retry would only delay the
         // answer it ends in (up to ~45 s of timeouts with the defaults).
         // However old the copy, the agent is told when it was stored (a
@@ -107,9 +112,11 @@ export class HttpClient {
       const text = await untilCancelled(shared, signal);
       return parsed ?? parseJson(text);
     } catch (err) {
-      // A definitive answer is Steam's latest word: the copy before it no
-      // longer stands in for a later failure (as a new body replaces it).
-      if (err instanceof ApiError && !err.retryable) this.#cache.delete(url);
+      // A definitive answer from the method itself (its JSON, like an
+      // endpoint's answers) is Steam's latest word: the copy before it no
+      // longer stands in for a later failure, as a new body replaces it. A
+      // gateway's page (an edge 403, a retired route) says nothing about it.
+      if (err instanceof ApiError && !err.retryable && err.jsonBody) this.#cache.delete(key);
       if (stale === undefined || !(err instanceof ApiError && err.retryable)) throw err;
       callScope.getStore()?.stale.push({ err: err as ApiError, storedAt: stale.storedAt });
       return parseJson(stale.value);

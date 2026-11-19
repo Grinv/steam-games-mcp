@@ -49,7 +49,19 @@ import {
 // ---- IStoreQueryService/SearchSuggestions (keyless title search) ------------
 
 export type SearchSuggestionsResponse = z.infer<typeof storeQueryInput>;
-export const searchSuggestionsRule = bodyRule(storeQueryInput, "SearchSuggestions");
+const suggestionsEnvelope = bodyRule(storeQueryInput, "SearchSuggestions");
+/** A search Steam counts matches for lists them (it starts at 0: no page
+ *  past the end), so a count beside no named item is no answer. */
+export function searchSuggestionsRule(body: SearchSuggestionsResponse): void {
+  suggestionsEnvelope(body);
+  const total = body.response.metadata.total_matching_records;
+  if (total > 0 && !body.response.store_items?.some((it) => typeof it.appid === "number"))
+    throw new ApiError({
+      code: "bad_response",
+      message: `SearchSuggestions counted ${total} matches but listed none with an appid`,
+      retryable: true,
+    });
+}
 
 const STORE_APP_TYPE = [
   "game",
@@ -128,7 +140,8 @@ export function summarizeDiscover(
   const keep = storeItemFilter(opts);
   const rows = (r.response?.store_items ?? [])
     .filter(
-      (it): it is StoreItemWithAppid => shownHere(it) && typeof it.appid === "number" && keep(it),
+      (it): it is StoreItemWithAppid =>
+        shownHere(it) === true && typeof it.appid === "number" && keep(it),
     )
     .map((it) => storeCard(it, opts.tagMap))
     .sort((a, b) => (b.discount_pct as number) - (a.discount_pct as number));
@@ -168,14 +181,11 @@ export function summarizeItems(
     count: appids.length,
     items: appids.map((appid) => {
       const it = byId.get(appid);
-      // Steam's own verdict, per row: visible:false is "not shown here" (a
-      // nonexistent, removed or region-locked appid: success 15), and so is a
-      // failed `success` without `visible` (4294967295: 8, invalid; both seen
-      // live 2026-11-20). An item that says neither is that row's unknown,
-      // noted by the client — never "not available".
-      if (it?.visible === false || (it?.success !== undefined && it.success !== 1))
-        return { appid, available: false };
-      if (!it || !shownHere(it)) return { appid, available: null };
+      // Steam's own verdict, per row (shownHere); an item that says neither,
+      // or none, is that row's unknown, noted by the client.
+      const shown = it && shownHere(it);
+      if (shown === false) return { appid, available: false };
+      if (!it || shown !== true) return { appid, available: null };
       const bp = ownPurchaseOption(it);
       return {
         ...baseCard({ ...it, appid }, tagMap),
@@ -244,7 +254,8 @@ export function summarizePurchasePrices(r: StoreItemsResponse): {
       initial: original ?? final,
       discount_percent: discount_pct,
     });
-    if (row.success) prices[String(it.appid)] = row.data;
+    // Keyed by the id Steam echoes for the appid asked, like summarizeItems.
+    if (row.success) prices[String(it.id ?? it.appid)] = row.data;
     else odd += 1;
   }
   return { prices, odd };
@@ -304,6 +315,10 @@ export interface WishlistDetailedResponse {
 }
 // Same budget as DISCOVER_MAX above (same card shape).
 export const WISHLIST_DETAIL_MAX = 50;
+// Capped like the cards: a whole wishlist is carded when checks run here.
+const appidList = (ids: number[]) =>
+  `${ids.slice(0, WISHLIST_DETAIL_MAX).join(", ")}${ids.length > WISHLIST_DETAIL_MAX ? ", …" : ""}`;
+
 export function summarizeWishlistDetailed(
   r: WishlistDetailedResponse,
   tagMap: TagMap | undefined,
@@ -324,12 +339,18 @@ export function summarizeWishlistDetailed(
   }
   // Steam lists every entry, and cards one it doesn't show in this country
   // as not visible (9 of a wishlist's first 50 under RU, seen live): with no
-  // card to show, it is named in the note, not left out without a word.
+  // card to show, it is named in the note, not left out without a word. A
+  // card that doesn't say (shownHere undefined) is named as unknown.
   const listed = r.response?.items ?? [];
-  const items = listed.filter((i) => !i.store_item || shownHere(i.store_item));
-  const hidden = listed.flatMap((i) =>
-    i.store_item && !shownHere(i.store_item) && typeof i.appid === "number" ? [i.appid] : [],
-  );
+  const items = listed.filter((i) => !i.store_item || shownHere(i.store_item) !== false);
+  const appidsWhere = (shown: boolean | undefined) =>
+    listed.flatMap((i) =>
+      i.store_item && shownHere(i.store_item) === shown && typeof i.appid === "number"
+        ? [i.appid]
+        : [],
+    );
+  const hidden = appidsWhere(false);
+  const unsettled = appidsWhere(undefined);
   const enriched = items.filter(
     (i): i is typeof i & { store_item: StoreItem } => i.store_item !== undefined,
   );
@@ -337,7 +358,9 @@ export function summarizeWishlistDetailed(
   const cards = enriched
     .filter(
       (i): i is typeof i & { store_item: StoreItemWithAppid } =>
-        typeof i.store_item.appid === "number" && (ctx.exact || keep(i.store_item)),
+        shownHere(i.store_item) === true &&
+        typeof i.store_item.appid === "number" &&
+        (ctx.exact || keep(i.store_item)),
     )
     .map((i) => ({
       ...storeCard(i.store_item, tagMap),
@@ -366,12 +389,13 @@ export function summarizeWishlistDetailed(
             `${carded} were checked against the rest (review %, own-package discount, ` +
             "compat/platform) — narrow the filters to cover them all."
           : "",
-        // Capped like the cards: a whole wishlist is carded when checks run here.
         hidden.length > 0
           ? `${hidden.length} not shown in this country (removed from the store, or not ` +
-            `sold there), so without a card: appids ` +
-            `${hidden.slice(0, WISHLIST_DETAIL_MAX).join(", ")}` +
-            `${hidden.length > WISHLIST_DETAIL_MAX ? ", …" : ""}.`
+            `sold there), so without a card: appids ${appidList(hidden)}.`
+          : "",
+        unsettled.length > 0
+          ? `${unsettled.length} with a card that doesn't say whether it's shown in this ` +
+            `country, so without one (ask again): appids ${appidList(unsettled)}.`
           : "",
       ]
         .filter(Boolean)
@@ -434,7 +458,7 @@ export function summarizeRecommendations(
   const scored = candidates
     .filter(
       (it): it is StoreItemWithAppid =>
-        shownHere(it) &&
+        shownHere(it) === true &&
         typeof it.appid === "number" &&
         !ownedAppids.has(it.appid) &&
         // Client-side discount backstop, like summarizeDiscover: the server

@@ -328,8 +328,8 @@ export class SteamWebClient {
       );
     }
     // "No games" is Steam's own count (game_count 0, no list), never an empty
-    // list beside a count: a library listed with nothing usable is no answer.
-    if (games.length === 0 && (res.response.game_count ?? 0) > 0) {
+    // list beside a count, nor rows none of which are usable: that is no answer.
+    if (games.length === 0 && (listed.length > 0 || (res.response.game_count ?? 0) > 0)) {
       throw new ApiError({
         code: "bad_response",
         message: "GetOwnedGames counted games but listed none usable",

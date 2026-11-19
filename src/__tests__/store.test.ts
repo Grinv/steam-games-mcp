@@ -267,6 +267,25 @@ describe("summarizeWishlistDetailed", () => {
     assert.match(s.note ?? "", /^1 not shown in this country.*1174180/);
   });
 
+  test("a card that doesn't say whether it's shown is named as unknown, not 'not sold'", () => {
+    const s = summarizeWishlistDetailed(
+      {
+        response: {
+          items: [mk(1, 1), { appid: 20, priority: 2, store_item: { appid: 20, name: "B" } }],
+        },
+      },
+      undefined,
+      {},
+      { total: 2, exact: true },
+    ) as { note?: string; items: { appid: number }[] };
+    assert.deepEqual(
+      s.items.map((i) => i.appid),
+      [1],
+    );
+    assert.match(s.note ?? "", /doesn't say whether it's shown.*20/);
+    assert.doesNotMatch(s.note ?? "", /not sold/);
+  });
+
   test("the entries not shown are listed up to the card cap, and counted", () => {
     const hidden = Array.from({ length: 60 }, (_, i) => ({
       appid: 1000 + i,

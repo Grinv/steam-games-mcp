@@ -8,7 +8,7 @@
 // and format/shared.schemas.ts.
 import { z } from "zod";
 import type { StoreItem } from "./storeCard.ts";
-import { unchecked } from "./shared.ts";
+import { unchecked, row } from "./shared.ts";
 
 // store.ts's compat()/COMPAT_CATEGORY — shared by every
 // steam_deck/steam_os/steam_machine/steam_frame field below.
@@ -181,7 +181,7 @@ export const storeQueryInput = z.looseObject({
       start: unchecked<number>().optional(),
       count: unchecked<number>().optional(),
     }),
-    store_items: unchecked<StoreItem[]>().optional(),
+    store_items: z.array(row<StoreItem>()).optional(),
   }),
 });
 

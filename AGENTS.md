@@ -288,7 +288,9 @@ npm run inspector      # run under the MCP Inspector
   the optional field via `withNotes`. `degradation.test.ts` fails every tool's
   every endpoint in turn and requires an error or a note, never silence.
 - **Caching is per request**, in `HttpClient` (`getJson(..., { cache: true })`,
-  `lib/cache.ts`): one entry is one Steam response body, keyed by URL, so
+  `lib/cache.ts`): one entry is one Steam response body, keyed by its
+  endpoint and URL (a body is kept under the rule it passed, so two endpoints
+  on one URL never serve each other's), so
   shaping and combining requests always run after the cache and a partial
   answer is never stored as a whole one. `getJson<T>` returns a JSON object or
   fails: an empty body, `null` or any non-object is `bad_response` (retryable),

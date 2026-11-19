@@ -119,6 +119,11 @@
     "contentType": "application/json; charset=UTF-8",
     "body": "{\"playerstats\":{\"error\":\"Profile is not public\",\"success\":false}}"
   },
+  "GetPlayerAchievements/no-achievements": {
+    "status": 200,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{\"playerstats\":{\"steamID\":\"76561198028121353\",\"gameName\":\"Dota 2\",\"success\":true}}"
+  },
   "GetPlayerAchievements/private-game-details": {
     "status": 403,
     "contentType": "application/json; charset=UTF-8",

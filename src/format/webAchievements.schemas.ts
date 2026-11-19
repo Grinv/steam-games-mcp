@@ -5,7 +5,7 @@
 // via `schema.parse({...})`, so the schema is the single source of truth for
 // its shape. `z.strictObject()` throughout.
 import { z } from "zod";
-import { unchecked } from "./shared.ts";
+import { unchecked, row } from "./shared.ts";
 
 // The `game` caveat below is the same one getGameAchievementsOutput carries:
 // both fields are populated from Valve's achievement schema (playerstats.gameName
@@ -85,7 +85,8 @@ export const playerAchievementsInput = z.looseObject({
     success: z.boolean(),
     error: unchecked<string>().optional(),
     gameName: unchecked<string>().optional(),
-    achievements: unchecked<PlayerAchievement[]>().optional(),
+    // Left out for a game without achievements (recorded: no-achievements).
+    achievements: z.array(row<PlayerAchievement>()).optional(),
   }),
 });
 
@@ -94,7 +95,7 @@ interface GlobalAchievement {
   percent?: number | string;
 }
 export const globalAchievementsInput = z.looseObject({
-  achievementpercentages: z.looseObject({ achievements: z.array(unchecked<GlobalAchievement>()) }),
+  achievementpercentages: z.looseObject({ achievements: z.array(row<GlobalAchievement>()) }),
 });
 
 interface GameStats {

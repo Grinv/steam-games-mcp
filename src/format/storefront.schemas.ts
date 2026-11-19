@@ -7,7 +7,7 @@
 // silently accepted. Also exported for wiring into `registerTool`'s
 // `outputSchema` in tools/storefront.ts.
 import { z } from "zod";
-import { unchecked } from "./shared.ts";
+import { unchecked, row } from "./shared.ts";
 import type { PriceOverview, StoreApp } from "./storefront.ts";
 
 // The currency/final/initial/discount_percent fields formattedPrice() builds,
@@ -207,7 +207,7 @@ interface FeaturedItem {
 // has none (specials under cc=KP or XX, seen live 2026-11-19), so absent is
 // empty, not unusable.
 const featuredSection = z.looseObject({
-  items: z.array(unchecked<FeaturedItem>()).optional(),
+  items: z.array(row<FeaturedItem>()).optional(),
 });
 export const featuredInput = z.looseObject({
   specials: featuredSection,
@@ -225,7 +225,7 @@ export const reviewHistogramInput = z.looseObject({
   success: z.literal(1),
   results: z.looseObject({
     rollup_type: unchecked<string>().optional(),
-    rollups: unchecked<Rollup[]>().optional(),
-    recent: unchecked<Rollup[]>().optional(),
+    rollups: z.array(row<Rollup>()).optional(),
+    recent: z.array(row<Rollup>()).optional(),
   }),
 });
