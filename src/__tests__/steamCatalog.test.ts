@@ -13,6 +13,7 @@ import {
   router,
   routerWithBrokenTagList,
   routerWithEmptyTagList,
+  getItemsAnswer,
 } from "./steamFixtures.ts";
 import { ITEMS_MAX } from "../tools/common.ts";
 import { DISCOVER_MAX, WISHLIST_DETAIL_MAX } from "../format/store.ts";
@@ -595,7 +596,9 @@ describe("bundle prices", () => {
     },
   });
   const serve = (body: unknown) => (url: string) =>
-    jsonResponse(url.includes("IStoreBrowseService/GetItems") ? body : TAGLIST);
+    jsonResponse(
+      url.includes("IStoreBrowseService/GetItems") ? getItemsAnswer(url, body) : TAGLIST,
+    );
 
   test("get_items reports the game's own package, not the bundle containing it", async (t) => {
     const { client } = await setupServer(

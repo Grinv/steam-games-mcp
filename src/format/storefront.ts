@@ -194,9 +194,12 @@ export function detailApp(a: StoreApp, override?: PriceOverride): z.infer<typeof
     },
     // Steam's `fullgame`: the game a DLC, soundtrack or demo belongs to, its
     // appid a numeric string (seen live 2026-11-19 on 2778580, 1206340, 219).
-    base_game: a.fullgame?.appid
-      ? { appid: Number(a.fullgame.appid), name: a.fullgame.name ?? null }
-      : null,
+    // Number() of a non-numeric string is NaN, which the schema rejects (an
+    // internal error): an id that isn't one names no base game.
+    base_game:
+      a.fullgame?.appid && Number.isInteger(Number(a.fullgame.appid))
+        ? { appid: Number(a.fullgame.appid), name: a.fullgame.name ?? null }
+        : null,
     drm_notice: a.drm_notice || null,
     account_notice: a.ext_user_account_notice || null,
     pc_requirements_min: stripHtml(reqs?.minimum),

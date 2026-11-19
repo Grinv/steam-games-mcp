@@ -19,7 +19,7 @@ import {
 import { Steam, classifySteamApiError } from "./endpoints.ts";
 import { noteDegraded, optional, optionalParts, orFailure } from "../lib/call.ts";
 import { settledWithLimit } from "../lib/concurrency.ts";
-import { STEAMID64_RE } from "../steam.ts";
+import { isSteamId64, STEAMID64_RE } from "../steam.ts";
 import {
   FRIENDS_CHECKED_MAX,
   friendIdsToEnrich,
@@ -198,7 +198,8 @@ export class SteamWebClient {
       query: { xml: 1 },
     });
     const id = /<steamID64>(\d{17})<\/steamID64>/.exec(xml)?.[1];
-    if (id) return id;
+    // Held to the same range as the API's answer: it becomes STEAM_ID's default.
+    if (id && isSteamId64(id)) return id;
     if (/<error>.*profile could not be found/s.test(xml)) return null;
     throw new ApiError({
       code: "bad_response",

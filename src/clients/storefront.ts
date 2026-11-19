@@ -53,12 +53,8 @@ const APPDETAILS_FILTERS = [
  *  Declared as a narrow interface rather than importing the class, so the
  *  Storefront client stays independent of the Web API client it's wired to. */
 export interface PurchasePriceSource {
-  getPurchasePrices(
-    appids: number[],
-    country?: string,
-    language?: string,
-    opts?: { cache?: boolean },
-  ): Promise<PurchasePrices>;
+  getPurchasePrices(appids: number[], country?: string, language?: string): Promise<PurchasePrices>;
+  getGamePurchasePrice(appid: number, country?: string, language?: string): Promise<PurchasePrices>;
 }
 
 export class StorefrontClient {
@@ -103,7 +99,7 @@ export class StorefrontClient {
         { appids: appid, cc, l, filters: APPDETAILS_FILTERS },
         { cache: true },
       ),
-      this.#pricing.getPurchasePrices([appid], cc, l, { cache: true }),
+      this.#pricing.getGamePurchasePrice(appid, cc, l),
     ]);
     const entry = res[String(appid)];
     if (!entry?.success || !entry.data || Array.isArray(entry.data)) {

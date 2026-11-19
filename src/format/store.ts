@@ -12,6 +12,7 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
+import { ApiError } from "../lib/errors.ts";
 import { bodyRule, capList, isoDay, notFound, notShown, storeUrl } from "./shared.ts";
 import { wishlistNotFound } from "./shared.schemas.ts";
 import {
@@ -247,7 +248,46 @@ export function summarizePurchasePrices(r: StoreItemsResponse): {
   return { prices, odd };
 }
 
-export const purchaseOptionsRule = bodyRule(purchaseItemsInput, "GetItems purchase options");
+// GetItems answers one item per id it's asked about — a nonexistent, removed
+// or out-of-range one too (appid 0, or success 8: 5 kinds of id, 5 items,
+// seen live 2026-11-19). So a list short of the ids asked for is no answer: a
+// fact about the whole body, unlike any one item's contents (per row).
+export function itemsForEveryId(body: StoreItemsResponse, query: Record<string, unknown>): void {
+  const asked = (JSON.parse(String(query.input_json)) as { ids?: unknown[] }).ids?.length ?? 0;
+  const got = body.response?.store_items?.length ?? 0;
+  if (got === asked) return;
+  throw new ApiError({
+    code: "bad_response",
+    message: `GetItems answered ${got} items for ${asked} ids`,
+    retryable: true,
+  });
+}
+
+const purchaseEnvelopeRule = bodyRule(purchaseItemsInput, "GetItems purchase options");
+
+/** get_prices' batch: a list for every id; each item's fit is decided per row. */
+export function purchaseOptionsRule(
+  body: StoreItemsResponse,
+  query: Record<string, unknown>,
+): void {
+  purchaseEnvelopeRule(body);
+  itemsForEveryId(body, query);
+}
+
+/** get_game's one appid: its item is the whole answer, so one that doesn't
+ *  fit is an unusable body — never cached over a good correction. */
+export function gamePurchaseOptionsRule(
+  body: StoreItemsResponse,
+  query: Record<string, unknown>,
+): void {
+  purchaseOptionsRule(body, query);
+  if (summarizePurchasePrices(body).odd === 0) return;
+  throw new ApiError({
+    code: "bad_response",
+    message: "GetItems' purchase options for the one appid don't fit the price shape",
+    retryable: true,
+  });
+}
 
 // ---- IWishlistService/GetWishlistSortedFiltered (enriched wishlist) ----------
 

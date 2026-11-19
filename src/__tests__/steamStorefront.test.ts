@@ -13,7 +13,7 @@ import {
   installFetch,
   silentLogger,
 } from "./helpers.ts";
-import { APP, ENV, FEATURED, router } from "./steamFixtures.ts";
+import { APP, ENV, FEATURED, router, getItemsAnswer } from "./steamFixtures.ts";
 import { PRICES_MAX } from "../tools/common.ts";
 import { StorefrontClient } from "../clients/storefront.ts";
 import { loadConfig } from "../config.ts";
@@ -515,6 +515,9 @@ describe("get_prices", () => {
     // The degradation test (degradation.test.ts) fails a whole endpoint; this
     // is the partial case it can't reach — one of two appdetails chunks.
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      // GetItems answers an item per id asked (no price correction here).
+      if (url.includes("IStoreBrowseService/GetItems"))
+        return jsonResponse(getItemsAnswer(url, {}));
       const ids = new URL(url).searchParams.get("appids")?.split(",") ?? [];
       if (url.includes("/api/appdetails") && ids.includes("150"))
         return jsonResponse({}, { status: 503 });
@@ -612,6 +615,9 @@ describe("get_prices", () => {
     // the game: per row, that price is unknown and noted — never "not sold",
     // and the other 49 of its chunk still come through.
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
+      // GetItems answers an item per id asked (no price correction here).
+      if (url.includes("IStoreBrowseService/GetItems"))
+        return jsonResponse(getItemsAnswer(url, {}));
       const ids = new URL(url).searchParams.get("appids")?.split(",") ?? [];
       // The second chunk answers for all but one of its appids.
       if (url.includes("/api/appdetails") && ids.includes("150")) {
@@ -659,6 +665,7 @@ describe("get_prices", () => {
     installFetch(t, mock);
     const store = new StorefrontClient(loadConfig({}), silentLogger(), {
       getPurchasePrices: async () => ({}),
+      getGamePurchasePrice: async () => ({}),
     });
     assert.deepEqual(await store.getPrices([]), { count: 0, prices: [] });
     assert.equal(mock.calls.length, 0, "no chunks means no upstream call");
@@ -808,7 +815,9 @@ const TRAP_ITEMS = {
 function trapRouter(items: unknown = TRAP_ITEMS, itemsStatus = 200) {
   return (url: string) => {
     if (url.includes("IStoreBrowseService/GetItems"))
-      return jsonResponse(items, { status: itemsStatus });
+      return jsonResponse(itemsStatus === 200 ? getItemsAnswer(url, items) : items, {
+        status: itemsStatus,
+      });
     if (url.includes("/api/appdetails"))
       return jsonResponse({
         [String(TRAP_APPID)]: {
@@ -880,7 +889,9 @@ describe("price_overview correction", () => {
     });
     const base = trapRouter();
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("IStoreBrowseService/GetItems") ? jsonResponse(items()) : base(url),
+      url.includes("IStoreBrowseService/GetItems")
+        ? jsonResponse(getItemsAnswer(url, items()))
+        : base(url),
     );
     const pct = async () =>
       (
@@ -894,7 +905,8 @@ describe("price_overview correction", () => {
 
   test("get_prices corrects the amounts and keeps currency, is_free and available", async (t) => {
     const { client } = await setupServer(t, ENV, (url) => {
-      if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(TRAP_ITEMS);
+      if (url.includes("IStoreBrowseService/GetItems"))
+        return jsonResponse(getItemsAnswer(url, TRAP_ITEMS));
       if (url.includes("/api/appdetails"))
         return jsonResponse({
           [String(TRAP_APPID)]: { success: true, data: { price_overview: TRAP_PRICE_OVERVIEW } },
@@ -919,7 +931,8 @@ describe("price_overview correction", () => {
     // not invent a price for it — overridePrice() only corrects a row that
     // already has one, so the row stays priced:false.
     const { client } = await setupServer(t, ENV, (url) => {
-      if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(TRAP_ITEMS);
+      if (url.includes("IStoreBrowseService/GetItems"))
+        return jsonResponse(getItemsAnswer(url, TRAP_ITEMS));
       if (url.includes("/api/appdetails"))
         return jsonResponse({ [String(TRAP_APPID)]: { success: true, data: [] } });
       return jsonResponse({});
@@ -965,16 +978,18 @@ describe("price_overview correction", () => {
     // get_game reported a $19.99 game as free until the override outranked it.
     const { client } = await setupServer(t, ENV, (url) => {
       if (url.includes("IStoreBrowseService/GetItems"))
-        return jsonResponse({
-          response: {
-            store_items: [
-              {
-                appid: 518790,
-                best_purchase_option: { packageid: 121558, formatted_final_price: "$19.99" },
-              },
-            ],
-          },
-        });
+        return jsonResponse(
+          getItemsAnswer(url, {
+            response: {
+              store_items: [
+                {
+                  appid: 518790,
+                  best_purchase_option: { packageid: 121558, formatted_final_price: "$19.99" },
+                },
+              ],
+            },
+          }),
+        );
       if (url.includes("/api/appdetails"))
         return jsonResponse({
           "518790": {
@@ -1070,7 +1085,9 @@ describe("price_overview correction", () => {
   });
 
   test(`the price lookup chunks at ${PRICE_LOOKUP_CHUNK} appids`, async (t) => {
-    const { client, mock } = await setupServer(t, ENV, () => jsonResponse({}));
+    const { client, mock } = await setupServer(t, ENV, (url) =>
+      jsonResponse(url.includes("IStoreBrowseService/GetItems") ? getItemsAnswer(url, {}) : {}),
+    );
     const appids = Array.from({ length: PRICES_MAX }, (_, i) => i + 1);
     await client.callTool({ name: "get_prices", arguments: { appids } });
     const lookups = mock.calls.filter((c) => c.url.includes("IStoreBrowseService/GetItems"));

@@ -303,9 +303,9 @@ npm run inspector      # run under the MCP Inspector
   single source of truth, so the shaper and its `outputSchema` can't drift
   apart) — `.parse()` calls and schema imports belong only in `format/`, never
   in `clients/`. One deliberate exception: `summarizePurchasePrices` shapes a
-  Steam payload that only feeds a price correction, so it `safeParse`s and
-  throws a `bad_response` ApiError on a mismatch (Steam's unusable answer,
-  costing the correction) instead of `parse` (our bug, failing the call). Trim responses for token efficiency (cap big lists like a
+  Steam payload that only feeds a price correction, so it `safeParse`s each
+  item and row and counts the ones that don't fit (`odd`, noted by the client)
+  instead of `parse` (our bug, failing the call). Trim responses for token efficiency (cap big lists like a
   player's library, a game's achievements, or a friend list).
 - **Never use `z.date()`/`z.bigint()`/`z.nan()`/`.transform()`/`z.map()`/`z.set()`
   in a tool's `inputSchema`/`outputSchema`.** The SDK converts every registered

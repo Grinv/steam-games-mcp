@@ -13,7 +13,7 @@
 import { ApiError } from "../lib/errors.ts";
 import type { Answered, CallOptions, Endpoint, Query } from "../lib/endpoint.ts";
 import { Steam } from "./endpoints.ts";
-import { noteDegraded, optionalParts, orFailure } from "../lib/call.ts";
+import { noteDegraded, optional, optionalParts, orFailure } from "../lib/call.ts";
 import {
   computeFavoriteTagWeights,
   noGamesToRecommendFrom,
@@ -230,6 +230,10 @@ export interface RecommendationTags {
   tagMap: TagMap;
   excludeIds: number[];
 }
+
+const priceCheck = (n: number) =>
+  `Price check of ${n} appids against the store's purchase options ` +
+  "(the price shown may be an upgrade or bundle SKU's, not the game's)";
 
 export class StoreServiceClient {
   readonly #call: Call;
@@ -522,14 +526,13 @@ export class StoreServiceClient {
   // rather than failing the whole tool call — a gap noted for the model
   // (optionalParts) and logged by tools/guard.ts.
   //
-  // `cache` is for getGame only, whose appdetails entry is itself cached:
-  // get_prices and search_games fetch their Storefront rows fresh, and a cached
-  // correction laid over a fresh row would hide a sale that just started.
+  // Uncached: get_prices and search_games fetch their Storefront rows fresh,
+  // and a cached correction laid over a fresh row would hide a sale that just
+  // started. get_game's cached one is getGamePurchasePrice, below.
   async getPurchasePrices(
     appids: number[],
     country?: string,
     language?: string,
-    opts: { cache?: boolean } = {},
   ): Promise<PurchasePrices> {
     if (appids.length === 0) return {};
     const context = {
@@ -539,31 +542,22 @@ export class StoreServiceClient {
     const chunks: number[][] = [];
     for (let i = 0; i < appids.length; i += PRICE_LOOKUP_CHUNK)
       chunks.push(appids.slice(i, i + PRICE_LOOKUP_CHUNK));
-    // A body without a store_items list rejects like a failed request (the
+    // A list short of the ids asked for rejects like a failed request (the
     // endpoint's rule): it costs only this chunk's corrections. An item that
-    // doesn't fit the price shape costs only its own, noted. With `cache`, the
-    // request is cached (and served stale while Steam is down, so getGame's
-    // details keep their correction during an outage); a failure never is.
-    const what = (n: number) =>
-      `Price check of ${n} appids against the store's purchase options ` +
-      "(the price shown may be an upgrade or bundle SKU's, not the game's)";
+    // doesn't fit the price shape costs only its own, noted.
     const load = async (chunk: number[]) => {
       const { prices, odd } = summarizePurchasePrices(
-        await this.#call(
-          Steam.GetPurchaseOptions,
-          {
-            input_json: JSON.stringify({
-              ids: chunk.map((appid) => ({ appid })),
-              context,
-              data_request: { include_all_purchase_options: true },
-            }),
-          },
-          { cache: opts.cache },
-        ),
+        await this.#call(Steam.GetPurchaseOptions, {
+          input_json: JSON.stringify({
+            ids: chunk.map((appid) => ({ appid })),
+            context,
+            data_request: { include_all_purchase_options: true },
+          }),
+        }),
       );
       if (odd) {
         noteDegraded(
-          what(odd),
+          priceCheck(odd),
           new ApiError({
             code: "bad_response",
             message: `${odd} GetItems purchase-option items don't fit the price shape`,
@@ -577,8 +571,35 @@ export class StoreServiceClient {
     // Rejects only on a bug: the outer Promise.all in StorefrontClient.getPrices/
     // getGame would otherwise turn an enrichment's upstream failure into a
     // failed tool call.
-    const parts = optionalParts(settled, (i) => what(chunks[i]!.length));
+    const parts = optionalParts(settled, (i) => priceCheck(chunks[i]!.length));
     return Object.assign({}, ...parts) as PurchasePrices;
+  }
+
+  // get_game's correction for its one appid, cached like its appdetails entry
+  // (and served stale while Steam is down, so the details keep it during an
+  // outage). Its item is the whole answer (GamePurchaseOptions' rule): one that
+  // doesn't fit fails like a request — never cached over a good correction —
+  // and costs only the correction, noted.
+  async getGamePurchasePrice(
+    appid: number,
+    country?: string,
+    language?: string,
+  ): Promise<PurchasePrices> {
+    const body = await optional(
+      priceCheck(1),
+      this.#call(
+        Steam.GamePurchaseOptions,
+        {
+          input_json: JSON.stringify({
+            ids: [{ appid }],
+            context: { language: language ?? this.#l, country_code: country ?? this.#country },
+            data_request: { include_all_purchase_options: true },
+          }),
+        },
+        { cache: true },
+      ),
+    );
+    return body ? summarizePurchasePrices(body).prices : {};
   }
 
   // Personalized recommendations: derive weighted tag preferences from a

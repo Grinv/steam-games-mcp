@@ -372,10 +372,33 @@ export const TAGLIST = {
   },
 };
 
+/** GetItems answers one item per id it's asked, in that order (seen live):
+ *  `body`'s item for an id it has, else a cardless one (success 8), as Steam
+ *  sends for an id it has no card for. */
+export function getItemsAnswer(url: string, body: unknown): unknown {
+  const ids =
+    (
+      JSON.parse(new URL(url).searchParams.get("input_json") ?? "{}") as {
+        ids?: { appid: number }[];
+      }
+    ).ids ?? [];
+  const given =
+    (body as { response?: { store_items?: { appid?: number }[] } }).response?.store_items ?? [];
+  return {
+    ...(body as object),
+    response: {
+      ...(body as { response?: object }).response,
+      store_items: ids.map(
+        ({ appid }) => given.find((i) => i.appid === appid) ?? { appid, success: 8 },
+      ),
+    },
+  };
+}
+
 export function router(url: string) {
   if (url.includes("IStoreService/GetTagList")) return jsonResponse(TAGLIST);
   if (url.includes("IStoreQueryService/Query")) return jsonResponse(DISCOVER);
-  if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(ITEMS);
+  if (url.includes("IStoreBrowseService/GetItems")) return jsonResponse(getItemsAnswer(url, ITEMS));
   if (url.includes("IStoreQueryService/SearchSuggestions")) return jsonResponse(SUGGEST);
   if (url.includes("/api/appdetails")) {
     const id = /appids=(\d+)/.exec(url)?.[1] ?? "620";

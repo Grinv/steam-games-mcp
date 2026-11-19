@@ -15,7 +15,15 @@ import {
   textOf,
   assertNotShown,
 } from "./helpers.ts";
-import { ENV, FRIENDLIST, OWNED, PLAYERS, SCHEMA, router } from "./steamFixtures.ts";
+import {
+  ENV,
+  FRIENDLIST,
+  OWNED,
+  PLAYERS,
+  SCHEMA,
+  router,
+  getItemsAnswer,
+} from "./steamFixtures.ts";
 import { FRIENDS_CHECKED_MAX, FRIENDS_MAX } from "../format/web.ts";
 import { OWNED_GAMES_LIMIT_MAX } from "../tools/webPlayer.ts";
 
@@ -315,14 +323,16 @@ describe("get_recommended_games", () => {
       });
     }
     if (url.includes("IStoreBrowseService/GetItems")) {
-      return jsonResponse({
-        response: {
-          store_items: [
-            { appid: 10, visible: true, tags: [{ tagid: 1, weight: 900 }] },
-            { appid: 20, visible: true, tags: [{ tagid: 2, weight: 900 }] },
-          ],
-        },
-      });
+      return jsonResponse(
+        getItemsAnswer(url, {
+          response: {
+            store_items: [
+              { appid: 10, visible: true, tags: [{ tagid: 1, weight: 900 }] },
+              { appid: 20, visible: true, tags: [{ tagid: 2, weight: 900 }] },
+            ],
+          },
+        }),
+      );
     }
     if (url.includes("IStoreQueryService/Query")) {
       return jsonResponse({
@@ -544,7 +554,10 @@ describe("get_recommended_games", () => {
         return jsonResponse({ response: { tags: [{ tagid: 1, name: "Roguelike" }] } });
       }
       if (url.includes("IStoreBrowseService/GetItems")) {
-        return jsonResponse({ response: { store_items: [{ appid: 10, visible: true }] } }); // no tags
+        // no tags
+        return jsonResponse(
+          getItemsAnswer(url, { response: { store_items: [{ appid: 10, visible: true }] } }),
+        );
       }
       return jsonResponse({});
     });

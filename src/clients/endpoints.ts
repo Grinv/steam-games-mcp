@@ -54,6 +54,8 @@ import {
 } from "../format/webAchievements.ts";
 import {
   storeQueryRule,
+  gamePurchaseOptionsRule,
+  itemsForEveryId,
   purchaseOptionsRule,
   type SearchSuggestionsResponse,
   type StoreQueryResponse,
@@ -491,8 +493,10 @@ export const Steam = {
     path: "IStoreBrowseService/GetItems/v1/",
     host: "api",
     keyless: true,
-    absent:
-      "Decided per row (format/storeCard.ts shownHere): an item without visible is one Steam returned no card for (seen live).",
+    // A list short of the ids asked for is no answer; each item's own
+    // verdict is per row (format/storeCard.ts shownHere: an item without
+    // visible is one Steam returned no card for, seen live).
+    validate: itemsForEveryId,
     probes: [
       {
         query: { input_json: json({ ids: [{ appid: 620 }], context: ctx }) },
@@ -502,17 +506,37 @@ export const Steam = {
     ],
   }),
   // GetItems asked only for purchase options (data_request
-  // include_all_purchase_options), feeding a price correction: a body that
-  // doesn't fit the price shape fails like a request and is never cached.
-  // Retryable like every unusable body (it says nothing about the game), so
-  // a good cached correction answers it; otherwise it costs that chunk's
-  // correction, noted. Its own entry because the rule holds for that query's
-  // URL, not for every GetItems answer.
+  // include_all_purchase_options), feeding get_prices' price corrections: a
+  // list short of the ids asked for is no answer (retried, never cached); an
+  // item that doesn't fit the price shape costs its own correction, noted.
+  // Its own entry because the rule holds for that query, not every GetItems.
   GetPurchaseOptions: endpoint<StoreItemsResponse>({
     path: "IStoreBrowseService/GetItems/v1/",
     host: "api",
     keyless: true,
     validate: purchaseOptionsRule,
+    probes: [
+      {
+        query: {
+          input_json: json({
+            ids: [{ appid: 3717330 }],
+            context: ctx,
+            data_request: { include_all_purchase_options: true },
+          }),
+        },
+        expect: "data",
+        shows: "purchase options that fit the price shape",
+      },
+    ],
+  }),
+  // The same query for get_game's one appid, cached: its item is the whole
+  // answer, so one that doesn't fit is unusable (a good cached correction
+  // answers it), never cached over a good one.
+  GamePurchaseOptions: endpoint<StoreItemsResponse>({
+    path: "IStoreBrowseService/GetItems/v1/",
+    host: "api",
+    keyless: true,
+    validate: gamePurchaseOptionsRule,
     probes: [
       {
         query: {

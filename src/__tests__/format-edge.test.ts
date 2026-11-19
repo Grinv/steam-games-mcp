@@ -26,6 +26,8 @@ import {
   GAME_SCHEMA_ACHIEVEMENTS_MAX,
 } from "../format/webAchievements.ts";
 import {
+  gamePurchaseOptionsRule,
+  itemsForEveryId,
   purchaseOptionsRule,
   summarizePurchasePrices,
   summarizeItems,
@@ -407,7 +409,10 @@ describe("summarizePurchasePrices", () => {
   // good cached correction stands in for it).
   test("a store_items that isn't a list is Steam's unusable answer", () => {
     assert.throws(
-      () => purchaseOptionsRule({ response: { store_items: {} } }),
+      () =>
+        purchaseOptionsRule({ response: { store_items: {} } } as never, {
+          input_json: JSON.stringify({ ids: [{ appid: 1 }] }),
+        }),
       (err: unknown) => err instanceof ApiError && err.code === "bad_response" && err.retryable,
     );
   });
@@ -872,5 +877,25 @@ describe("body rules held to what was seen", () => {
     assert.doesNotThrow(() =>
       vanityRule({ response: { success: 1, steamid: "76561197960287930" } }),
     );
+  });
+});
+
+describe("GetItems' list must account for every id asked", () => {
+  const q = (ids: number[]) => ({
+    input_json: JSON.stringify({ ids: ids.map((appid) => ({ appid })) }),
+  });
+  // One item per id, even an unknown one (seen live): a short list is no answer.
+  test("an answer short of the ids asked for is unusable, a full one passes", () => {
+    assert.throws(() => itemsForEveryId({ response: {} }, q([620, 570])), /2 ids/);
+    assert.doesNotThrow(() =>
+      itemsForEveryId({ response: { store_items: [{ appid: 620 }, { appid: 0 }] } }, q([620, 9])),
+    );
+  });
+  // get_game's one appid: its item is the whole answer, so one that doesn't fit
+  // is unusable — never cached over a good correction.
+  test("get_game's one item that doesn't fit the price shape is unusable", () => {
+    const odd = { response: { store_items: [{ appid: 1, purchase_options: {} }] } };
+    assert.throws(() => gamePurchaseOptionsRule(odd as never, q([1])), ApiError);
+    assert.doesNotThrow(() => purchaseOptionsRule(odd as never, q([1])));
   });
 });
