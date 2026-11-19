@@ -178,12 +178,16 @@ export const Steam = {
     path: "IPlayerService/GetSteamLevel/v1/",
     host: "api",
     keyless: false,
+    absent:
+      "No player_level: the level is unknown (null); {} is what a profile that hides it gets (seen live).",
     probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
   }),
   GetOwnedGames: endpoint<OwnedGamesResponse>({
     path: "IPlayerService/GetOwnedGames/v1/",
     host: "api",
     keyless: false,
+    absent:
+      "{} (neither games nor game_count) is Steam not showing the library (seen live on private game details); a public empty one is {game_count:0}.",
     probes: [
       { query: { steamid: PUBLIC }, expect: "data", shows: "a public library" },
       invalidSteamidProbe({ steamid: ACCOUNT_0 }),
@@ -194,6 +198,8 @@ export const Steam = {
     path: "IPlayerService/GetRecentlyPlayedGames/v1/",
     host: "api",
     keyless: false,
+    absent:
+      "{} is Steam not showing the list, for private and some public profiles alike (seen live), so worded as not shown; a public quiet one is {total_count:0}.",
     probes: [
       invalidSteamidProbe({ steamid: ACCOUNT_0, count: 1 }),
       badKeyProbe({ steamid: PUBLIC, count: 1 }),
@@ -366,6 +372,7 @@ export const Steam = {
     path: "ISteamNews/GetNewsForApp/v2/",
     host: "api",
     keyless: true,
+    validate: (body) => requireField(Array.isArray(body.appnews?.newsitems), "appnews.newsitems"),
     answers: { 403: "unknown_appid" },
     probes: [
       { query: { appid: 620, count: 1 }, expect: "data", shows: "news" },
@@ -381,6 +388,8 @@ export const Steam = {
     path: "IUserReviewsService/GetAppReviews/v1/",
     host: "api",
     keyless: true,
+    absent:
+      "{} is Steam's answer for an unknown appid (seen live): every summary field reads unknown (null).",
     probes: [
       {
         query: { input_json: json({ appid: 620, num_per_page: 1 }) },
@@ -393,24 +402,32 @@ export const Steam = {
     path: "IWishlistService/GetWishlist/v1/",
     host: "api",
     keyless: true,
+    absent:
+      "{} is Steam's answer for a private and an empty wishlist alike (seen live), worded as not shown.",
     probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
   }),
   GetWishlistSortedFiltered: endpoint<WishlistDetailedResponse>({
     path: "IWishlistService/GetWishlistSortedFiltered/v1/",
     host: "api",
     keyless: true,
+    absent:
+      "{} is Steam's answer when its filters match nothing (seen live: min_discount 100); the wishlist's size comes from GetWishlist.",
     probes: [invalidSteamidProbe({ input_json: json({ steamid: ACCOUNT_0 }) })],
   }),
   GetGamesFollowed: endpoint<FollowedGamesResponse>({
     path: "IStoreService/GetGamesFollowed/v1/",
     host: "api",
     keyless: true,
+    absent:
+      "{} is Steam not showing the follows, or there being none (seen live), worded as not shown.",
     probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
   }),
   GetGamesFollowedCount: endpoint<FollowedGamesCountResponse>({
     path: "IStoreService/GetGamesFollowedCount/v1/",
     host: "api",
     keyless: true,
+    absent:
+      "{} is Steam's answer for hidden follows (seen live 2026-11-19); the list's own length stands in.",
     probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
   }),
   // Every Steam language has a full dictionary (446 tags each, 2026-11-18),
@@ -441,6 +458,8 @@ export const Steam = {
     path: "IStoreBrowseService/GetItems/v1/",
     host: "api",
     keyless: true,
+    absent:
+      "Decided per row (format/storeCard.ts shownHere): an item without visible is one Steam returned no card for (seen live).",
     probes: [
       {
         query: { input_json: json({ ids: [{ appid: 620 }], context: ctx }) },
@@ -479,6 +498,13 @@ export const Steam = {
     path: "IStoreQueryService/Query/v1/",
     host: "api",
     keyless: true,
+    // No store_items with a total of 0 is Steam's "none" (seen live); the
+    // total is on every answer.
+    validate: (body) =>
+      requireField(
+        typeof body.response?.metadata?.total_matching_records === "number",
+        "metadata.total_matching_records",
+      ),
     probes: [
       {
         query: { input_json: json({ query: { count: 1 }, context: ctx }) },
@@ -491,6 +517,7 @@ export const Steam = {
     path: "IStoreQueryService/SearchSuggestions/v1/",
     host: "api",
     keyless: true,
+    absent: 'No store_items is Steam\'s no-match (seen live: metadata only, for "zzqxqx").',
     probes: [
       {
         query: { input_json: json({ search_term: "portal", max_results: 1, context: ctx }) },
@@ -503,6 +530,7 @@ export const Steam = {
     path: "IStoreTopSellersService/GetWeeklyTopSellers/v1/",
     host: "api",
     keyless: true,
+    validate: (body) => requireField(Array.isArray(body.response?.ranks), "response.ranks"),
     probes: [
       {
         query: { input_json: json({ context: ctx, page_count: 1 }) },
@@ -515,6 +543,7 @@ export const Steam = {
     path: "ISteamChartsService/GetMostPlayedSteamDeckGames/v1/",
     host: "api",
     keyless: true,
+    validate: (body) => requireField(Array.isArray(body.response?.ranks), "response.ranks"),
     probes: [
       {
         query: { input_json: json({ context: ctx, top_played_period: 1, count: 1 }) },
@@ -527,12 +556,14 @@ export const Steam = {
     path: "ISteamChartsService/GetMostPlayedGames/v1/",
     host: "api",
     keyless: true,
+    validate: (body) => requireField(Array.isArray(body.response?.ranks), "response.ranks"),
     probes: [{ query: { input_json: json({ context: ctx }) }, expect: "data", shows: "a chart" }],
   }),
   GetGamesByConcurrentPlayers: endpoint<ConcurrentPlayersResponse>({
     path: "ISteamChartsService/GetGamesByConcurrentPlayers/v1/",
     host: "api",
     keyless: true,
+    validate: (body) => requireField(Array.isArray(body.response?.ranks), "response.ranks"),
     probes: [{ query: { input_json: json({ context: ctx }) }, expect: "data", shows: "a chart" }],
   }),
 
@@ -544,6 +575,8 @@ export const Steam = {
     path: "api/appdetails",
     host: "store",
     keyless: true,
+    absent:
+      "Decided per row: an entry without success is that price's available:null, noted (clients/storefront.ts).",
     probes: [
       {
         query: { appids: "620,99999999", filters: "price_overview" },
@@ -570,12 +603,26 @@ export const Steam = {
     path: "appreviewhistogram/{appid}",
     host: "store",
     keyless: true,
+    // results with success 1 on every answer, an unknown appid's too (its
+    // rollups absent: none, seen live).
+    validate: (body) =>
+      requireField(
+        body.success === 1 && typeof body.results === "object" && body.results !== null,
+        "success 1 and results",
+      ),
     probes: [{ query: { appid: 620, l: "english" }, expect: "data", shows: "a histogram" }],
   }),
   FeaturedCategories: endpoint<FeaturedResponse>({
     path: "api/featuredcategories",
     host: "store",
     keyless: true,
+    validate: (body) =>
+      requireField(
+        (["specials", "coming_soon", "top_sellers", "new_releases"] as const).every((k) =>
+          Array.isArray(body[k]?.items),
+        ),
+        "the four sections' items",
+      ),
     probes: [{ query: { cc: "US" }, expect: "data", shows: "store sections" }],
   }),
 };

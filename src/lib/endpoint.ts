@@ -48,6 +48,12 @@ export interface Endpoint<T, A extends string = never> {
   /** Throws an ApiError when a 200's body isn't usable data for this query.
    *  Runs before caching and inside the retry, like a failed request. */
   validate?: (body: T, query: Query) => void;
+  /** Without a body rule: what an absent field means here, and the evidence
+   *  — Steam's own answer for "none" (seen live), or a per-row unknown.
+   *  Every field of a response type is optional, so each endpoint states one
+   *  or the other (recorded.test.ts): an absence nobody decided would read as
+   *  a verdict by default. */
+  absent?: string;
   probes: readonly Probe[];
 }
 

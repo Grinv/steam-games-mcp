@@ -202,7 +202,11 @@ npm run inspector      # run under the MCP Inspector
   back with no `visible`) must not cost the batch. One path can be both, as two
   endpoints: appdetails for `get_game`'s one appid (`GameDetails`, a body
   rule) and for `get_prices`' batch (`AppDetails`, a per-row `available:null`,
-  noted) — the rule is the query's, never inferred from it. Hand-written error bodies stay only in tests of the
+  noted) — the rule is the query's, never inferred from it. Every endpoint
+  declares one or the other — a body rule, or `absent`: what a missing field
+  means there (Steam's own "none" seen live, or a per-row unknown) — and
+  `recorded.test.ts` fails on one that declares neither, so the rule's reach
+  is checked, not remembered. Hand-written error bodies stay only in tests of the
   generic pipeline (`lib/` behaviour on any status), never as "what Steam
   answers here": that is how the 403 fixture above, a bad key "401 on all of
   IPlayerService" (only GetOwnedGames is) and an invented accountid-0 page

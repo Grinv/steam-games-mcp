@@ -13,7 +13,7 @@ import {
   installFetch,
   silentLogger,
 } from "./helpers.ts";
-import { APP, ENV, router } from "./steamFixtures.ts";
+import { APP, ENV, FEATURED, router } from "./steamFixtures.ts";
 import { PRICES_MAX } from "../tools/common.ts";
 import { StorefrontClient } from "../clients/storefront.ts";
 import { loadConfig } from "../config.ts";
@@ -380,7 +380,7 @@ test("get_specials lists discounted games with formatted prices, deduping repeat
   assert.equal(s.specials[0]!.final_price, "1.99 USD");
 });
 
-test("get_featured returns all four store sections, defaulting missing ones to empty", async (t) => {
+test("get_featured returns all four store sections", async (t) => {
   const { client } = await setupServer(t, ENV, router);
   const res = await client.callTool({ name: "get_featured", arguments: {} });
   const s = res.structuredContent as {
@@ -393,10 +393,20 @@ test("get_featured returns all four store sections, defaulting missing ones to e
   assert.equal(s.specials[0]!.appid, 620);
   assert.equal(s.specials[0]!.discount_percent, 80);
   assert.deepEqual(s.top_sellers, []);
-  // The FEATURED fixture has no new_releases/coming_soon keys at all — proving
-  // an absent section degrades to [] rather than throwing/undefined.
   assert.deepEqual(s.new_releases, []);
   assert.deepEqual(s.coming_soon, []);
+});
+
+// All four sections come on every answer (seen live): a missing one is an
+// unusable answer, not an empty section.
+test("get_featured: an answer without one of its sections is unusable", async (t) => {
+  const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+    url.includes("/api/featuredcategories")
+      ? jsonResponse({ specials: { items: [] } })
+      : router(url),
+  );
+  const res = await client.callTool({ name: "get_featured", arguments: {} });
+  assertToolError(res, /unusable/);
 });
 
 test("get_featured drops bundle entries, whose id isn't an appid", async (t) => {
@@ -406,6 +416,7 @@ test("get_featured drops bundle entries, whose id isn't an appid", async (t) => 
   const { client } = await setupServer(t, ENV, (url) =>
     url.includes("/api/featuredcategories")
       ? jsonResponse({
+          ...FEATURED,
           top_sellers: {
             items: [
               { id: 620, type: 0, name: "Portal 2", final_price: 999, currency: "USD" },

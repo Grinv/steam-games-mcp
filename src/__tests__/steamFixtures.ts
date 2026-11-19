@@ -98,7 +98,10 @@ export const FEATURED = {
       },
     ],
   },
+  // Steam sends all four sections on every answer (seen live); empty here.
   top_sellers: { items: [] },
+  new_releases: { items: [] },
+  coming_soon: { items: [] },
 };
 export const NEWS = {
   appnews: {
@@ -395,6 +398,9 @@ export function router(url: string) {
   if (url.includes("GetRecentlyPlayedGames")) return jsonResponse(OWNED);
   if (url.includes("GetPlayerAchievements")) return jsonResponse(ACHIEVEMENTS);
   if (url.includes("ResolveVanityURL")) return jsonResponse(VANITY);
+  // Every chart answers with its ranks list (seen live); empty here.
+  if (/ISteamChartsService|IStoreTopSellersService/.test(url))
+    return jsonResponse({ response: { ranks: [] } });
   return jsonResponse({});
 }
 

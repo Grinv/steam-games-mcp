@@ -580,6 +580,8 @@ describe("bundle prices", () => {
   const OWN = { packageid: 782856, formatted_final_price: "$49.99", discount_pct: 0 };
   const card = (purchase_options: unknown[]) => ({
     response: {
+      // Query's total is on every answer (seen live); GetItems ignores it.
+      metadata: { total_matching_records: 1 },
       store_items: [
         {
           appid: 2186680,

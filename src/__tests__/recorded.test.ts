@@ -80,3 +80,12 @@ test("every answer an endpoint declares is backed by a recorded situation with t
   }
   assert.deepEqual(unbacked, []);
 });
+
+test("every endpoint either has a body rule or says what an absent field means", () => {
+  // Every field of a response type is optional: an absence nobody decided
+  // reads as a verdict by default ("no such app", "0 friends", "empty").
+  const undecided = Object.entries(Steam)
+    .filter(([, ep]) => !("validate" in ep && ep.validate) && !("absent" in ep && ep.absent))
+    .map(([name]) => name);
+  assert.deepEqual(undecided, []);
+});
