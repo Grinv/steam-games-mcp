@@ -10,46 +10,65 @@
 // profile; 76561197960435530 a profile with private game details;
 // 76561198028121353 a public profile; 76561199999999999 no such account.
 import { endpoint } from "../lib/endpoint.ts";
-import type {
-  CurrentPlayersResponse,
-  FollowedGamesCountResponse,
-  FollowedGamesResponse,
-  FriendListResponse,
-  NewsResponse,
-  OwnedGamesResponse,
-  PlayerBansResponse,
-  PlayerSummariesResponse,
-  RecentlyPlayedResponse,
-  ReviewsResponse,
-  SteamLevelResponse,
-  VanityResponse,
-  WishlistResponse,
+import {
+  currentPlayersRule,
+  friendListRule,
+  newsRule,
+  playerBansRule,
+  playerSummariesRule,
+  vanityRule,
+  type CurrentPlayersResponse,
+  type FollowedGamesCountResponse,
+  type FollowedGamesResponse,
+  type FriendListResponse,
+  type NewsResponse,
+  type OwnedGamesResponse,
+  type PlayerBansResponse,
+  type PlayerSummariesResponse,
+  type RecentlyPlayedResponse,
+  type ReviewsResponse,
+  type SteamLevelResponse,
+  type VanityResponse,
+  type WishlistResponse,
 } from "../format/web.ts";
-import { RESULT_NO_MATCH, RESULT_OK } from "../format/web.ts";
-import type {
-  GameSchemaResponse,
-  GlobalAchievementsResponse,
-  PlayerAchievementsResponse,
+import {
+  gameSchemaRule,
+  globalAchievementsRule,
+  playerAchievementsRule,
+  type GameSchemaResponse,
+  type GlobalAchievementsResponse,
+  type PlayerAchievementsResponse,
 } from "../format/webAchievements.ts";
-import type {
-  SearchSuggestionsResponse,
-  StoreQueryResponse,
-  WishlistDetailedResponse,
+import {
+  storeQueryRule,
+  summarizePurchasePrices,
+  type SearchSuggestionsResponse,
+  type StoreQueryResponse,
+  type WishlistDetailedResponse,
 } from "../format/store.ts";
 import {
   summarizeTagList,
   type GetTagListResponse,
   type StoreItemsResponse,
 } from "../format/storeCard.ts";
-import { summarizePurchasePrices } from "../format/store.ts";
-import type {
-  ConcurrentPlayersResponse,
-  DeckMostPlayedResponse,
-  MostPlayedResponse,
-  TopSellersResponse,
+import {
+  concurrentPlayersRule,
+  deckMostPlayedRule,
+  mostPlayedRule,
+  topSellersRule,
+  type ConcurrentPlayersResponse,
+  type DeckMostPlayedResponse,
+  type MostPlayedResponse,
+  type TopSellersResponse,
 } from "../format/charts.ts";
-import type { FeaturedResponse, ReviewHistogramResponse, StoreApp } from "../format/storefront.ts";
-import { usableAppEntry } from "../format/storefront.ts";
+import {
+  appEntryRule,
+  featuredRule,
+  reviewHistogramRule,
+  type FeaturedResponse,
+  type ReviewHistogramResponse,
+  type StoreApp,
+} from "../format/storefront.ts";
 import { ApiError } from "../lib/errors.ts";
 
 const PUBLIC = "76561198028121353";
@@ -61,16 +80,13 @@ const ACCOUNT_0 = "76561197960265728";
 const json = (o: unknown) => JSON.stringify(o);
 const ctx = { language: "english", country_code: "US" };
 
-// A field a whole-body verdict is read from must be in the body: absent, it
-// would turn into one by default ("no such app", "no achievements"). Each is
-// sent on every answer seen live (2026-11-19); a body without it is unusable,
-// never a verdict. A fact about one item of a batch is decided per row
-// instead (format/'s shownHere, a profile's visibility): one odd item must
-// not cost the rest.
-function requireField(present: boolean, what: string): void {
-  if (present) return;
-  throw new ApiError({ code: "bad_response", message: `the body has no ${what}`, retryable: true });
-}
+// A body rule is the response's input schema (format/*.schemas.ts, via
+// bodyRule): a field a whole-body verdict is read from is required there, as
+// it would otherwise turn into one by default ("no such app", "no
+// achievements"). Each is sent on every answer seen live (2026-11-19); a body
+// without it is unusable, never a verdict. A fact about one item of a batch is
+// decided per row instead (format/'s shownHere, a profile's visibility): one
+// odd item must not cost the rest.
 
 // accountid 0 names no account: Steam answers it with a 400 HTML page on
 // every player endpoint keyed on one SteamID64. The tools refuse it before
@@ -127,11 +143,7 @@ export const Steam = {
     path: "ISteamUser/ResolveVanityURL/v1/",
     host: "api",
     keyless: false,
-    validate: (body) => {
-      const r = body.response;
-      const answered = (r?.success === RESULT_OK && !!r.steamid) || r?.success === RESULT_NO_MATCH;
-      requireField(answered, `a success of 1 (with a steamid) or 42, not ${r?.success}`);
-    },
+    validate: vanityRule,
     probes: [
       { query: { vanityurl: "gabelogannewell" }, expect: "data", shows: "resolves" },
       {
@@ -147,7 +159,7 @@ export const Steam = {
     host: "api",
     keyless: false,
     // An empty list is "no such account"; no list at all is no answer.
-    validate: (body) => requireField(Array.isArray(body.response?.players), "response.players"),
+    validate: playerSummariesRule,
     probes: [
       { query: { steamids: PUBLIC }, expect: "data", shows: "a public profile" },
       badKeyProbe({ steamids: PUBLIC }),
@@ -164,7 +176,7 @@ export const Steam = {
     path: "ISteamUser/GetPlayerBans/v1/",
     host: "api",
     keyless: false,
-    validate: (body) => requireField(Array.isArray(body.players), "players"),
+    validate: playerBansRule,
     probes: [
       {
         query: { steamids: ACCOUNT_0 },
@@ -215,11 +227,7 @@ export const Steam = {
     // `friendslist` is on every 200 seen; its `friends` was an array on all 9
     // sampled, but no public list without friends was seen, so an absent one
     // reads as none (protobuf-backed APIs omit an empty repeated field).
-    validate: (body) =>
-      requireField(
-        typeof body.friendslist === "object" && body.friendslist !== null,
-        "friendslist",
-      ),
+    validate: friendListRule,
     answers: {
       401: "not_shown",
       404: "not_shown",
@@ -255,8 +263,7 @@ export const Steam = {
     host: "api",
     keyless: false,
     answers: { 403: "not_shown", 400: "no_stats" },
-    validate: (body) =>
-      requireField(typeof body.playerstats?.success === "boolean", "playerstats.success"),
+    validate: playerAchievementsRule,
     probes: [
       badKeyProbe({ steamid: PUBLIC, appid: 620 }),
       {
@@ -297,7 +304,7 @@ export const Steam = {
     answers: { 400: "no_schema" },
     // `game` is {} for an app without a schema ({"game":{}}, recorded); absent,
     // "no achievements" would be a guess.
-    validate: (body) => requireField(typeof body.game === "object" && body.game !== null, "game"),
+    validate: gameSchemaRule,
     probes: [
       {
         query: { appid: 1206340 },
@@ -325,8 +332,7 @@ export const Steam = {
     host: "api",
     keyless: true,
     answers: { 403: "no_data" },
-    validate: (body) =>
-      requireField(Array.isArray(body.achievementpercentages?.achievements), "achievements"),
+    validate: globalAchievementsRule,
     probes: [
       { query: { gameid: 620 }, expect: "data", shows: "a game with achievements" },
       {
@@ -357,7 +363,7 @@ export const Steam = {
     answers: { 404: "no_app" },
     // On a 200, result 1 (seen on every app); "no such app" is the 404 with 42.
     // Any other result says nothing established: unusable, not "no such app".
-    validate: (body) => requireField(body.response?.result === 1, "a result of 1"),
+    validate: currentPlayersRule,
     probes: [
       { query: { appid: 620 }, expect: "data", shows: "a live count" },
       {
@@ -372,7 +378,7 @@ export const Steam = {
     path: "ISteamNews/GetNewsForApp/v2/",
     host: "api",
     keyless: true,
-    validate: (body) => requireField(Array.isArray(body.appnews?.newsitems), "appnews.newsitems"),
+    validate: newsRule,
     answers: { 403: "unknown_appid" },
     probes: [
       { query: { appid: 620, count: 1 }, expect: "data", shows: "news" },
@@ -437,11 +443,14 @@ export const Steam = {
     path: "IStoreService/GetTagList/v1/",
     host: "api",
     keyless: true,
-    validate: (body, query) =>
-      requireField(
-        Object.keys(summarizeTagList(body)).length > 0,
-        `tags for language "${query.language}"`,
-      ),
+    validate: (body, query) => {
+      if (Object.keys(summarizeTagList(body)).length > 0) return;
+      throw new ApiError({
+        code: "bad_response",
+        message: `the body has no tags for language "${query.language}"`,
+        retryable: true,
+      });
+    },
     probes: [
       { query: { language: "english" }, expect: "data", shows: "a dictionary" },
       {
@@ -500,11 +509,7 @@ export const Steam = {
     keyless: true,
     // No store_items with a total of 0 is Steam's "none" (seen live); the
     // total is on every answer.
-    validate: (body) =>
-      requireField(
-        typeof body.response?.metadata?.total_matching_records === "number",
-        "metadata.total_matching_records",
-      ),
+    validate: storeQueryRule,
     probes: [
       {
         query: { input_json: json({ query: { count: 1 }, context: ctx }) },
@@ -530,7 +535,7 @@ export const Steam = {
     path: "IStoreTopSellersService/GetWeeklyTopSellers/v1/",
     host: "api",
     keyless: true,
-    validate: (body) => requireField(Array.isArray(body.response?.ranks), "response.ranks"),
+    validate: topSellersRule,
     probes: [
       {
         query: { input_json: json({ context: ctx, page_count: 1 }) },
@@ -543,7 +548,7 @@ export const Steam = {
     path: "ISteamChartsService/GetMostPlayedSteamDeckGames/v1/",
     host: "api",
     keyless: true,
-    validate: (body) => requireField(Array.isArray(body.response?.ranks), "response.ranks"),
+    validate: deckMostPlayedRule,
     probes: [
       {
         query: { input_json: json({ context: ctx, top_played_period: 1, count: 1 }) },
@@ -556,20 +561,20 @@ export const Steam = {
     path: "ISteamChartsService/GetMostPlayedGames/v1/",
     host: "api",
     keyless: true,
-    validate: (body) => requireField(Array.isArray(body.response?.ranks), "response.ranks"),
+    validate: mostPlayedRule,
     probes: [{ query: { input_json: json({ context: ctx }) }, expect: "data", shows: "a chart" }],
   }),
   GetGamesByConcurrentPlayers: endpoint<ConcurrentPlayersResponse>({
     path: "ISteamChartsService/GetGamesByConcurrentPlayers/v1/",
     host: "api",
     keyless: true,
-    validate: (body) => requireField(Array.isArray(body.response?.ranks), "response.ranks"),
+    validate: concurrentPlayersRule,
     probes: [{ query: { input_json: json({ context: ctx }) }, expect: "data", shows: "a chart" }],
   }),
 
   // ---- store.steampowered.com (keyless) -------------------------------------
   // appdetails answers every appid it's asked about with an entry carrying a
-  // boolean `success` (usableAppEntry). A batch (get_prices) decides that per
+  // boolean `success` (format/'s appEntryInput). A batch (get_prices) decides that per
   // row: one odd entry costs its own price, noted, not the chunk's hundred.
   AppDetails: endpoint<AppDetailsResponse>({
     path: "api/appdetails",
@@ -592,8 +597,7 @@ export const Steam = {
     path: "api/appdetails",
     host: "store",
     keyless: true,
-    validate: (body, query) =>
-      requireField(usableAppEntry(body[String(query.appids)]), `an entry for ${query.appids}`),
+    validate: (body, query) => appEntryRule(body[String(query.appids)]),
     probes: [
       { query: { appids: 620 }, expect: "data", shows: "a game's entry" },
       { query: { appids: 99999999 }, expect: "data", shows: "{success:false} for no such app" },
@@ -605,24 +609,14 @@ export const Steam = {
     keyless: true,
     // results with success 1 on every answer, an unknown appid's too (its
     // rollups absent: none, seen live).
-    validate: (body) =>
-      requireField(
-        body.success === 1 && typeof body.results === "object" && body.results !== null,
-        "success 1 and results",
-      ),
+    validate: reviewHistogramRule,
     probes: [{ query: { appid: 620, l: "english" }, expect: "data", shows: "a histogram" }],
   }),
   FeaturedCategories: endpoint<FeaturedResponse>({
     path: "api/featuredcategories",
     host: "store",
     keyless: true,
-    validate: (body) =>
-      requireField(
-        (["specials", "coming_soon", "top_sellers", "new_releases"] as const).every((k) =>
-          Array.isArray(body[k]?.items),
-        ),
-        "the four sections' items",
-      ),
+    validate: featuredRule,
     probes: [{ query: { cc: "US" }, expect: "data", shows: "store sections" }],
   }),
 };

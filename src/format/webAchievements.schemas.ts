@@ -5,6 +5,7 @@
 // via `schema.parse({...})`, so the schema is the single source of truth for
 // its shape. `z.strictObject()` throughout.
 import { z } from "zod";
+import { unchecked } from "./shared.ts";
 
 // The `game` caveat below is the same one getGameAchievementsOutput carries:
 // both fields are populated from Valve's achievement schema (playerstats.gameName
@@ -67,4 +68,47 @@ export const getGameAchievementsOutput = z.strictObject({
       global_unlock_pct: z.number().nullable(),
     }),
   ),
+});
+
+// ---- Steam's answers (input) -------------------------------------------------
+// Body rules, as in web.schemas.ts: the response types in webAchievements.ts
+// are inferred from these. Only the required fields are checked.
+
+interface PlayerAchievement {
+  apiname?: string;
+  name?: string;
+  achieved?: number;
+  unlocktime?: number;
+}
+export const playerAchievementsInput = z.looseObject({
+  playerstats: z.looseObject({
+    success: z.boolean(),
+    error: unchecked<string>().optional(),
+    gameName: unchecked<string>().optional(),
+    achievements: unchecked<PlayerAchievement[]>().optional(),
+  }),
+});
+
+interface GlobalAchievement {
+  name?: string;
+  percent?: number | string;
+}
+export const globalAchievementsInput = z.looseObject({
+  achievementpercentages: z.looseObject({ achievements: z.array(unchecked<GlobalAchievement>()) }),
+});
+
+interface GameStats {
+  achievements?: {
+    name?: string; // internal apiname
+    displayName?: string;
+    description?: string;
+    hidden?: number;
+    icon?: string;
+  }[];
+}
+export const gameSchemaInput = z.looseObject({
+  game: z.looseObject({
+    gameName: unchecked<string>().optional(),
+    availableGameStats: unchecked<GameStats>().optional(),
+  }),
 });

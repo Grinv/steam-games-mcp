@@ -11,9 +11,11 @@
 
 import { z } from "zod";
 import type { PurchasePrices } from "./store.ts";
-import { capList, isoDay, money, names, storeUrl, stripHtml } from "./shared.ts";
+import { bodyRule, capList, isoDay, money, names, storeUrl, stripHtml } from "./shared.ts";
 import {
+  appEntryInput,
   detailPriceSchema,
+  featuredInput,
   featuredItemSchema,
   getFeaturedOutput,
   getGameOutput,
@@ -21,6 +23,7 @@ import {
   getReviewHistogramOutput,
   getSpecialsOutput,
   priceFieldsSchema,
+  reviewHistogramInput,
   rollupSchema,
 } from "./storefront.schemas.ts";
 
@@ -225,14 +228,12 @@ export type PriceDetailsResponse = Record<
 // get_featured's "0.00 USD"; featuredItemSchema's final_price documents it too.
 // get_items reads IStoreBrowseService, which carries a real is_free flag.
 
-/** An appdetails entry Steam answered: an object with a boolean `success`.
- *  It answers every appid it's asked about, a nonexistent, removed or
- *  region-locked one included ({success:false}; all seen live 2026-11-19). */
-export function usableAppEntry(e: unknown): boolean {
-  return (
-    typeof e === "object" && e !== null && typeof (e as { success?: unknown }).success === "boolean"
-  );
-}
+/** An appdetails entry Steam answered: an object with a boolean `success`
+ *  (appEntryInput). It answers every appid it's asked about, a nonexistent,
+ *  removed or region-locked one included ({success:false}; all seen live
+ *  2026-11-19). Per row for a batch; get_game's one entry is a body rule. */
+export const usableAppEntry = (e: unknown): boolean => appEntryInput.safeParse(e).success;
+export const appEntryRule = bodyRule(appEntryInput, "appdetails' entry for the appid");
 
 export function summarizePrices(
   merged: PriceDetailsResponse,
@@ -260,27 +261,9 @@ export function summarizePrices(
 
 // ---- Storefront: featuredcategories -----------------------------------------
 
-interface FeaturedItem {
-  id?: number;
-  // 0 = app. top_sellers also carries bundles (type 2, verified live
-  // 2026-10-03: id 72233 is "Destiny 2: The Collection", a /bundle/ page whose
-  // /app/ URL redirects to the store front), where `id` is a bundle id.
-  type?: number;
-  name?: string;
-  discounted?: boolean;
-  discount_percent?: number;
-  // Explicitly nullable: Steam sends `original_price: null` (not an absent key)
-  // for anything with no price yet — every coming_soon entry, verified live.
-  original_price?: number | null;
-  final_price?: number;
-  currency?: string;
-}
-export interface FeaturedResponse {
-  specials?: { items?: FeaturedItem[] };
-  top_sellers?: { items?: FeaturedItem[] };
-  new_releases?: { items?: FeaturedItem[] };
-  coming_soon?: { items?: FeaturedItem[] };
-}
+export type FeaturedResponse = z.infer<typeof featuredInput>;
+export const featuredRule = bodyRule(featuredInput, "featuredcategories");
+type FeaturedItem = FeaturedResponse["specials"]["items"][number];
 
 // Not `.parse()`d per item — see formattedPrice()'s comment; the enclosing
 // summarizeFeatured()/summarizeSpecials() validates the whole result once.
@@ -335,15 +318,9 @@ export function summarizeSpecials(r: FeaturedResponse): z.infer<typeof getSpecia
 
 // ---- Storefront: review histogram -------------------------------------------
 
-interface Rollup {
-  date?: number;
-  recommendations_up?: number;
-  recommendations_down?: number;
-}
-export interface ReviewHistogramResponse {
-  success?: number;
-  results?: { rollup_type?: string; rollups?: Rollup[]; recent?: Rollup[] };
-}
+export type ReviewHistogramResponse = z.infer<typeof reviewHistogramInput>;
+export const reviewHistogramRule = bodyRule(reviewHistogramInput, "appreviewhistogram");
+type Rollup = NonNullable<ReviewHistogramResponse["results"]["rollups"]>[number];
 
 // Not `.parse()`d per entry — see formattedPrice()'s comment;
 // summarizeReviewHistogram validates the whole result once.

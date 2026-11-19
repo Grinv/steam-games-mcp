@@ -4,50 +4,27 @@
 // appid, name, link and the chart's own metrics; price/reviews/compat are what
 // get_items is for.
 import { z } from "zod";
-import { isoDateTime, storeUrl } from "./shared.ts";
-import { getChartsOutput, type chartSchema } from "./charts.schemas.ts";
+import { bodyRule, isoDateTime, storeUrl } from "./shared.ts";
+import {
+  concurrentPlayersInput,
+  deckMostPlayedInput,
+  getChartsOutput,
+  mostPlayedInput,
+  topSellersInput,
+  type chartSchema,
+} from "./charts.schemas.ts";
 
-export interface TopSellersResponse {
-  response?: {
-    start_date?: number;
-    ranks?: {
-      rank?: number;
-      appid?: number;
-      item?: { name?: string };
-      last_week_rank?: number;
-      consecutive_weeks?: number;
-    }[];
-  };
-}
-
-// Names ride along on `item` when the request carries a data_request.
-interface PlayerRank {
-  rank?: number;
-  appid?: number;
-  item?: { name?: string };
-  last_week_rank?: number;
-  concurrent_in_game?: number;
-  peak_in_game?: number;
-}
-export interface MostPlayedResponse {
-  response?: { rollup_date?: number; ranks?: PlayerRank[] };
-}
-export interface ConcurrentPlayersResponse {
-  response?: { last_update?: number; ranks?: PlayerRank[] };
-}
-
-// Names ride along on each rank's `item` (requested via an empty data_request);
-// there is no date field at all, and a new entry's last_period_rank is -1.
-export interface DeckMostPlayedResponse {
-  response?: {
-    ranks?: {
-      rank?: number;
-      appid?: number;
-      item?: { name?: string };
-      last_period_rank?: number;
-    }[];
-  };
-}
+export type TopSellersResponse = z.infer<typeof topSellersInput>;
+export const topSellersRule = bodyRule(topSellersInput, "GetWeeklyTopSellers");
+export type MostPlayedResponse = z.infer<typeof mostPlayedInput>;
+export const mostPlayedRule = bodyRule(mostPlayedInput, "GetMostPlayedGames");
+export type ConcurrentPlayersResponse = z.infer<typeof concurrentPlayersInput>;
+export const concurrentPlayersRule = bodyRule(
+  concurrentPlayersInput,
+  "GetGamesByConcurrentPlayers",
+);
+export type DeckMostPlayedResponse = z.infer<typeof deckMostPlayedInput>;
+export const deckMostPlayedRule = bodyRule(deckMostPlayedInput, "GetMostPlayedSteamDeckGames");
 
 export type ChartName = z.infer<typeof chartSchema>;
 

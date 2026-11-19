@@ -194,9 +194,13 @@ npm run inspector      # run under the MCP Inspector
   the server actually sends (e.g. `storeCardDataRequest()`): a "verified live"
   comment is checked once, a check:api assertion every run. A field a
   whole-body verdict is read from (current players' `result`, the schema's
-  `game`) is a body rule on its endpoint (`requireField` in `validate`): every
-  type field is optional, and an absent one would otherwise default into "no
-  such app" or "no achievements". A fact about one item of a batch (a card's
+  `game`) is required by its endpoint's body rule: `validate` parses the body
+  with the response's input schema (`format/*.schemas.ts`, via `bodyRule`)
+  and the response type is inferred from it (`z.infer`), so a required field
+  is required in the type too; every other field and list element is typed
+  but `unchecked` (never verified live, and one odd item must not cost the
+  body), and an absent verdict field would otherwise default into "no such
+  app" or "no achievements". A fact about one item of a batch (a card's
   `visible`, a profile's visibility) is decided per row instead (`shownHere`),
   absent meaning that row's unknown: one odd item (appid 4294967295 comes
   back with no `visible`) must not cost the batch. One path can be both, as two

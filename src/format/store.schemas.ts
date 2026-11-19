@@ -7,6 +7,8 @@
 // need (get_wishlist, get_recommended_games) alongside format/web.schemas.ts
 // and format/shared.schemas.ts.
 import { z } from "zod";
+import type { StoreItem } from "./storeCard.ts";
+import { unchecked } from "./shared.ts";
 
 // store.ts's compat()/COMPAT_CATEGORY — shared by every
 // steam_deck/steam_os/steam_machine/steam_frame field below.
@@ -161,6 +163,20 @@ export const purchaseItemsInput = z.looseObject({
         .optional(),
     })
     .optional(),
+});
+
+// IStoreQueryService/Query's answer, its body rule (store.ts's storeQueryRule):
+// the type StoreQueryResponse is inferred from it. Only the total is checked;
+// the cards are decided per row, like GetItems' (storeCard.ts's shownHere).
+export const storeQueryInput = z.looseObject({
+  response: z.looseObject({
+    metadata: z.looseObject({
+      total_matching_records: z.number(),
+      start: unchecked<number>().optional(),
+      count: unchecked<number>().optional(),
+    }),
+    store_items: unchecked<StoreItem[]>().optional(),
+  }),
 });
 
 // store.ts's summarizePurchasePrices() — the base-game purchase price of each

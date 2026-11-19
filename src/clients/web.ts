@@ -347,7 +347,7 @@ export class SteamWebClient {
   // helper already degrades a missing entry to `name: null`, the same
   // fallback it uses for a steamid Steam simply has no data for.
   async #playerSummaries(ids: string[]): Promise<PlayerSummariesResponse> {
-    if (ids.length === 0) return {};
+    if (ids.length === 0) return { response: { players: [] } };
     const chunks: string[][] = [];
     for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
     const settled = await Promise.allSettled(
@@ -394,7 +394,9 @@ export class SteamWebClient {
     const res = await this.#friendsRaw(steamid);
     if (res === null) return friendsNotShown();
     const allIds = friendIdsOf(res);
-    if (allIds.length === 0) return summarizeFriendsWhoOwn(appids, [], [], {});
+    if (allIds.length === 0) {
+      return summarizeFriendsWhoOwn(appids, [], [], { response: { players: [] } });
+    }
     // Two bounds, both measured live on a 634-friend account:
     //
     // FRIENDS_CHECKED_MAX caps how many friends are looked up at all. One
@@ -522,7 +524,7 @@ export class SteamWebClient {
       ...(kind === "patch_notes" ? { tags: "patchnotes" } : {}),
     });
     // A nonexistent appid's answer: a clean empty result.
-    return summarizeNews(res.answer ? {} : res.data);
+    return summarizeNews(res.answer ? { appnews: { newsitems: [] } } : res.data);
   }
 
   async getGlobalAchievements(appid: number): Promise<Record<string, unknown>> {
@@ -531,7 +533,9 @@ export class SteamWebClient {
       { gameid: appid },
       { cache: true },
     );
-    return summarizeGlobalAchievements(res.answer ? {} : res.data);
+    return summarizeGlobalAchievements(
+      res.answer ? { achievementpercentages: { achievements: [] } } : res.data,
+    );
   }
 
   // Current concurrent player count for a game. Not cached — it's a live number.
@@ -640,6 +644,6 @@ export class SteamWebClient {
         detail: NO_ACHIEVEMENT_SCHEMA,
       });
     }
-    return summarizeGameSchema(schema.data, rarity?.data ?? {});
+    return summarizeGameSchema(schema.data, rarity?.data);
   }
 }

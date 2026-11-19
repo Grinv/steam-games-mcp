@@ -3,6 +3,7 @@
 // `getChartsOutput.parse({...})`, so this is the single source of truth for the
 // shape and the tool's outputSchema.
 import { z } from "zod";
+import { unchecked } from "./shared.ts";
 
 export const CHART_NAMES = [
   "top_sellers",
@@ -64,3 +65,49 @@ export const getChartsOutput = z.discriminatedUnion("chart", [
       .describe("Steam's most recent daily peak of concurrent players."),
   }),
 ]);
+
+// ---- Steam's answers (input) -------------------------------------------------
+// Body rules, as in web.schemas.ts: the response types in charts.ts are
+// inferred from these. Only `response.ranks` is checked, as an array.
+
+// Names ride along on `item` when the request carries a data_request.
+interface Rank {
+  rank?: number;
+  appid?: number;
+  item?: { name?: string };
+}
+interface TopSellerRank extends Rank {
+  last_week_rank?: number;
+  consecutive_weeks?: number;
+}
+interface PlayerRank extends Rank {
+  last_week_rank?: number;
+  concurrent_in_game?: number;
+  peak_in_game?: number;
+}
+// No date field at all, and a new entry's last_period_rank is -1.
+interface DeckRank extends Rank {
+  last_period_rank?: number;
+}
+
+export const topSellersInput = z.looseObject({
+  response: z.looseObject({
+    start_date: unchecked<number>().optional(),
+    ranks: z.array(unchecked<TopSellerRank>()),
+  }),
+});
+export const mostPlayedInput = z.looseObject({
+  response: z.looseObject({
+    rollup_date: unchecked<number>().optional(),
+    ranks: z.array(unchecked<PlayerRank>()),
+  }),
+});
+export const concurrentPlayersInput = z.looseObject({
+  response: z.looseObject({
+    last_update: unchecked<number>().optional(),
+    ranks: z.array(unchecked<PlayerRank>()),
+  }),
+});
+export const deckMostPlayedInput = z.looseObject({
+  response: z.looseObject({ ranks: z.array(unchecked<DeckRank>()) }),
+});

@@ -50,9 +50,10 @@ export interface Endpoint<T, A extends string = never> {
   validate?: (body: T, query: Query) => void;
   /** Without a body rule: what an absent field means here, and the evidence
    *  — Steam's own answer for "none" (seen live), or a per-row unknown.
-   *  Every field of a response type is optional, so each endpoint states one
-   *  or the other (recorded.test.ts): an absence nobody decided would read as
-   *  a verdict by default. */
+   *  Only a body rule's schema makes a field required (the response type is
+   *  inferred from it); without one every field is optional, so each endpoint
+   *  states one or the other (recorded.test.ts): an absence nobody decided
+   *  would read as a verdict by default. */
   absent?: string;
   probes: readonly Probe[];
 }

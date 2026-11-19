@@ -12,8 +12,7 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
-import { ApiError } from "../lib/errors.ts";
-import { capList, isoDay, notFound, notShown, storeUrl } from "./shared.ts";
+import { bodyRule, capList, isoDay, notFound, notShown, storeUrl, unusableBody } from "./shared.ts";
 import { wishlistNotFound } from "./shared.schemas.ts";
 import {
   discoverGamesOutput,
@@ -22,6 +21,7 @@ import {
   purchasePricesSchema,
   recommendedGamesFound,
   searchGamesOutput,
+  storeQueryInput,
   wishlistDetailedFound,
 } from "./store.schemas.ts";
 import {
@@ -103,12 +103,8 @@ export function summarizeSearchSuggestions(
 
 // ---- IStoreQueryService/Query (keyless catalog discovery) -------------------
 
-export interface StoreQueryResponse {
-  response?: {
-    metadata?: { total_matching_records?: number; start?: number; count?: number };
-    store_items?: StoreItem[];
-  };
-}
+export type StoreQueryResponse = z.infer<typeof storeQueryInput>;
+export const storeQueryRule = bodyRule(storeQueryInput, "Query");
 
 // Catalog-wide deal discovery. The server filters by min discount; review
 // thresholds (percent / count) and discount-desc sorting are applied here over
@@ -241,19 +237,10 @@ export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
   return parsed.data;
 }
 
-// Retryable like every unusable body: it states nothing about the game, so a
-// good cached correction stands in for it (a stale copy answers only a
-// retryable failure), and "retry later" advice holds.
-function unusablePrices(error: z.ZodError): ApiError {
-  // One line (the log shows a message's first line): where and what, per issue.
-  const why = error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
-  return new ApiError({
-    code: "bad_response",
-    message: `GetItems purchase options don't fit the price shape: ${why}`,
-    retryable: true,
-    cause: error,
-  });
-}
+// Retryable like every unusable body: a good cached correction stands in for
+// it (a stale copy answers only a retryable failure), and "retry later" holds.
+const unusablePrices = (error: z.ZodError) =>
+  unusableBody("GetItems purchase options don't fit the price shape", error);
 
 // ---- IWishlistService/GetWishlistSortedFiltered (enriched wishlist) ----------
 

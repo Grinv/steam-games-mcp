@@ -1,7 +1,39 @@
 // Generic field helpers shared by the storefront and web formatters. Pure,
 // dependency-free transforms used to keep tool responses token-efficient.
+import { ApiError } from "../lib/errors.ts";
 import { notFoundReason } from "./shared.schemas.ts";
-import type { z } from "zod";
+import { z } from "zod";
+
+// A Steam body that doesn't fit its input schema: unusable, never a verdict.
+// Retryable like every unusable body (it states nothing about the game or
+// player), so a stale copy can answer it. One line (the log shows a message's
+// first line): where and what, per issue.
+export function unusableBody(what: string, error: z.ZodError): ApiError {
+  const why = error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
+  return new ApiError({
+    code: "bad_response",
+    message: `${what}: ${why}`,
+    retryable: true,
+    cause: error,
+  });
+}
+
+// An endpoint's body rule (clients/endpoints.ts's `validate`) from the
+// response's input schema: the body is used only when it parses, so the
+// fields the schema requires are there, as the type derived from it says.
+// The schema checks only those and the objects on their path; the rest is
+// `unchecked`.
+export function bodyRule(schema: z.ZodType, what: string): (body: unknown) => void {
+  return (body) => {
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) throw unusableBody(what, parsed.error);
+  };
+}
+
+// Typed, not checked: Steam's optional fields and list elements are
+// hand-written types never verified live. Only a body rule's required fields
+// are checked, so one odd item can't cost the whole body.
+export const unchecked = <T>() => z.custom<T>();
 
 // The client layer (clients/web.ts, clients/storeService.ts) short-circuits to
 // found:false before a summarizer ever runs (a private profile/friends list,

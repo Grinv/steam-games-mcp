@@ -14,6 +14,7 @@ import type { ApiError } from "../lib/errors.ts";
 import { problemDetail } from "../lib/result.ts";
 import {
   NO_SUCH_ACCOUNT_REASON,
+  bodyRule,
   notShown,
   capList,
   hours,
@@ -25,8 +26,10 @@ import {
 import { notFoundReason, wishlistNotFound } from "./shared.schemas.ts";
 import {
   comparePlayersFound,
+  currentPlayersInput,
   findFriendsWhoOwnFound,
   friendListFound,
+  friendListInput,
   getCurrentPlayersOutput,
   getFollowedGamesOutput,
   getGameNewsOutput,
@@ -35,30 +38,22 @@ import {
   getPlayerBansOutput,
   getPlayerSummaryOutput,
   getRecentlyPlayedOutput,
+  newsInput,
   personaStates,
+  playerBansInput,
+  playerSummariesInput,
+  RESULT_OK,
   vanityFound,
+  vanityInput,
   visibilitySchema,
   wishlistLightFound,
 } from "./web.schemas.ts";
 
 // ---- Web API: player summary ------------------------------------------------
 
-interface PlayerSummary {
-  steamid?: string;
-  personaname?: string;
-  profileurl?: string;
-  avatarfull?: string;
-  personastate?: number;
-  realname?: string;
-  loccountrycode?: string;
-  timecreated?: number;
-  communityvisibilitystate?: number;
-  gameextrainfo?: string;
-  gameid?: string;
-}
-export interface PlayerSummariesResponse {
-  response?: { players?: PlayerSummary[] };
-}
+export type PlayerSummariesResponse = z.infer<typeof playerSummariesInput>;
+export const playerSummariesRule = bodyRule(playerSummariesInput, "GetPlayerSummaries");
+type PlayerSummary = PlayerSummariesResponse["response"]["players"][number];
 
 // GetSteamLevel is fetched alongside GetPlayerSummaries and merged in; it has
 // its own failure mode (e.g. private inventory), so the level is nullable
@@ -306,19 +301,8 @@ export function summarizeRecentlyPlayed(
 
 // ---- Web API: news ----------------------------------------------------------
 
-export interface NewsResponse {
-  appnews?: {
-    newsitems?: {
-      gid?: string;
-      title?: string;
-      url?: string;
-      author?: string;
-      contents?: string;
-      feedlabel?: string;
-      date?: number;
-    }[];
-  };
-}
+export type NewsResponse = z.infer<typeof newsInput>;
+export const newsRule = bodyRule(newsInput, "GetNewsForApp");
 
 // ---- Web API: IUserReviewsService/GetAppReviews ----------------------------
 // An unknown appid answers an empty `response`.
@@ -379,15 +363,10 @@ export function summarizeNews(r: NewsResponse): z.infer<typeof getGameNewsOutput
 
 // ---- Web API: resolve vanity url --------------------------------------------
 
-export interface VanityResponse {
-  response?: { success?: number; steamid?: string; message?: string };
-}
-
-// ResolveVanityURL reports an EResult in `response.success`: 1 (OK) on a hit,
-// 42 (NoMatch) when the name resolves to nothing. The endpoint lets only these
-// two through (clients/endpoints.ts), so anything not OK here is NoMatch.
-export const RESULT_OK = 1;
-export const RESULT_NO_MATCH = 42;
+// The endpoint lets only an OK (with a steamid) or a NoMatch through
+// (vanityInput), so anything not OK here is NoMatch.
+export type VanityResponse = z.infer<typeof vanityInput>;
+export const vanityRule = bodyRule(vanityInput, "ResolveVanityURL");
 
 export function summarizeVanity(
   r: VanityResponse,
@@ -405,9 +384,8 @@ export function summarizeVanity(
 
 // ---- Web API: current players (keyless) -------------------------------------
 
-export interface CurrentPlayersResponse {
-  response?: { player_count?: number; result?: number };
-}
+export type CurrentPlayersResponse = z.infer<typeof currentPlayersInput>;
+export const currentPlayersRule = bodyRule(currentPlayersInput, "GetNumberOfCurrentPlayers");
 
 export function summarizeCurrentPlayers(
   r: CurrentPlayersResponse,
@@ -461,17 +439,8 @@ export function summarizeWishlist(
 
 // ---- Web API: player bans (key required; ban status is always public) ------
 
-export interface PlayerBansResponse {
-  players?: {
-    SteamId?: string;
-    CommunityBanned?: boolean;
-    VACBanned?: boolean;
-    NumberOfVACBans?: number;
-    NumberOfGameBans?: number;
-    DaysSinceLastBan?: number;
-    EconomyBan?: string;
-  }[];
-}
+export type PlayerBansResponse = z.infer<typeof playerBansInput>;
+export const playerBansRule = bodyRule(playerBansInput, "GetPlayerBans");
 
 export function summarizePlayerBans(r: PlayerBansResponse): z.infer<typeof getPlayerBansOutput> {
   const p = r.players?.[0];
@@ -535,9 +504,8 @@ export function summarizeFollowedGames(
 
 // ---- Web API: friend list (key required; friends list must be public) ------
 
-export interface FriendListResponse {
-  friendslist?: { friends?: { steamid?: string; relationship?: string; friend_since?: number }[] };
-}
+export type FriendListResponse = z.infer<typeof friendListInput>;
+export const friendListRule = bodyRule(friendListInput, "GetFriendList");
 
 // GetFriendList only returns steamid/friend_since — no names — so this merges
 // in a GetPlayerSummaries batch (fetched alongside) for name/state/avatar.

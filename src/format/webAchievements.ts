@@ -7,24 +7,21 @@
 // rarity data (get_game_achievements merges it into the schema), and the
 // finitePercent coercion.
 import { z } from "zod";
-import { capList, isoDay, notFound, notShown } from "./shared.ts";
+import { bodyRule, capList, isoDay, notFound, notShown } from "./shared.ts";
 import { notFoundReason } from "./shared.schemas.ts";
 import {
+  gameSchemaInput,
   getGameAchievementsOutput,
   getGlobalAchievementsOutput,
+  globalAchievementsInput,
   playerAchievementsFound,
+  playerAchievementsInput,
 } from "./webAchievements.schemas.ts";
 
 // ---- Web API: player achievements -------------------------------------------
 
-export interface PlayerAchievementsResponse {
-  playerstats?: {
-    success?: boolean;
-    error?: string;
-    gameName?: string;
-    achievements?: { apiname?: string; name?: string; achieved?: number; unlocktime?: number }[];
-  };
-}
+export type PlayerAchievementsResponse = z.infer<typeof playerAchievementsInput>;
+export const playerAchievementsRule = bodyRule(playerAchievementsInput, "GetPlayerAchievements");
 
 // Shared cap for all three achievement-list tools (get_player_achievements,
 // get_global_achievements, get_game_achievements) — a handful of long-running
@@ -102,9 +99,11 @@ export function playerAchievementsMissing(
 
 // ---- Web API: global achievement percentages --------------------------------
 
-export interface GlobalAchievementsResponse {
-  achievementpercentages?: { achievements?: { name?: string; percent?: number | string }[] };
-}
+export type GlobalAchievementsResponse = z.infer<typeof globalAchievementsInput>;
+export const globalAchievementsRule = bodyRule(
+  globalAchievementsInput,
+  "GetGlobalAchievementPercentagesForApp",
+);
 
 // Steam sends `percent` as a string ("74.2", 0-100, most common first — all
 // seen live 2026-11-19 on Portal 2), so it's coerced; a non-numeric one would
@@ -139,30 +138,19 @@ export function summarizeGlobalAchievements(
 
 // ---- Web API: full achievement schema (key) + global rarity merge -----------
 
-export interface GameSchemaResponse {
-  game?: {
-    gameName?: string;
-    availableGameStats?: {
-      achievements?: {
-        name?: string; // internal apiname
-        displayName?: string;
-        description?: string;
-        hidden?: number;
-        icon?: string;
-      }[];
-    };
-  };
-}
+export type GameSchemaResponse = z.infer<typeof gameSchemaInput>;
+export const gameSchemaRule = bodyRule(gameSchemaInput, "GetSchemaForGame");
 
 // Merge the full schema (names/descriptions/hidden) with global unlock % (keyed
 // by the internal apiname), so each achievement carries how rare it is.
+// `global` undefined: rarity is unknown (null on every achievement).
 export function summarizeGameSchema(
   schema: GameSchemaResponse,
-  global: GlobalAchievementsResponse,
+  global: GlobalAchievementsResponse | undefined,
   max = GAME_SCHEMA_ACHIEVEMENTS_MAX,
 ): z.infer<typeof getGameAchievementsOutput> {
   const pct = new Map<string, number>();
-  for (const x of global.achievementpercentages?.achievements ?? []) {
+  for (const x of global?.achievementpercentages?.achievements ?? []) {
     // A non-numeric percent stays unknown (null), as in
     // summarizeGlobalAchievements, rather than reading as "nobody unlocked it".
     const p = finitePercent(x.percent);

@@ -194,6 +194,8 @@ describe("summarizeFeatured", () => {
           { id: 2, name: "On sale", currency: "USD", original_price: 1999, final_price: 999 },
         ],
       },
+      top_sellers: { items: [] },
+      new_releases: { items: [] },
     }) as { coming_soon: { final_price: string | null }[]; specials: { final_price: string }[] };
     assert.equal(s.coming_soon[0]!.final_price, null);
     // A real price is still a real price.
@@ -496,6 +498,7 @@ describe("summarizeReviewHistogram", () => {
       recommendations_down: 0,
     }));
     const s = summarizeReviewHistogram({
+      success: 1,
       results: { rollup_type: "month", rollups, recent },
     }) as { history: { date: string }[]; recent: { date: string }[] };
     assert.equal(s.history.length, 24);
@@ -507,6 +510,7 @@ describe("summarizeReviewHistogram", () => {
 
   test("a zero-total rollup (0 up, 0 down) reports positive_pct null, not 0", () => {
     const s = summarizeReviewHistogram({
+      success: 1,
       results: { rollups: [{ date: 1700000000, recommendations_up: 0, recommendations_down: 0 }] },
     }) as { history: { positive_pct: number | null }[] };
     assert.equal(s.history[0]!.positive_pct, null);
@@ -649,7 +653,6 @@ describe("summarizeFriendsWhoOwn", () => {
 test("summarizeNews: no news items (brand-new game) → empty items, not thrown", () => {
   const s = summarizeNews({ appnews: { newsitems: [] } }) as { items: unknown[] };
   assert.deepEqual(s.items, []);
-  assert.deepEqual(summarizeNews({}), { items: [] });
 });
 
 describe("summarizeGlobalAchievements", () => {

@@ -10,6 +10,7 @@
 // fragment (format/shared.schemas.ts) at their own construction site, not here.
 import { z } from "zod";
 import { gamesNotFound } from "./shared.schemas.ts";
+import { unchecked } from "./shared.ts";
 
 // Steam's `personastate` is a small fixed index (0-6, per the Web API docs);
 // format/web.ts's summarizers map it through this same list, so the two
@@ -240,4 +241,84 @@ export const findFriendsWhoOwnFound = z.strictObject({
   // timeout/5xx) rather than came back without a library — see summarizeFriendsWhoOwn.
   unavailable_friends: z.array(friendNameEntry.extend({ reason: z.string() })),
   unavailable_friends_total: z.number().optional(),
+});
+
+// ---- Steam's answers (input) -------------------------------------------------
+// What a Web API endpoint must send for its body to be usable, as its body
+// rule (bodyRule in shared.ts; clients/endpoints.ts says why each field is
+// required). The response types in web.ts are inferred from these, so a
+// required field here is required in the type. Only the required fields and
+// the objects on their path are checked; the rest is typed, `unchecked`.
+
+interface PlayerSummary {
+  steamid?: string;
+  personaname?: string;
+  profileurl?: string;
+  avatarfull?: string;
+  personastate?: number;
+  realname?: string;
+  loccountrycode?: string;
+  timecreated?: number;
+  communityvisibilitystate?: number;
+  gameextrainfo?: string;
+  gameid?: string;
+}
+export const playerSummariesInput = z.looseObject({
+  response: z.looseObject({ players: z.array(unchecked<PlayerSummary>()) }),
+});
+
+interface PlayerBan {
+  SteamId?: string;
+  CommunityBanned?: boolean;
+  VACBanned?: boolean;
+  NumberOfVACBans?: number;
+  NumberOfGameBans?: number;
+  DaysSinceLastBan?: number;
+  EconomyBan?: string;
+}
+export const playerBansInput = z.looseObject({ players: z.array(unchecked<PlayerBan>()) });
+
+interface Friend {
+  steamid?: string;
+  relationship?: string;
+  friend_since?: number;
+}
+export const friendListInput = z.looseObject({
+  friendslist: z.looseObject({ friends: unchecked<Friend[]>().optional() }),
+});
+
+interface NewsItem {
+  gid?: string;
+  title?: string;
+  url?: string;
+  author?: string;
+  contents?: string;
+  feedlabel?: string;
+  date?: number;
+}
+export const newsInput = z.looseObject({
+  appnews: z.looseObject({ newsitems: z.array(unchecked<NewsItem>()) }),
+});
+
+// ResolveVanityURL reports an EResult in `response.success`: 1 (OK) on a hit,
+// 42 (NoMatch) when the name resolves to nothing.
+export const RESULT_OK = 1;
+export const RESULT_NO_MATCH = 42;
+export const vanityInput = z.looseObject({
+  response: z.discriminatedUnion("success", [
+    z.looseObject({
+      success: z.literal(RESULT_OK),
+      steamid: z.string().min(1),
+      message: unchecked<string>().optional(),
+    }),
+    z.looseObject({
+      success: z.literal(RESULT_NO_MATCH),
+      steamid: unchecked<string>().optional(),
+      message: unchecked<string>().optional(),
+    }),
+  ]),
+});
+
+export const currentPlayersInput = z.looseObject({
+  response: z.looseObject({ result: z.literal(1), player_count: unchecked<number>().optional() }),
 });

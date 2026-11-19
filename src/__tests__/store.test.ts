@@ -168,7 +168,10 @@ test("summarizeDiscover re-checks minDiscount client-side (backstop for Steam's 
     { appid: 1, visible: true, name: "Full price", best_purchase_option: { discount_pct: 0 } },
     { appid: 2, visible: true, name: "Real deal", best_purchase_option: { discount_pct: 80 } },
   ];
-  const s = summarizeDiscover({ response: { store_items: items } }, { minDiscount: 50 }) as {
+  const s = summarizeDiscover(
+    { response: { metadata: { total_matching_records: items.length }, store_items: items } },
+    { minDiscount: 50 },
+  ) as {
     deals: { appid: number }[];
   };
   assert.deepEqual(

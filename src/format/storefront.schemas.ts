@@ -7,6 +7,7 @@
 // silently accepted. Also exported for wiring into `registerTool`'s
 // `outputSchema` in tools/storefront.ts.
 import { z } from "zod";
+import { unchecked } from "./shared.ts";
 
 // The currency/final/initial/discount_percent fields formattedPrice() builds,
 // shared by detailApp's price() and summarizePrices' rows.
@@ -159,4 +160,48 @@ export const getReviewHistogramOutput = z.strictObject({
     ),
   history: z.array(rollupSchema),
   recent: z.array(rollupSchema),
+});
+
+// ---- Steam's answers (input) -------------------------------------------------
+// Body rules, as in web.schemas.ts: the response types in storefront.ts are
+// inferred from these. Only the required fields are checked.
+
+// One appid's appdetails entry, usable when it carries a boolean `success`.
+export const appEntryInput = z.looseObject({ success: z.boolean() });
+
+interface FeaturedItem {
+  id?: number;
+  // 0 = app. top_sellers also carries bundles (type 2, verified live
+  // 2026-10-03: id 72233 is "Destiny 2: The Collection", a /bundle/ page whose
+  // /app/ URL redirects to the store front), where `id` is a bundle id.
+  type?: number;
+  name?: string;
+  discounted?: boolean;
+  discount_percent?: number;
+  // Explicitly nullable: Steam sends `original_price: null` (not an absent key)
+  // for anything with no price yet — every coming_soon entry, verified live.
+  original_price?: number | null;
+  final_price?: number;
+  currency?: string;
+}
+const featuredSection = z.looseObject({ items: z.array(unchecked<FeaturedItem>()) });
+export const featuredInput = z.looseObject({
+  specials: featuredSection,
+  top_sellers: featuredSection,
+  new_releases: featuredSection,
+  coming_soon: featuredSection,
+});
+
+interface Rollup {
+  date?: number;
+  recommendations_up?: number;
+  recommendations_down?: number;
+}
+export const reviewHistogramInput = z.looseObject({
+  success: z.literal(1),
+  results: z.looseObject({
+    rollup_type: unchecked<string>().optional(),
+    rollups: unchecked<Rollup[]>().optional(),
+    recent: unchecked<Rollup[]>().optional(),
+  }),
 });
