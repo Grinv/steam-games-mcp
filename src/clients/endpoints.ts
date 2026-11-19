@@ -49,6 +49,7 @@ import type {
   TopSellersResponse,
 } from "../format/charts.ts";
 import type { FeaturedResponse, ReviewHistogramResponse, StoreApp } from "../format/storefront.ts";
+import { usableAppEntry } from "../format/storefront.ts";
 import { ApiError } from "../lib/errors.ts";
 
 const PUBLIC = "76561198028121353";
@@ -149,6 +150,8 @@ export const Steam = {
     path: "ISteamUser/GetPlayerSummaries/v2/",
     host: "api",
     keyless: false,
+    // An empty list is "no such account"; no list at all is no answer.
+    validate: (body) => requireField(Array.isArray(body.response?.players), "response.players"),
     probes: [
       { query: { steamids: PUBLIC }, expect: "data", shows: "a public profile" },
       badKeyProbe({ steamids: PUBLIC }),
@@ -165,6 +168,7 @@ export const Steam = {
     path: "ISteamUser/GetPlayerBans/v1/",
     host: "api",
     keyless: false,
+    validate: (body) => requireField(Array.isArray(body.players), "players"),
     probes: [
       {
         query: { steamids: ACCOUNT_0 },
@@ -206,6 +210,8 @@ export const Steam = {
     path: "ISteamUser/GetFriendList/v1/",
     host: "api",
     keyless: false,
+    validate: (body) =>
+      requireField(Array.isArray(body.friendslist?.friends), "friendslist.friends"),
     answers: {
       401: "not_shown",
       404: "not_shown",
@@ -519,24 +525,18 @@ export const Steam = {
   }),
 
   // ---- store.steampowered.com (keyless) -------------------------------------
-  // appdetails answers every appid it's asked about, a nonexistent one too
-  // ({success:false}; the only omission seen is appid 0, which no tool schema
-  // accepts). So a body without an entry for each requested appid is
-  // unusable: retried, never cached, a stale copy stands in.
+  // appdetails answers every appid it's asked about with an entry carrying a
+  // boolean `success` (usableAppEntry). For one appid (get_game) that entry is
+  // the whole answer, so without it the body is unusable — retried, never
+  // cached. A batch (get_prices) decides it per row: one odd entry costs its
+  // own price, noted, not the chunk's hundred.
   AppDetails: endpoint<AppDetailsResponse>({
     path: "api/appdetails",
     host: "store",
     keyless: true,
     validate: (body, query) => {
       const ids = String(query.appids).split(",");
-      // An object each: a null entry would read as "Steam failed this row".
-      const missing = ids.filter((id) => typeof body[id] !== "object" || body[id] === null);
-      if (missing.length === 0) return;
-      throw new ApiError({
-        code: "bad_response",
-        message: `appdetails answered without an entry for ${missing.length} of ${ids.length} appids`,
-        retryable: true,
-      });
+      if (ids.length === 1) requireField(usableAppEntry(body[ids[0]!]), `an entry for ${ids[0]}`);
     },
     probes: [
       {

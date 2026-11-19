@@ -111,15 +111,17 @@ function reviewScoreFloor(threshold: number): number {
 
 // A title as matched by name: only its letters and digits count — symbols
 // (™, ®) dropped, compatibility forms unfolded (², full-width letters), and
-// diacritics folded where they are accents (Latin, Cyrillic ё, Greek tonos):
-// "half life" is Half-Life, "dont starve" Don't Starve, "mirrors edge"
-// Mirror's Edge™, "pokemon" Pokémon, "portal 2" Portal². Elsewhere a mark is
-// part of the letter (Japanese ガ is カ plus dakuten), so it's kept (NFC).
+// accents folded: Latin and Greek marks, and Cyrillic ё to е (the one way
+// Russian is commonly typed without its mark): "half life" is Half-Life,
+// "dont starve" Don't Starve, "mirrors edge" Mirror's Edge™, "pokemon"
+// Pokémon, "portal 2" Portal². Other marks are part of the letter — Cyrillic
+// й isn't и, Ukrainian ї isn't і, Japanese ガ isn't カ — so they're kept (NFC).
 function titleKey(s: string): string {
   return s
     .replace(/\p{S}/gu, "")
     .normalize("NFKD")
-    .replace(/([\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Greek}])\p{M}+/gu, "$1")
+    .replace(/([\p{Script=Latin}\p{Script=Greek}])\p{M}+/gu, "$1")
+    .replace(/([еЕ])\u0308/g, "$1")
     .normalize("NFC")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\p{M}]/gu, "");
@@ -134,7 +136,13 @@ function titleKey(s: string): string {
 function tagIdsFor(names: string[], tagMap: TagMap, language: string): number[][] {
   // Lowercase without U+0307: Turkish "İ" lowercases to "i" plus that dot, so
   // "izometrik" missed İzometrik (14 Turkish tags carry an İ, seen live).
-  const key = (n: string) => n.toLowerCase().replace(/\u0307/g, "");
+  // NFC first: an accented name typed decomposed (some macOS input) is
+  // the same name.
+  const key = (n: string) =>
+    n
+      .normalize("NFC")
+      .toLowerCase()
+      .replace(/\u0307/g, "");
   const byName = new Map<string, number[]>();
   for (const [id, n] of Object.entries(tagMap)) {
     byName.set(key(n), [...(byName.get(key(n)) ?? []), Number(id)]);

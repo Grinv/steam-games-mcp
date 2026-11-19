@@ -224,6 +224,16 @@ export type PriceDetailsResponse = Record<
 // on the same appid in the same second. This is the same trap 0.13.0 fixed for
 // get_featured's "0.00 USD"; featuredItemSchema's final_price documents it too.
 // get_items reads IStoreBrowseService, which carries a real is_free flag.
+
+/** An appdetails entry Steam answered: an object with a boolean `success`.
+ *  It answers every appid it's asked about, a nonexistent, removed or
+ *  region-locked one included ({success:false}; all seen live 2026-11-19). */
+export function usableAppEntry(e: unknown): boolean {
+  return (
+    typeof e === "object" && e !== null && typeof (e as { success?: unknown }).success === "boolean"
+  );
+}
+
 export function summarizePrices(
   merged: PriceDetailsResponse,
   appids: number[],
@@ -231,10 +241,9 @@ export function summarizePrices(
 ): z.infer<typeof getPricesOutput> {
   const prices = appids.map((id) => {
     const entry = merged[String(id)];
-    // appdetails answers every appid it's asked about, a bad one too
-    // ({success:false}, verified live 2026-11-16) — so no entry at all means
-    // the chunk holding it failed: unknown, never "not available".
-    if (!entry) return { appid: id, available: null };
+    // Per row: no usable entry (its chunk failed, or Steam's entry for it
+    // lacked `success`) is unknown, never "not available"; either is noted.
+    if (!entry || !usableAppEntry(entry)) return { appid: id, available: null };
     const data = entry.data;
     const po = data && !Array.isArray(data) ? data.price_overview : undefined;
     if (!entry.success) return { appid: id, available: false as const };

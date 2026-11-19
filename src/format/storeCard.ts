@@ -167,14 +167,6 @@ function discountEnd(bp: StoreItem["best_purchase_option"]): string | null {
   return ends.length ? isoDateTime(Math.min(...ends)) : null;
 }
 
-/** Whether best_purchase_option prices THIS app rather than a bundle containing
- *  it. Valve's "best" option is whatever it considers the best value, which is
- *  routinely a multi-game bundle: measured over Steam's top 500 US sellers,
- *  5 of 421 priced apps came back at a bundle price — e.g. appid 2186680
- *  (Warhammer 40,000: Rogue Trader) is $49.99 as package 782856 but reports
- *  $48.36 as bundle 67187 "The Darkest Grimdark Bundle", alongside another
- *  game. A bundle price is not this app's price, so anything answering "what
- *  does this game cost" must check this first. */
 /** Whether Steam shows this item here — its own per-item verdict, decided
  *  per row (a batch holds items of every kind): `visible:true` (success 1);
  *  `visible:false` when not shown in this country (RDR2 1174180 under cc=RU,
@@ -184,6 +176,14 @@ export function shownHere(it: StoreItem): boolean {
   return it.visible === true;
 }
 
+/** Whether best_purchase_option prices THIS app rather than a bundle containing
+ *  it. Valve's "best" option is whatever it considers the best value, which is
+ *  routinely a multi-game bundle: measured over Steam's top 500 US sellers,
+ *  5 of 421 priced apps came back at a bundle price — e.g. appid 2186680
+ *  (Warhammer 40,000: Rogue Trader) is $49.99 as package 782856 but reports
+ *  $48.36 as bundle 67187 "The Darkest Grimdark Bundle", alongside another
+ *  game. A bundle price is not this app's price, so anything answering "what
+ *  does this game cost" must check this first. */
 export function isOwnPackage(bp: StoreItem["best_purchase_option"]): boolean {
   return typeof bp?.packageid === "number";
 }

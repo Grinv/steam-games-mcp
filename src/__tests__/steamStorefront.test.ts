@@ -299,6 +299,8 @@ describe("get_game", () => {
     ["mirrors edge", "Mirror's Edge™"],
     ["portal 2", "Portal²"],
     ["ежик в тумане", "Ёжик в тумане"],
+    // й isn't и: a mark that makes another letter stays.
+    ["мой", "Мой"],
   ] as const) {
     test(`get_game by name: "${typed}" is ${title}`, async (t) => {
       const { client, mock } = await setupServer(t, ENV, (url) =>
@@ -317,6 +319,23 @@ describe("get_game", () => {
       assert.match(mock.calls.find((c) => c.url.includes("appdetails"))!.url, /appids=2\b/);
     });
   }
+
+  test("get_game by name: Cyrillic й isn't folded into и", async (t) => {
+    const { client, mock } = await setupServer(t, ENV, (url) =>
+      url.includes("SearchSuggestions")
+        ? jsonResponse({
+            response: {
+              store_items: [
+                { appid: 1, name: "Мой" },
+                { appid: 2, name: "Мои" },
+              ],
+            },
+          })
+        : router(url),
+    );
+    await client.callTool({ name: "get_game", arguments: { name: "мои" } });
+    assert.match(mock.calls.find((c) => c.url.includes("appdetails"))!.url, /appids=2\b/);
+  });
 
   test("get_game by name: a Japanese title isn't folded into another", async (t) => {
     const { client, mock } = await setupServer(t, ENV, (url) =>
@@ -574,12 +593,11 @@ describe("get_prices", () => {
     assert.equal(res.isError, true);
   });
 
-  test("get_prices: a chunk answered without an entry for every appid fails like a request", async (t) => {
+  test("get_prices: an appid Steam answered no usable entry for is its own gap, not the chunk's", async (t) => {
     // Distinct from an explicit {success:false} entry. appdetails answers every
-    // appid it's asked about, a nonexistent one too (verified live 2026-11-16:
-    // 99 of 100 mixed ids, the omitted one appid 0, which the schema rejects),
-    // so a partial answer is unusable — never "not sold", and never a null row
-    // without a note explaining it.
+    // appid with one (verified live), so a missing entry says nothing about
+    // the game: per row, that price is unknown and noted — never "not sold",
+    // and the other 49 of its chunk still come through.
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) => {
       const ids = new URL(url).searchParams.get("appids")?.split(",") ?? [];
       // The second chunk answers for all but one of its appids.
@@ -598,8 +616,11 @@ describe("get_prices", () => {
       prices: { appid: number; available: boolean | null }[];
       notes: string[];
     };
-    assert.ok(s.prices.slice(100).every((p) => p.available === null));
-    assert.match(s.notes[0]!, /^Prices of 50 appids unavailable: .*unusable response/);
+    assert.deepEqual(
+      s.prices.filter((p) => p.available === null).map((p) => p.appid),
+      [150],
+    );
+    assert.match(s.notes[0]!, /^Prices of 1 appids unavailable: .*unusable response/);
   });
 
   test(`get_prices rejects appids outside the 1-${PRICES_MAX} bound before calling the upstream`, async (t) => {

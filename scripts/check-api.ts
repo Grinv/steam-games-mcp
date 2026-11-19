@@ -513,6 +513,19 @@ const checks: Check[] = [
     },
   },
   {
+    // What usableAppEntry rests on: appdetails answers each appid it's asked
+    // about with an entry carrying a boolean success — existing, nonexistent,
+    // removed and region-locked alike (seen 2026-11-19).
+    name: "storefront appdetails (an entry with success for every appid)",
+    run: async () => {
+      const ids = ["620", "99999999", "219820", "1174180"];
+      const body = await getJson<Record<string, { success?: unknown } | undefined>>(
+        `${STORE}/api/appdetails?appids=${ids.join(",")}&cc=ru&filters=price_overview`,
+      );
+      for (const id of ids) need(typeof body[id]?.success === "boolean", `${id}.success`);
+    },
+  },
+  {
     name: "storefront featuredcategories",
     run: async () => {
       const body = await getJson<Record<string, { items?: { type?: unknown }[] } | undefined>>(

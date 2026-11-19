@@ -1920,7 +1920,7 @@ describe("a SteamID64 that can't name an account is refused before any call", ()
   });
 
   test("the account range's own ends are accepted", async (t) => {
-    const { client } = await setupServer(t, ENV);
+    const { client } = await setupServer(t, ENV, router);
     for (const id of ["76561197960265729", "76561202255233023"]) {
       const res = await client.callTool({ name: "get_player_bans", arguments: { steamid: id } });
       assert.equal(res.isError, undefined, id);
@@ -1935,6 +1935,14 @@ describe("a body missing the field a whole-body verdict rests on is unusable", (
   for (const [tool, args, endpoint, body] of [
     ["get_current_players", { appid: 620 }, "GetNumberOfCurrentPlayers", { response: {} }],
     ["get_game_achievements", { appid: 620 }, "GetSchemaForGame", {}],
+    [
+      "get_player_summary",
+      { steamid: "76561197960287930" },
+      "GetPlayerSummaries",
+      { response: {} },
+    ],
+    ["get_player_bans", { steamid: "76561197960287930" }, "GetPlayerBans", {}],
+    ["get_friend_list", { steamid: "76561197960287930" }, "GetFriendList", {}],
   ] as const) {
     test(`${tool}: ${endpoint} without it`, async (t) => {
       const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>

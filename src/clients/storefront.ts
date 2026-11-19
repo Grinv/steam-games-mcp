@@ -6,7 +6,7 @@
 import { HttpClient } from "../lib/http.ts";
 import { RateLimiter } from "../lib/rateLimit.ts";
 import { ApiError } from "../lib/errors.ts";
-import { optionalParts } from "../lib/call.ts";
+import { noteDegraded, optionalParts } from "../lib/call.ts";
 import { call } from "../lib/endpoint.ts";
 import { Steam } from "./endpoints.ts";
 import {
@@ -17,6 +17,7 @@ import {
   summarizeSpecials,
   type FeaturedResponse,
   type PriceDetailsResponse,
+  usableAppEntry,
 } from "../format/storefront.ts";
 import type { PurchasePrices } from "../format/store.ts";
 import type { Logger } from "../lib/logger.ts";
@@ -176,6 +177,21 @@ export class StorefrontClient {
     }
     const parts = optionalParts(settled, (i) => `Prices of ${chunks[i]!.length} appids`);
     const merged: PriceDetailsResponse = Object.assign({}, ...parts);
+    // Per row: an entry Steam sent without a boolean `success` is that price's
+    // gap alone (available:null), noted like a failed chunk's.
+    const odd = chunks.flatMap((chunk, i) =>
+      settled[i]!.status === "fulfilled" ? chunk.filter((id) => !usableAppEntry(merged[id])) : [],
+    );
+    if (odd.length) {
+      noteDegraded(
+        `Prices of ${odd.length} appids`,
+        new ApiError({
+          code: "bad_response",
+          message: `appdetails had no usable entry for ${odd.length} appids`,
+          retryable: true,
+        }),
+      );
+    }
     return summarizePrices(merged, appids, overrides);
   }
 

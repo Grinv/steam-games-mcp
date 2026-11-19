@@ -240,11 +240,15 @@ function toHttpError(res: Response, raw: string): ApiError {
 
 function isJsonObject(text: string): boolean {
   try {
-    const v: unknown = JSON.parse(text);
-    return v !== null && typeof v === "object" && !Array.isArray(v);
+    return isObject(JSON.parse(text));
   } catch {
     return false; // an HTML page, or nothing: not JSON is the answer here
   }
+}
+
+// What Steam answers with, as data or as an error's own body: a JSON object.
+function isObject(v: unknown): v is object {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
 // The parsed body, after the call's own validation: what may be cached.
@@ -254,7 +258,7 @@ function isJsonObject(text: string): boolean {
 // callers then dereferenced into an internal error.
 function checked(text: string, options: RequestOptions): object {
   const body = parseJson(text);
-  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+  if (!isObject(body)) {
     throw new ApiError({
       code: "bad_response",
       message: `Upstream returned ${text.length === 0 ? "an empty body" : `a non-object JSON body (${text.slice(0, 20)})`}`,
