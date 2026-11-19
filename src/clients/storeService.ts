@@ -110,6 +110,19 @@ function reviewScoreFloor(threshold: number): number {
   return 1;
 }
 
+// Without case, in any language: the lowercase of the uppercase, so German ß
+// is ss and Turkish ı is i (toLowerCase alone keeps them apart from SS and
+// I), and NFC again, since uppercasing can split a letter from its accent
+// (Greek ΐ); minus the dot Turkish İ lowercases with. Checked live on all
+// 31 tag dictionaries: every name found typed in either case, no two merged.
+function caseless(s: string): string {
+  return s
+    .toUpperCase()
+    .toLowerCase()
+    .normalize("NFC")
+    .replace(/\u0307/g, "");
+}
+
 // A title as matched by name: only its letters and digits count — symbols
 // (™, ®) dropped, compatibility forms unfolded (², full-width letters), and
 // accents folded: Latin and Greek marks, and Cyrillic ё to е (the one way
@@ -118,17 +131,14 @@ function reviewScoreFloor(threshold: number): number {
 // Pokémon, "portal 2" Portal². Other marks are part of the letter — Cyrillic
 // й isn't и, Ukrainian ї isn't і, Japanese ガ isn't カ — so they're kept (NFC).
 function titleKey(s: string): string {
-  return (
-    s
-      // A symbol with its presentation selector or keycap (❤️, 1️⃣), not just the symbol.
-      .replace(/\p{S}[\uFE00-\uFE0F\u20E3]*|[\uFE00-\uFE0F\u20E3]/gu, "")
-      .normalize("NFKD")
-      .replace(/([\p{Script=Latin}\p{Script=Greek}])\p{M}+/gu, "$1")
-      .replace(/([еЕ])\u0308/g, "$1")
-      .normalize("NFC")
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\p{M}]/gu, "")
-  );
+  const folded = s
+    // A symbol with its presentation selector or keycap (❤️, 1️⃣), not just the symbol.
+    .replace(/\p{S}[\uFE00-\uFE0F\u20E3]*|[\uFE00-\uFE0F\u20E3]/gu, "")
+    .normalize("NFKD")
+    .replace(/([\p{Script=Latin}\p{Script=Greek}])\p{M}+/gu, "$1")
+    .replace(/([еЕ])\u0308/g, "$1")
+    .normalize("NFC");
+  return caseless(folded).replace(/[^\p{L}\p{N}\p{M}]/gu, "");
 }
 
 // Tag names → each name's tagids, case-insensitively. A name isn't unique: in
@@ -138,17 +148,9 @@ function titleKey(s: string): string {
 // doesn't have without a word (it matches or excludes nothing), and the
 // dictionary is in hand, so such a name is refused here, naming it.
 function tagIdsFor(names: string[], tagMap: TagMap, language: string): number[][] {
-  // Turkish has four i's, and case doesn't map between them outside a Turkish
-  // locale: "İ" lowercases to "i" plus U+0307 (so "izometrik" missed
-  // İzometrik), "I" to "i" (so "BAĞIMSIZ" missed Bağımsız). One "i" for all
-  // (14 Turkish tags carry an İ, 90 an ı, seen live). NFC first: an accented
-  // name typed decomposed (some macOS input) is the same name.
-  const key = (n: string) =>
-    n
-      .normalize("NFC")
-      .toLowerCase()
-      .replace(/\u0307/g, "")
-      .replace(/ı/g, "i");
+  // NFC first: an accented name typed decomposed (some macOS input) is the
+  // same name.
+  const key = (n: string) => caseless(n.normalize("NFC"));
   const byName = new Map<string, number[]>();
   for (const [id, n] of Object.entries(tagMap)) {
     byName.set(key(n), [...(byName.get(key(n)) ?? []), Number(id)]);

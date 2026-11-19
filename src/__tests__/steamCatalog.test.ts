@@ -1167,13 +1167,16 @@ test("an appid past 32 bits is refused before any call", async (t) => {
   assert.equal(mock.calls.length, 0);
 });
 
-// Turkish case doesn't map between its i's outside a Turkish locale: "İ"
-// lowercases to "i" plus U+0307, "I" to "i" (not "ı"). One key for all.
-for (const [typed, name, tagid] of [
-  ["izometrik", "İzometrik", 5851],
-  ["BAĞIMSIZ", "Bağımsız", 492],
+// toLowerCase alone isn't caseless: Turkish "İ" lowercases to "i" plus
+// U+0307 and "I" to "i" (not "ı"), German "ß" uppercases to "SS", and
+// uppercasing Greek "ΐ" splits off its accent (all seen in Steam's tags).
+for (const [language, typed, name, tagid] of [
+  ["turkish", "izometrik", "İzometrik", 5851],
+  ["turkish", "BAĞIMSIZ", "Bağımsız", 492],
+  ["german", "FUSSBALL", "Fußball", 1254546],
+  ["greek", "Ιστιοπλοΐα".toUpperCase(), "Ιστιοπλοΐα", 13577],
 ] as const)
-  test(`discover_games: the Turkish tag ${name} matches "${typed}"`, async (t) => {
+  test(`discover_games: the ${language} tag ${name} matches "${typed}"`, async (t) => {
     const { client, mock } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
       url.includes("GetTagList")
         ? jsonResponse({ response: { tags: [{ tagid, name }] } })
@@ -1181,7 +1184,7 @@ for (const [typed, name, tagid] of [
     );
     await client.callTool({
       name: "discover_games",
-      arguments: { tags: [typed], language: "turkish" },
+      arguments: { tags: [typed], language },
     });
     const q = mock.calls.find((c) => c.url.includes("IStoreQueryService/Query"))!;
     const input = JSON.parse(new URL(q.url).searchParams.get("input_json")!);
