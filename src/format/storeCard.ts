@@ -19,7 +19,13 @@ import {
 // ---- shared StoreItem shape -------------------------------------------------
 
 export interface StoreItem {
+  // GetItems echoes the id it was asked for in every item, an unknown
+  // appid's too, whose `appid` is 0 (recorded: GetItems/no-app).
+  id?: number;
   appid?: number;
+  // EResult: 1 found; 15 not shown here (with visible:false); 8 an invalid
+  // id (4294967295, with no visible); seen live 2026-11-20.
+  success?: number;
   name?: string;
   // EStoreAppType: 0 game, 1 demo, 2 mod, 3 movie, 4 dlc, 5 guide, 6 software,
   // 7 video, 8 series, 9 episode, 10 hardware, 11 music, 12 beta, 13 tool,

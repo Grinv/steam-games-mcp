@@ -30,6 +30,13 @@ export function bodyRule(schema: z.ZodType, what: string): (body: unknown) => vo
   };
 }
 
+// A protobuf service method (I…Service) always answers {"response": {...}},
+// and its "none" is {"response":{}} (recorded per endpoint): a body without
+// the envelope is no answer, never that "none". What an absent field inside
+// means is the endpoint's `absent`.
+export const responseEnvelopeRule = (what: string) =>
+  bodyRule(z.looseObject({ response: z.looseObject({}) }), what);
+
 // Typed, not checked: Steam's optional fields and list elements are
 // hand-written types never verified live. Only a body rule's required fields
 // are checked, so one odd item can't cost the whole body.

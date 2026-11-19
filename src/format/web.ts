@@ -60,7 +60,7 @@ type PlayerSummary = PlayerSummariesResponse["response"]["players"][number];
 // its own failure mode (e.g. private inventory), so the level is nullable
 // independent of whether the summary itself was found.
 export interface SteamLevelResponse {
-  response?: { player_level?: number };
+  response: { player_level?: number };
 }
 
 // ECommunityVisibilityState. 3 is public; anything else means this server
@@ -119,7 +119,7 @@ interface OwnedGame {
   img_icon_url?: string;
 }
 export interface OwnedGamesResponse {
-  response?: { game_count?: number; games?: OwnedGame[] };
+  response: { game_count?: number; games?: OwnedGame[] };
 }
 
 // Steam returns an empty `response: {}` (no game_count) when the profile or its
@@ -261,7 +261,7 @@ export function summarizeComparePlayers(
 // isPrivate()'s `game_count`/`games` check would misreport as private since
 // neither of ITS fields is ever present in this endpoint's response at all.
 export interface RecentlyPlayedResponse {
-  response?: { total_count?: number; games?: OwnedGame[] };
+  response: { total_count?: number; games?: OwnedGame[] };
 }
 
 function recentlyPlayedNotShown(r: RecentlyPlayedResponse): boolean {
@@ -398,7 +398,7 @@ export function summarizeCurrentPlayers(
 // ---- Web API: wishlist (keyless; needs a public wishlist) -------------------
 
 export interface WishlistResponse {
-  response?: { items?: { appid?: number; priority?: number; date_added?: number }[] };
+  response: { items?: { appid?: number; priority?: number; date_added?: number }[] };
 }
 
 // A wishlist can hold tens of thousands of items; sort by priority (1 = top of
@@ -470,10 +470,10 @@ export function summarizePlayerBans(r: PlayerBansResponse): z.infer<typeof getPl
 // ---- Web API: followed games (keyless; needs a public profile) -------------
 
 export interface FollowedGamesResponse {
-  response?: { appids?: number[] };
+  response: { appids?: number[] };
 }
 export interface FollowedGamesCountResponse {
-  response?: { followed_game_count?: number };
+  response: { followed_game_count?: number };
 }
 
 // A player can follow far more games than they wishlist; cap like the other
@@ -482,7 +482,7 @@ export interface FollowedGamesCountResponse {
 export const FOLLOWED_MAX = 200;
 export function summarizeFollowedGames(
   r: FollowedGamesResponse,
-  countRes: FollowedGamesCountResponse,
+  countRes: FollowedGamesCountResponse | undefined,
   max = FOLLOWED_MAX,
 ): z.infer<typeof getFollowedGamesOutput> {
   const appids = r.response?.appids ?? [];
@@ -497,7 +497,7 @@ export function summarizeFollowedGames(
   const { included, returned } = capList(appids, max);
   return getFollowedGamesOutput.parse({
     found: true,
-    total: countRes.response?.followed_game_count ?? appids.length,
+    total: countRes?.response.followed_game_count ?? appids.length,
     returned,
     games: included.map((appid) => ({ appid, store_url: storeUrl(appid) })),
   });

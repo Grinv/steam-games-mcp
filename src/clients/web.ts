@@ -294,9 +294,35 @@ export class SteamWebClient {
     ]);
     if (res instanceof ApiError) throw res;
     if (ownedGamesNotShown(res)) return libraryNotShown();
-    const games = (res.response?.games ?? [])
-      .filter((g): g is { appid: number; playtime_forever?: number } => typeof g.appid === "number")
-      .map((g) => ({ appid: g.appid, playtimeMinutes: g.playtime_forever ?? 0 }));
+    // Per row: Steam sends appid and playtime_forever with every game (all
+    // 428 of one library, 247 of them 0; seen live 2026-11-20). A row without
+    // them is unknown, never "not played", and is left out, noted.
+    const listed = res.response.games ?? [];
+    const games = listed.flatMap((g) =>
+      typeof g.appid === "number" && typeof g.playtime_forever === "number"
+        ? [{ appid: g.appid, playtimeMinutes: g.playtime_forever }]
+        : [],
+    );
+    if (games.length < listed.length) {
+      noteDegraded(
+        `${listed.length - games.length} library games`,
+        new ApiError({
+          code: "bad_response",
+          message: "GetOwnedGames rows without appid or playtime_forever",
+          detail: "Steam's answer left out their appid or playtime.",
+          retryable: true,
+        }),
+      );
+    }
+    // "No games" is Steam's own count (game_count 0, no list), never an empty
+    // list beside a count: a library listed with nothing usable is no answer.
+    if (games.length === 0 && (res.response.game_count ?? 0) > 0) {
+      throw new ApiError({
+        code: "bad_response",
+        message: "GetOwnedGames counted games but listed none usable",
+        retryable: true,
+      });
+    }
     return this.#store.getRecommendedGames(games, opts, tags);
   }
 
@@ -589,12 +615,11 @@ export class SteamWebClient {
   // Optional: summarizeFollowedGames falls back to appids.length. Steam's own
   // count can exceed the list (32 listed, 33 counted on one profile, live
   // 2026-11-16), so a missing count is said, not hidden.
-  async #followedGamesCount(steamid: string): Promise<FollowedGamesCountResponse> {
-    const res = await optional(
+  async #followedGamesCount(steamid: string): Promise<FollowedGamesCountResponse | undefined> {
+    return optional(
       "Steam's own followed-games count (total is the listed games)",
       this.#call(Steam.GetGamesFollowedCount, { steamid }),
     );
-    return res ?? {};
   }
 
   #getWishlistDetailed(

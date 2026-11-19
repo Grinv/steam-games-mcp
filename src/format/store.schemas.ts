@@ -81,6 +81,12 @@ export const getItemsOutput = z.strictObject({
             "removed, or isn't sold there (re-check under another `country`). Never dropped from " +
             "the list, so rows line up with the given appids.",
         ),
+      z
+        .strictObject({ appid: z.number(), available: z.null() })
+        .describe(
+          "Unknown: Steam's answer for this appid didn't say whether it's shown here (see " +
+            "`notes`). Not 'not available' — ask again.",
+        ),
       baseCardSchema.extend({
         available: z.literal(true),
         is_free: z.boolean(),

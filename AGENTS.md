@@ -208,11 +208,17 @@ npm run inspector      # run under the MCP Inspector
   endpoints: appdetails for `get_game`'s one appid (`GameDetails`, a body
   rule) and for `get_prices`' batch (`AppDetails`, a per-row `available:null`,
   noted) — the rule is the query's, never inferred from it. Every endpoint
-  declares one or the other — a body rule, or `absent`: what a missing field
-  means there (Steam's own "none", named by the recorded situation that shows
-  it, `seen`, backed like an answer; or `perRow`, a per-row unknown) — and
-  `recorded.test.ts` fails on one that declares neither, so the rule's reach
-  is checked, not remembered. A list is required only where its absence
+  declares a body rule, `absent` (what a missing field means there: Steam's
+  own "none", named by the recorded situation that shows it, `seen`, backed
+  like an answer; or `perRow`, a per-row unknown), or both (a protobuf
+  method's `response` envelope is required, `responseEnvelopeRule`, and
+  `absent` says what's missing inside it) — and `recorded.test.ts` fails on
+  one that declares neither, so the rule's reach is checked, not remembered.
+  Whether an absent field still turns into a verdict is checked too:
+  `degradation.test.ts` drops each field of each answer every tool reads, in
+  turn, and fails on a verdict (`found:false`, not found, `available`/
+  `priced`/`owned:false`) the full answer didn't give, unless the body left
+  is one Steam was recorded sending. A list is required only where its absence
   can't mean "none": where Steam writes "none" as `[]`, or where there is no
   "none" (the global player charts always rank 100). The protobuf service
   methods (`I…Service`) are proto2 and leave an empty list out, so there an

@@ -64,6 +64,11 @@
     "contentType": "application/json; charset=UTF-8",
     "body": "{}"
   },
+  "GetItems/invalid-id": {
+    "status": 200,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{\"response\":{\"store_items\":[{\"item_type\":0,\"id\":4294967295,\"success\":8,\"appid\":4294967295}]}}"
+  },
   "GetItems/no-app": {
     "status": 200,
     "contentType": "application/json; charset=UTF-8",

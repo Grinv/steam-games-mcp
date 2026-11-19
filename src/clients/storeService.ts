@@ -446,7 +446,21 @@ export class StoreServiceClient {
       { input_json: JSON.stringify(input) },
       l,
     );
-    return summarizeItems(res, appids, tagMap);
+    const out = summarizeItems(res, appids, tagMap);
+    // A row Steam's item didn't settle (available:null) is that row's gap.
+    const unknown = out.items.filter((i) => i.available === null).length;
+    if (unknown) {
+      noteDegraded(
+        `Store data of ${unknown} appids`,
+        new ApiError({
+          code: "bad_response",
+          message: `GetItems didn't say whether ${unknown} appids are shown here`,
+          detail: "Steam's answer didn't say whether they're shown in this country.",
+          retryable: true,
+        }),
+      );
+    }
+    return out;
   }
 
   // Steam charts (get_charts), all keyless, names riding along on each rank's

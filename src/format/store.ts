@@ -158,22 +158,27 @@ export function summarizeItems(
   appids: number[],
   tagMap?: TagMap,
 ): z.infer<typeof getItemsOutput> {
-  const byId = new Map<number, StoreItemWithAppid>();
+  // Matched on the id Steam echoes (an unknown appid's item has appid 0).
+  const byId = new Map<number, StoreItem>();
   for (const it of r.response?.store_items ?? []) {
-    // Rebuild with an explicit `appid` so TS sees the narrowed type on the
-    // object itself, not just on this one property access.
-    if (typeof it.appid === "number") byId.set(it.appid, { ...it, appid: it.appid });
+    const id = it.id ?? it.appid;
+    if (typeof id === "number") byId.set(id, it);
   }
   return getItemsOutput.parse({
     count: appids.length,
     items: appids.map((appid) => {
       const it = byId.get(appid);
-      // Steam's own verdict, per row (shownHere): a nonexistent or removed
-      // appid comes back as appid 0, so it has no row here either.
-      if (!it || !shownHere(it)) return { appid, available: false };
+      // Steam's own verdict, per row: visible:false is "not shown here" (a
+      // nonexistent, removed or region-locked appid: success 15), and so is a
+      // failed `success` without `visible` (4294967295: 8, invalid; both seen
+      // live 2026-11-20). An item that says neither is that row's unknown,
+      // noted by the client — never "not available".
+      if (it?.visible === false || (it?.success !== undefined && it.success !== 1))
+        return { appid, available: false };
+      if (!it || !shownHere(it)) return { appid, available: null };
       const bp = ownPurchaseOption(it);
       return {
-        ...baseCard(it, tagMap),
+        ...baseCard({ ...it, appid }, tagMap),
         // Always present, so `available` discriminates every row the way
         // get_prices' does instead of being inferable only from its absence.
         available: true,
@@ -293,7 +298,7 @@ export function gamePurchaseOptionsRule(
 // as GetItems), so "my wishlist with prices / deals" is ONE call instead of
 // get_wishlist + get_items. Filtered/sorted client-side and capped for token safety.
 export interface WishlistDetailedResponse {
-  response?: {
+  response: {
     items?: { appid?: number; priority?: number; date_added?: number; store_item?: StoreItem }[];
   };
 }
@@ -391,8 +396,10 @@ export function computeFavoriteTagWeights(
 ): Map<number, number> {
   const weights = new Map<number, number>();
   for (const it of ownedItems) {
-    if (typeof it.appid !== "number") continue;
-    const hoursPlayed = (playtimeMinutesByAppid.get(it.appid) ?? 0) / 60;
+    // The id Steam echoes for the appid asked (summarizeItems).
+    const appid = it.id ?? it.appid;
+    if (typeof appid !== "number") continue;
+    const hoursPlayed = (playtimeMinutesByAppid.get(appid) ?? 0) / 60;
     if (hoursPlayed <= 0) continue;
     for (const tag of topTagIds(it.tags, tagMap)) {
       weights.set(tag, (weights.get(tag) ?? 0) + hoursPlayed);

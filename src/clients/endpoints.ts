@@ -86,6 +86,7 @@ import {
   type FeaturedResponse,
   type ReviewHistogramResponse,
 } from "../format/storefront.ts";
+import { responseEnvelopeRule } from "../format/shared.ts";
 import { ApiError } from "../lib/errors.ts";
 
 const PUBLIC = "76561198028121353";
@@ -209,6 +210,7 @@ export const Steam = {
     path: "IPlayerService/GetSteamLevel/v1/",
     host: "api",
     keyless: false,
+    validate: responseEnvelopeRule("GetSteamLevel"),
     absent: {
       means:
         "No player_level: the level is unknown (null); {} is what a profile that hides it gets.",
@@ -228,6 +230,7 @@ export const Steam = {
     path: "IPlayerService/GetOwnedGames/v1/",
     host: "api",
     keyless: false,
+    validate: responseEnvelopeRule("GetOwnedGames"),
     absent: {
       means:
         "{} (neither games nor game_count) is Steam not showing the library; a public empty one is {game_count:0}.",
@@ -249,6 +252,7 @@ export const Steam = {
     path: "IPlayerService/GetRecentlyPlayedGames/v1/",
     host: "api",
     keyless: false,
+    validate: responseEnvelopeRule("GetRecentlyPlayedGames"),
     absent: {
       means:
         "{} is Steam not showing the list, for private and some public profiles alike, so worded as not shown; a public quiet one is {total_count:0}.",
@@ -448,10 +452,11 @@ export const Steam = {
       },
     ],
   }),
-  GetAppReviews: endpoint<{ response?: ReviewsResponse }>({
+  GetAppReviews: endpoint<{ response: ReviewsResponse }>({
     path: "IUserReviewsService/GetAppReviews/v1/",
     host: "api",
     keyless: true,
+    validate: responseEnvelopeRule("GetAppReviews"),
     absent: {
       means: "{} is Steam's answer for an unknown appid: every summary field reads unknown (null).",
       seen: "no-app",
@@ -474,6 +479,7 @@ export const Steam = {
     path: "IWishlistService/GetWishlist/v1/",
     host: "api",
     keyless: true,
+    validate: responseEnvelopeRule("GetWishlist"),
     absent: {
       means: "{} is Steam's answer for a private and an empty wishlist alike, worded as not shown.",
       seen: "hidden",
@@ -492,6 +498,7 @@ export const Steam = {
     path: "IWishlistService/GetWishlistSortedFiltered/v1/",
     host: "api",
     keyless: true,
+    validate: responseEnvelopeRule("GetWishlistSortedFiltered"),
     absent: {
       means:
         "{} is Steam's answer when its filters match nothing; the wishlist's size comes from GetWishlist.",
@@ -518,6 +525,7 @@ export const Steam = {
     path: "IStoreService/GetGamesFollowed/v1/",
     host: "api",
     keyless: true,
+    validate: responseEnvelopeRule("GetGamesFollowed"),
     absent: {
       means: "{} is Steam not showing the follows, or there being none, worded as not shown.",
       seen: "hidden",
@@ -536,6 +544,7 @@ export const Steam = {
     path: "IStoreService/GetGamesFollowedCount/v1/",
     host: "api",
     keyless: true,
+    validate: responseEnvelopeRule("GetGamesFollowedCount"),
     absent: {
       means: "{} is Steam's answer for hidden follows; the list's own length stands in.",
       seen: "hidden",
@@ -596,6 +605,12 @@ export const Steam = {
         expect: "data",
         shows: "an unknown appid is an item of its own, appid 0 and not visible",
         situation: "no-app",
+      },
+      {
+        query: { input_json: json({ ids: [{ appid: 4294967295 }], context: ctx }) },
+        expect: "data",
+        shows: "an invalid appid is an item with success 8 and no visible",
+        situation: "invalid-id",
       },
     ],
   }),

@@ -89,21 +89,27 @@ describe("summarizeItems", () => {
     assert.equal(s.items[1]!.price.discount_end, null);
   });
 
-  test("missing appid → available:false; free game → price {is_free}", () => {
+  test("an unknown appid → available:false; free game → price {is_free}", () => {
     const r = {
       response: {
-        store_items: [{ appid: 10, visible: true, name: "Free Game", is_free: true }],
+        store_items: [
+          { id: 10, appid: 10, visible: true, name: "Free Game", is_free: true },
+          // Steam's item for an unknown appid (recorded: GetItems/no-app).
+          { id: 999, appid: 0, visible: false, success: 15 },
+        ],
       },
     };
-    const s = summarizeItems(r, [10, 999]) as {
+    const s = summarizeItems(r, [10, 999, 7]) as {
       count: number;
-      items: { appid: number; available?: boolean; is_free?: boolean; price?: unknown }[];
+      items: { appid: number; available?: boolean | null; is_free?: boolean; price?: unknown }[];
     };
-    assert.equal(s.count, 2);
+    assert.equal(s.count, 3);
     const free = s.items.find((i) => i.appid === 10)!;
     assert.equal(free.is_free, true);
     assert.deepEqual(free.price, { is_free: true });
     assert.equal(s.items.find((i) => i.appid === 999)!.available, false);
+    // No item at all says nothing (the body rule wants one per id): unknown.
+    assert.equal(s.items.find((i) => i.appid === 7)!.available, null);
   });
 
   test("is_free alone (no name/best_purchase_option/reviews) is NOT reported unavailable", () => {
@@ -193,7 +199,12 @@ describe("summarizeWishlistDetailed", () => {
   });
 
   test("empty wishlist → found:false with a private/empty reason", () => {
-    const s = summarizeWishlistDetailed({}, undefined, {}, { total: 0, exact: true }) as {
+    const s = summarizeWishlistDetailed(
+      { response: {} },
+      undefined,
+      {},
+      { total: 0, exact: true },
+    ) as {
       found: boolean;
       reason: string;
       total: number;

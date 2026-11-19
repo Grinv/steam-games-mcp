@@ -167,6 +167,16 @@ export const OWNED = {
     ],
   },
 };
+// GetRecentlyPlayedGames sends total_count with its list (seen live).
+export const RECENT = {
+  response: {
+    total_count: 2,
+    games: [
+      { appid: 620, name: "Portal 2", playtime_2weeks: 60, playtime_forever: 600 },
+      { appid: 400, name: "Portal", playtime_2weeks: 30, playtime_forever: 1200 },
+    ],
+  },
+};
 export const ACHIEVEMENTS = {
   playerstats: {
     success: true,
@@ -374,8 +384,8 @@ export const TAGLIST = {
 
 // Steam's item for an id with no app (recorded): appid 0, not visible.
 const NO_APP_ITEM = (
-  JSON.parse(RECORDED["GetItems/no-app"]!.body) as { response: { store_items: unknown[] } }
-).response.store_items[0];
+  JSON.parse(RECORDED["GetItems/no-app"]!.body) as { response: { store_items: object[] } }
+).response.store_items[0]!;
 
 /** GetItems answers one item per id it's asked, in that order (seen live):
  *  `body`'s item for an id it has, else Steam's recorded item for an id with
@@ -393,7 +403,11 @@ export function getItemsAnswer(url: string, body: unknown): unknown {
     ...(body as object),
     response: {
       ...(body as { response?: object }).response,
-      store_items: ids.map(({ appid }) => given.find((i) => i.appid === appid) ?? NO_APP_ITEM),
+      // Steam echoes each asked id in its item's `id`.
+      store_items: ids.map(({ appid }) => ({
+        ...(given.find((i) => i.appid === appid) ?? NO_APP_ITEM),
+        id: appid,
+      })),
     },
   };
 }
@@ -423,7 +437,7 @@ export function router(url: string) {
   if (url.includes("GetSteamLevel")) return jsonResponse(STEAM_LEVEL);
   if (url.includes("GetPlayerBans")) return jsonResponse(PLAYER_BANS);
   if (url.includes("GetOwnedGames")) return jsonResponse(OWNED);
-  if (url.includes("GetRecentlyPlayedGames")) return jsonResponse(OWNED);
+  if (url.includes("GetRecentlyPlayedGames")) return jsonResponse(RECENT);
   if (url.includes("GetPlayerAchievements")) return jsonResponse(ACHIEVEMENTS);
   if (url.includes("ResolveVanityURL")) return jsonResponse(VANITY);
   // Every chart answers with its ranks list (seen live); empty here.
