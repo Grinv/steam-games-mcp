@@ -79,12 +79,12 @@ import {
   type TopSellersResponse,
 } from "../format/charts.ts";
 import {
-  appEntryRule,
+  gameEntryRule,
+  type GameEntry,
   featuredRule,
   reviewHistogramRule,
   type FeaturedResponse,
   type ReviewHistogramResponse,
-  type StoreApp,
 } from "../format/storefront.ts";
 import { ApiError } from "../lib/errors.ts";
 
@@ -151,9 +151,6 @@ export function classifySteamApiError(err: ApiError, body: string): ApiError {
     cause: err,
   });
 }
-
-/** appdetails, keyed by appid; `data` is `[]` for some delisted apps. */
-export type AppDetailsResponse = Record<string, { success?: boolean; data?: StoreApp | [] }>;
 
 export const Steam = {
   // ---- player data (key required) ------------------------------------------
@@ -744,16 +741,17 @@ export const Steam = {
   }),
 
   // ---- store.steampowered.com (keyless) -------------------------------------
-  // appdetails answers every appid it's asked about with an entry carrying a
-  // boolean `success` (format/'s appEntryInput). A batch (get_prices) decides that per
-  // row: one odd entry costs its own price, noted, not the chunk's hundred.
-  AppDetails: endpoint<AppDetailsResponse>({
+  // appdetails answers every appid it's asked about with an entry:
+  // {success:false}, or a success with its data (format/'s priceEntryInput,
+  // gameEntryInput). A batch (get_prices) decides that per row: one odd entry
+  // costs its own price, noted, not the chunk's hundred.
+  AppDetails: endpoint<Record<string, unknown>>({
     path: "api/appdetails",
     host: "store",
     keyless: true,
     absent: {
       means:
-        "Decided per row: an entry without success is that price's available:null, noted (clients/storefront.ts).",
+        "Decided per row: an entry that doesn't fit (priceEntryInput) is that price's available:null, noted (clients/storefront.ts).",
       perRow: true,
     },
     probes: [
@@ -767,11 +765,11 @@ export const Steam = {
   // The same path for get_game's one appid, its own entry because the rule is
   // that query's: the entry is the whole answer, so without it the body is
   // unusable — retried, never cached.
-  GameDetails: endpoint<AppDetailsResponse>({
+  GameDetails: endpoint<Record<string, GameEntry>>({
     path: "api/appdetails",
     host: "store",
     keyless: true,
-    validate: (body, query) => appEntryRule(body[String(query.appids)]),
+    validate: (body, query) => gameEntryRule(body[String(query.appids)]),
     probes: [
       { query: { appids: 620 }, expect: "data", shows: "a game's entry" },
       { query: { appids: 99999999 }, expect: "data", shows: "{success:false} for no such app" },

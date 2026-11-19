@@ -8,6 +8,7 @@
 // `outputSchema` in tools/storefront.ts.
 import { z } from "zod";
 import { unchecked } from "./shared.ts";
+import type { PriceOverview, StoreApp } from "./storefront.ts";
 
 // The currency/final/initial/discount_percent fields formattedPrice() builds,
 // shared by detailApp's price() and summarizePrices' rows.
@@ -166,17 +167,26 @@ export const getReviewHistogramOutput = z.strictObject({
 // Body rules, as in web.schemas.ts: the response types in storefront.ts are
 // inferred from these. Only the required fields are checked.
 
-// One appid's appdetails entry: {success:false} (no such app here), or
-// {success:true} with its `data` — an object, or [] when a filter leaves
-// nothing (seen live 2026-11-20 on 620, 570, 1206340, 99999999). Without
-// `data`, a success says nothing about the app.
-export const appEntryInput = z.discriminatedUnion("success", [
-  z.looseObject({ success: z.literal(false) }),
-  z.looseObject({
-    success: z.literal(true),
-    data: z.union([z.looseObject({}), z.array(z.unknown()).length(0)]),
-  }),
-]);
+// One appid's appdetails entry: {success:false} — Steam's own "no such app
+// here", for a nonexistent, removed or region-locked one — or a success with
+// its `data` (seen live 2026-11-20: 620, 570, 1206340, 10110, 219820, 99999999,
+// 1174180 under RU). Without `data` a success says nothing, so it isn't one:
+// the entry types are inferred from these, and only success:false is a "no".
+const isRecord = (v: unknown) => typeof v === "object" && v !== null && !Array.isArray(v);
+const appEntry = <D>(isData: (v: unknown) => boolean) =>
+  z.discriminatedUnion("success", [
+    z.looseObject({ success: z.literal(false) }),
+    z.looseObject({ success: z.literal(true), data: z.custom<D>(isData) }),
+  ]);
+// get_game's entry: a success is the app's record.
+export const gameEntryInput = appEntry<StoreApp>(isRecord);
+// get_prices' rows (filters=price_overview): the price, or [] when the app has
+// none (570, free).
+export const priceEntryInput = appEntry<{ price_overview: PriceOverview } | []>(
+  (v) =>
+    (isRecord(v) && isRecord((v as { price_overview?: unknown }).price_overview)) ||
+    (Array.isArray(v) && v.length === 0),
+);
 
 interface FeaturedItem {
   id?: number;

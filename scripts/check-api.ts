@@ -31,6 +31,7 @@ import { ApiError } from "../src/lib/errors.ts";
 import { createLogger } from "../src/lib/logger.ts";
 import { MAINTAINER, Steam, classifySteamApiError } from "../src/clients/endpoints.ts";
 import { storeCardDataRequest } from "../src/clients/storeService.ts";
+import { usableAppEntry } from "../src/format/storefront.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const STORE = process.env.STEAM_STORE_BASE_URL ?? "https://store.steampowered.com";
@@ -538,15 +539,15 @@ const checks: Check[] = [
   },
   {
     // What usableAppEntry rests on: appdetails answers each appid it's asked
-    // about with an entry carrying a boolean success — existing, nonexistent,
-    // removed and region-locked alike (seen 2026-11-19).
-    name: "storefront appdetails (an entry with success for every appid)",
+    // about with an entry that fits priceEntryInput — success:false for a
+    // nonexistent, removed or region-locked one, else its price or [] (free).
+    name: "storefront appdetails (an entry that fits the row rule for every appid)",
     run: async () => {
-      const ids = ["620", "99999999", "219820", "1174180"];
-      const body = await getJson<Record<string, { success?: unknown } | undefined>>(
+      const ids = ["620", "570", "99999999", "219820", "1174180"];
+      const body = await getJson<Record<string, unknown>>(
         `${STORE}/api/appdetails?appids=${ids.join(",")}&cc=ru&filters=price_overview`,
       );
-      for (const id of ids) need(typeof body[id]?.success === "boolean", `${id}.success`);
+      for (const id of ids) need(usableAppEntry(body[id]), `${id}'s entry`);
     },
   },
   {

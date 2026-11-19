@@ -101,8 +101,9 @@ export class StorefrontClient {
       ),
       this.#pricing.getGamePurchasePrice(appid, cc, l),
     ]);
-    const entry = res[String(appid)];
-    if (!entry?.success || !entry.data || Array.isArray(entry.data)) {
+    // The body rule holds this entry; only Steam's success:false is a "no".
+    const entry = res[String(appid)]!;
+    if (!entry.success) {
       // appdetails answers {success:false} both for "no such app" and for "not
       // sold in this country", so naming only the first sends the agent off to
       // re-search a perfectly good appid. Confirmed live: appid 1174180 (Red
@@ -172,20 +173,19 @@ export class StorefrontClient {
       throw (failed.find((r) => !(r.reason instanceof ApiError)) ?? failed[0]!).reason;
     }
     const parts = optionalParts(settled, (i) => `Prices of ${chunks[i]!.length} appids`);
-    const merged: PriceDetailsResponse = Object.assign({}, ...parts);
-    // Per row: an entry Steam sent without a boolean `success` is that price's
-    // gap alone, noted like a failed chunk's — dropped here, decided once, so
+    const merged: Record<string, unknown> = Object.assign({}, ...parts);
+    // Per row: an entry that doesn't fit (priceEntryInput) is that price's gap
+    // alone, noted like a failed chunk's — left out here, decided once, so
     // summarizePrices reads it as no entry (available:null).
+    const rows: PriceDetailsResponse = {};
+    for (const [id, e] of Object.entries(merged)) if (usableAppEntry(e)) rows[id] = e;
     const odd = [
       ...new Set(
         chunks.flatMap((chunk, i) =>
-          settled[i]!.status === "fulfilled"
-            ? chunk.filter((id) => !usableAppEntry(merged[id]))
-            : [],
+          settled[i]!.status === "fulfilled" ? chunk.filter((id) => !(id in rows)) : [],
         ),
       ),
     ];
-    for (const id of odd) delete merged[id];
     if (odd.length) {
       noteDegraded(
         `Prices of ${odd.length} appids`,
@@ -196,7 +196,7 @@ export class StorefrontClient {
         }),
       );
     }
-    return summarizePrices(merged, appids, overrides);
+    return summarizePrices(rows, appids, overrides);
   }
 
   // Review trend over time (monthly history + recent daily). Cached briefly.

@@ -14,7 +14,8 @@ import type { PurchasePrices } from "./store.ts";
 import { appidValue } from "../steam.ts";
 import { bodyRule, capList, isoDay, money, names, storeUrl, stripHtml } from "./shared.ts";
 import {
-  appEntryInput,
+  gameEntryInput,
+  priceEntryInput,
   detailPriceSchema,
   featuredInput,
   featuredItemSchema,
@@ -30,7 +31,7 @@ import {
 
 // ---- Storefront: appdetails -------------------------------------------------
 
-interface PriceOverview {
+export interface PriceOverview {
   currency?: string;
   initial?: number;
   final?: number;
@@ -210,12 +211,10 @@ export function detailApp(a: StoreApp, override?: PriceOverride): z.infer<typeof
 
 // ---- Storefront: batch prices (appdetails?filters=price_overview) -----------
 
-// appdetails keyed by appid; with the price_overview filter, `data` is either
-// { price_overview } or an empty array (free / no price).
-export type PriceDetailsResponse = Record<
-  string,
-  { success?: boolean; data?: { price_overview?: PriceOverview } | [] }
->;
+export type GameEntry = z.infer<typeof gameEntryInput>;
+export type PriceEntry = z.infer<typeof priceEntryInput>;
+// get_prices' usable rows, keyed by appid (the client drops the rest, noted).
+export type PriceDetailsResponse = Record<string, PriceEntry>;
 
 // Shape a merged batch response into one row per requested appid, preserving
 // order.
@@ -230,13 +229,12 @@ export type PriceDetailsResponse = Record<
 // get_featured's "0.00 USD"; featuredItemSchema's final_price documents it too.
 // get_items reads IStoreBrowseService, which carries a real is_free flag.
 
-/** An appdetails entry Steam answered: {success:false}, or a success with its
- *  `data` (appEntryInput). It answers every appid it's asked about, a
- *  nonexistent, removed or region-locked one included ({success:false}; all
- *  seen live 2026-11-19). Per row for a batch; get_game's one entry is a body
- *  rule. */
-export const usableAppEntry = (e: unknown): boolean => appEntryInput.safeParse(e).success;
-export const appEntryRule = bodyRule(appEntryInput, "appdetails' entry for the appid");
+/** An appdetails price row Steam answered (priceEntryInput). It answers every
+ *  appid it's asked about, a nonexistent, removed or region-locked one
+ *  included ({success:false}; all seen live 2026-11-19). Per row for a batch;
+ *  get_game's one entry is a body rule. */
+export const usableAppEntry = (e: unknown): e is PriceEntry => priceEntryInput.safeParse(e).success;
+export const gameEntryRule = bodyRule(gameEntryInput, "appdetails' entry for the appid");
 
 export function summarizePrices(
   merged: PriceDetailsResponse,
@@ -248,10 +246,11 @@ export function summarizePrices(
     // No entry (its chunk failed, or the client dropped one without
     // `success`): unknown, never "not available"; either is noted.
     if (!entry) return { appid: id, available: null };
-    const data = entry.data;
-    const po = data && !Array.isArray(data) ? data.price_overview : undefined;
     if (!entry.success) return { appid: id, available: false as const };
-    if (!po) return { appid: id, available: true as const, priced: false as const };
+    // [] is Steam's "no price" (a free or unreleased app).
+    if (Array.isArray(entry.data))
+      return { appid: id, available: true as const, priced: false as const };
+    const po = entry.data.price_overview;
     return {
       appid: id,
       available: true as const,
