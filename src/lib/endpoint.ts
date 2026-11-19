@@ -49,12 +49,13 @@ export interface Endpoint<T, A extends string = never> {
    *  Runs before caching and inside the retry, like a failed request. */
   validate?: (body: T, query: Query) => void;
   /** Without a body rule: what an absent field means here, and the evidence
-   *  — Steam's own answer for "none" (seen live), or a per-row unknown.
-   *  Only a body rule's schema makes a field required (the response type is
-   *  inferred from it); without one every field is optional, so each endpoint
-   *  states one or the other (recorded.test.ts): an absence nobody decided
-   *  would read as a verdict by default. */
-  absent?: string;
+   *  — Steam's own answer for "none", named by the probe situation that
+   *  records it (`seen`, backed like an answer: recorded.test.ts), or a
+   *  per-row unknown. Only a body rule's schema makes a field required (the
+   *  response type is inferred from it); without one every field is optional,
+   *  so each endpoint states one or the other (recorded.test.ts): an absence
+   *  nobody decided would read as a verdict by default. */
+  absent?: { means: string } & ({ seen: string } | { perRow: true });
   probes: readonly Probe[];
 }
 

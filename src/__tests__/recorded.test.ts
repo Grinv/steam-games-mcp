@@ -89,3 +89,13 @@ test("every endpoint either has a body rule or says what an absent field means",
     .map(([name]) => name);
   assert.deepEqual(undecided, []);
 });
+
+test("every 'none' an absent field is read as was recorded, like an answer", () => {
+  // A "seen live" in a comment is checked once; a recorded situation every
+  // check:api run (probes and recordings are one set, above).
+  const unbacked = Object.entries(Steam).flatMap(([name, ep]) => {
+    const seen = "absent" in ep && ep.absent && "seen" in ep.absent ? ep.absent.seen : undefined;
+    return seen && !ep.probes.some((p) => p.situation === seen) ? [`${name}/${seen}`] : [];
+  });
+  assert.deepEqual(unbacked, []);
+});

@@ -92,6 +92,10 @@ const PUBLIC = "76561198028121353";
 // controls, without putting that id in the repo.
 export const MAINTAINER = "$STEAM_ID";
 const ACCOUNT_0 = "76561197960265728";
+// A public profile with private game details, wishlist and follows.
+const PRIVATE_DETAILS = "76561197960435530";
+// A friends-only profile: its level, among the rest, is hidden.
+const FRIENDS_ONLY = "76561197960287930";
 const json = (o: unknown) => JSON.stringify(o);
 const ctx = { language: "english", country_code: "US" };
 
@@ -206,18 +210,38 @@ export const Steam = {
     path: "IPlayerService/GetSteamLevel/v1/",
     host: "api",
     keyless: false,
-    absent:
-      "No player_level: the level is unknown (null); {} is what a profile that hides it gets (seen live).",
-    probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
+    absent: {
+      means:
+        "No player_level: the level is unknown (null); {} is what a profile that hides it gets.",
+      seen: "hidden",
+    },
+    probes: [
+      invalidSteamidProbe({ steamid: ACCOUNT_0 }),
+      {
+        query: { steamid: FRIENDS_ONLY },
+        expect: "data",
+        shows: "a hidden level is {}",
+        situation: "hidden",
+      },
+    ],
   }),
   GetOwnedGames: endpoint<OwnedGamesResponse>({
     path: "IPlayerService/GetOwnedGames/v1/",
     host: "api",
     keyless: false,
-    absent:
-      "{} (neither games nor game_count) is Steam not showing the library (seen live on private game details); a public empty one is {game_count:0}.",
+    absent: {
+      means:
+        "{} (neither games nor game_count) is Steam not showing the library; a public empty one is {game_count:0}.",
+      seen: "private-game-details",
+    },
     probes: [
       { query: { steamid: PUBLIC }, expect: "data", shows: "a public library" },
+      {
+        query: { steamid: PRIVATE_DETAILS },
+        expect: "data",
+        shows: "a library not shown is {}",
+        situation: "private-game-details",
+      },
       invalidSteamidProbe({ steamid: ACCOUNT_0 }),
       badKeyProbe({ steamid: PUBLIC }),
     ],
@@ -226,10 +250,19 @@ export const Steam = {
     path: "IPlayerService/GetRecentlyPlayedGames/v1/",
     host: "api",
     keyless: false,
-    absent:
-      "{} is Steam not showing the list, for private and some public profiles alike (seen live), so worded as not shown; a public quiet one is {total_count:0}.",
+    absent: {
+      means:
+        "{} is Steam not showing the list, for private and some public profiles alike, so worded as not shown; a public quiet one is {total_count:0}.",
+      seen: "private-game-details",
+    },
     probes: [
       invalidSteamidProbe({ steamid: ACCOUNT_0, count: 1 }),
+      {
+        query: { steamid: PRIVATE_DETAILS, count: 1 },
+        expect: "data",
+        shows: "a list not shown is {}",
+        situation: "private-game-details",
+      },
       badKeyProbe({ steamid: PUBLIC, count: 1 }),
     ],
   }),
@@ -251,7 +284,7 @@ export const Steam = {
     probes: [
       badKeyProbe({ steamid: PUBLIC, relationship: "friend" }),
       {
-        query: { steamid: "76561197960287930", relationship: "friend" },
+        query: { steamid: FRIENDS_ONLY, relationship: "friend" },
         expect: "not_shown",
         shows: "a friends-only list is a 401",
         situation: "friends-only",
@@ -283,7 +316,7 @@ export const Steam = {
     probes: [
       badKeyProbe({ steamid: PUBLIC, appid: 620 }),
       {
-        query: { steamid: "76561197960435530", appid: 620 },
+        query: { steamid: PRIVATE_DETAILS, appid: 620 },
         expect: "not_shown",
         shows: "private game details are a 403",
         situation: "private-game-details",
@@ -420,9 +453,17 @@ export const Steam = {
     path: "IUserReviewsService/GetAppReviews/v1/",
     host: "api",
     keyless: true,
-    absent:
-      "{} is Steam's answer for an unknown appid (seen live): every summary field reads unknown (null).",
+    absent: {
+      means: "{} is Steam's answer for an unknown appid: every summary field reads unknown (null).",
+      seen: "no-app",
+    },
     probes: [
+      {
+        query: { input_json: json({ appid: 99999999, num_per_page: 1 }) },
+        expect: "data",
+        shows: "an unknown appid is {}",
+        situation: "no-app",
+      },
       {
         query: { input_json: json({ appid: 620, num_per_page: 1 }) },
         expect: "data",
@@ -434,33 +475,81 @@ export const Steam = {
     path: "IWishlistService/GetWishlist/v1/",
     host: "api",
     keyless: true,
-    absent:
-      "{} is Steam's answer for a private and an empty wishlist alike (seen live), worded as not shown.",
-    probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
+    absent: {
+      means: "{} is Steam's answer for a private and an empty wishlist alike, worded as not shown.",
+      seen: "hidden",
+    },
+    probes: [
+      invalidSteamidProbe({ steamid: ACCOUNT_0 }),
+      {
+        query: { steamid: PRIVATE_DETAILS },
+        expect: "data",
+        shows: "a wishlist not shown is {}",
+        situation: "hidden",
+      },
+    ],
   }),
   GetWishlistSortedFiltered: endpoint<WishlistDetailedResponse>({
     path: "IWishlistService/GetWishlistSortedFiltered/v1/",
     host: "api",
     keyless: true,
-    absent:
-      "{} is Steam's answer when its filters match nothing (seen live: min_discount 100); the wishlist's size comes from GetWishlist.",
-    probes: [invalidSteamidProbe({ input_json: json({ steamid: ACCOUNT_0 }) })],
+    absent: {
+      means:
+        "{} is Steam's answer when its filters match nothing; the wishlist's size comes from GetWishlist.",
+      seen: "no-match",
+    },
+    probes: [
+      invalidSteamidProbe({ input_json: json({ steamid: ACCOUNT_0 }) }),
+      {
+        // A tag id no game carries, on a public wishlist.
+        query: {
+          input_json: json({
+            steamid: PUBLIC,
+            context: ctx,
+            filters: { tagids_must_match: [999999999] },
+          }),
+        },
+        expect: "data",
+        shows: "filters matching nothing are {}",
+        situation: "no-match",
+      },
+    ],
   }),
   GetGamesFollowed: endpoint<FollowedGamesResponse>({
     path: "IStoreService/GetGamesFollowed/v1/",
     host: "api",
     keyless: true,
-    absent:
-      "{} is Steam not showing the follows, or there being none (seen live), worded as not shown.",
-    probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
+    absent: {
+      means: "{} is Steam not showing the follows, or there being none, worded as not shown.",
+      seen: "hidden",
+    },
+    probes: [
+      invalidSteamidProbe({ steamid: ACCOUNT_0 }),
+      {
+        query: { steamid: PRIVATE_DETAILS },
+        expect: "data",
+        shows: "follows not shown are {}",
+        situation: "hidden",
+      },
+    ],
   }),
   GetGamesFollowedCount: endpoint<FollowedGamesCountResponse>({
     path: "IStoreService/GetGamesFollowedCount/v1/",
     host: "api",
     keyless: true,
-    absent:
-      "{} is Steam's answer for hidden follows (seen live 2026-11-19); the list's own length stands in.",
-    probes: [invalidSteamidProbe({ steamid: ACCOUNT_0 })],
+    absent: {
+      means: "{} is Steam's answer for hidden follows; the list's own length stands in.",
+      seen: "hidden",
+    },
+    probes: [
+      invalidSteamidProbe({ steamid: ACCOUNT_0 }),
+      {
+        query: { steamid: PRIVATE_DETAILS },
+        expect: "data",
+        shows: "a hidden follow count is {}",
+        situation: "hidden",
+      },
+    ],
   }),
   // Every Steam language has a full dictionary (446 tags each, 2026-11-18),
   // and only Steam's names reach it (STEAM_LANGUAGES), so an empty one is a
@@ -502,6 +591,12 @@ export const Steam = {
         query: { input_json: json({ ids: [{ appid: 620 }], context: ctx }) },
         expect: "data",
         shows: "items",
+      },
+      {
+        query: { input_json: json({ ids: [{ appid: 99999999 }], context: ctx }) },
+        expect: "data",
+        shows: "an unknown appid is an item of its own, appid 0 and not visible",
+        situation: "no-app",
       },
     ],
   }),
@@ -582,8 +677,14 @@ export const Steam = {
     path: "IStoreQueryService/SearchSuggestions/v1/",
     host: "api",
     keyless: true,
-    absent: 'No store_items is Steam\'s no-match (seen live: metadata only, for "zzqxqx").',
+    absent: { means: "No store_items is Steam's no-match (metadata only).", seen: "no-match" },
     probes: [
+      {
+        query: { input_json: json({ search_term: "zzqxqx", max_results: 1, context: ctx }) },
+        expect: "data",
+        shows: "no match is metadata without store_items",
+        situation: "no-match",
+      },
       {
         query: { input_json: json({ search_term: "portal", max_results: 1, context: ctx }) },
         expect: "data",
@@ -646,8 +747,11 @@ export const Steam = {
     path: "api/appdetails",
     host: "store",
     keyless: true,
-    absent:
-      "Decided per row: an entry without success is that price's available:null, noted (clients/storefront.ts).",
+    absent: {
+      means:
+        "Decided per row: an entry without success is that price's available:null, noted (clients/storefront.ts).",
+      perRow: true,
+    },
     probes: [
       {
         query: { appids: "620,99999999", filters: "price_overview" },

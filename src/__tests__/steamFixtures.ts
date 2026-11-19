@@ -2,7 +2,7 @@
 // (steamStorefront.test.ts, steamCatalog.test.ts, steamPlayer.test.ts) — one
 // `router()` covering every endpoint those three files exercise, so a single
 // connectServer() + installFetch(t, mockFetch(router)) setup works everywhere.
-import { jsonResponse } from "./helpers.ts";
+import { jsonResponse, RECORDED } from "./helpers.ts";
 
 // Key present + throttling disabled so tests run offline and fast.
 export const ENV = {
@@ -372,9 +372,14 @@ export const TAGLIST = {
   },
 };
 
+// Steam's item for an id with no app (recorded): appid 0, not visible.
+const NO_APP_ITEM = (
+  JSON.parse(RECORDED["GetItems/no-app"]!.body) as { response: { store_items: unknown[] } }
+).response.store_items[0];
+
 /** GetItems answers one item per id it's asked, in that order (seen live):
- *  `body`'s item for an id it has, else a cardless one (success 8), as Steam
- *  sends for an id it has no card for. */
+ *  `body`'s item for an id it has, else Steam's recorded item for an id with
+ *  no app. */
 export function getItemsAnswer(url: string, body: unknown): unknown {
   const ids =
     (
@@ -388,9 +393,7 @@ export function getItemsAnswer(url: string, body: unknown): unknown {
     ...(body as object),
     response: {
       ...(body as { response?: object }).response,
-      store_items: ids.map(
-        ({ appid }) => given.find((i) => i.appid === appid) ?? { appid, success: 8 },
-      ),
+      store_items: ids.map(({ appid }) => given.find((i) => i.appid === appid) ?? NO_APP_ITEM),
     },
   };
 }

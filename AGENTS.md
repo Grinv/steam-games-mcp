@@ -208,13 +208,15 @@ npm run inspector      # run under the MCP Inspector
   rule) and for `get_prices`' batch (`AppDetails`, a per-row `available:null`,
   noted) — the rule is the query's, never inferred from it. Every endpoint
   declares one or the other — a body rule, or `absent`: what a missing field
-  means there (Steam's own "none" seen live, or a per-row unknown) — and
+  means there (Steam's own "none", named by the recorded situation that shows
+  it, `seen`, backed like an answer; or `perRow`, a per-row unknown) — and
   `recorded.test.ts` fails on one that declares neither, so the rule's reach
-  is checked, not remembered. A list is required only where Steam writes "none" as `[]`:
-  the protobuf service methods (`I…Service`) are proto2 and leave an empty
-  list out, so there an absent list is empty; their empty answers are
-  recorded situations (`clients/endpoints.ts` header says which API writes
-  which). Hand-written error bodies stay only in tests of the
+  is checked, not remembered. A list is required only where its absence
+  can't mean "none": where Steam writes "none" as `[]`, or where there is no
+  "none" (the global player charts always rank 100). The protobuf service
+  methods (`I…Service`) are proto2 and leave an empty list out, so there an
+  absent list is empty; their empty answers are recorded situations
+  (`clients/endpoints.ts` header says which API writes which). Hand-written error bodies stay only in tests of the
   generic pipeline (`lib/` behaviour on any status), never as "what Steam
   answers here": that is how the 403 fixture above, a bad key "401 on all of
   IPlayerService" (only GetOwnedGames is) and an invented accountid-0 page
