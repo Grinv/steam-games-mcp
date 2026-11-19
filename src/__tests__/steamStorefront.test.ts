@@ -197,21 +197,21 @@ describe("get_game", () => {
     assertToolError(res, /isn't available in that country/i);
   });
 
-  test("get_game returns a not-found error for success:true with no data (region-restricted/delisted)", async (t) => {
-    const { client } = await setupServer(t, ENV, (url) => {
-      if (url.includes("/api/appdetails")) return jsonResponse({ "999": { success: true } });
-      return jsonResponse({});
-    });
-    const res = await client.callTool({ name: "get_game", arguments: { appid: 999 } });
-    assertToolError(res, /no matching resource|404/i);
-  });
-
   test("get_game: a body without the appid's entry is an unusable answer, not 'no such app'", async (t) => {
     // appdetails answers every appid, a nonexistent one with {success:false}
     // (verified live), so a missing entry says nothing about the game — and
     // must not crash the lookup or get cached (answersEvery).
     const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
       url.includes("/api/appdetails") ? jsonResponse({}) : jsonResponse({}),
+    );
+    const res = await client.callTool({ name: "get_game", arguments: { appid: 999 } });
+    assertToolError(res, /unusable response.*retry/i);
+  });
+
+  test("get_game: a success without its data is an unusable answer, not 'no such app'", async (t) => {
+    // Steam sends `data` with every success (an object, or [] when filtered).
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+      url.includes("/api/appdetails") ? jsonResponse({ 999: { success: true } }) : jsonResponse({}),
     );
     const res = await client.callTool({ name: "get_game", arguments: { appid: 999 } });
     assertToolError(res, /unusable response.*retry/i);
@@ -649,6 +649,22 @@ describe("get_prices", () => {
       [150],
     );
     assert.match(s.notes[0]!, /^Prices of 1 appids unavailable: .*unusable response/);
+  });
+
+  test("get_prices: a success without its data is that row's unknown, not 'no price'", async (t) => {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+      url.includes("/api/appdetails")
+        ? jsonResponse({ 1: { success: true, data: [] }, 7: { success: true } })
+        : router(url),
+    );
+    const res = await client.callTool({ name: "get_prices", arguments: { appids: [1, 7] } });
+    const s = res.structuredContent as {
+      prices: { appid: number; available: boolean | null; priced?: boolean }[];
+      notes: string[];
+    };
+    assert.deepEqual(s.prices[0], { appid: 1, available: true, priced: false });
+    assert.equal(s.prices[1]!.available, null);
+    assert.ok(s.notes.length > 0);
   });
 
   test(`get_prices rejects appids outside the 1-${PRICES_MAX} bound before calling the upstream`, async (t) => {

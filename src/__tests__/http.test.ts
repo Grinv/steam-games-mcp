@@ -283,6 +283,22 @@ describe("response cache (cache: true)", () => {
     );
   });
 
+  test("after a definitive answer, the copy before it never stands in for a later failure", async (t) => {
+    // Steam's latest answer was the 404: the 200 cached before it is no
+    // longer what Steam says, so a 503 after it is a failure, not that copy.
+    let status = 200;
+    installFetch(
+      t,
+      mockFetch(() => (status === 200 ? jsonResponse({ v: 1 }) : jsonResponse({}, { status }))),
+    );
+    const c = client({ cacheTtlMs: 1, retries: 0 });
+    await warmThenExpire(c);
+    status = 404;
+    await assert.rejects(() => c.getJson("thing", { cache: true }), { code: "not_found" });
+    status = 503;
+    await assert.rejects(() => c.getJson("thing", { cache: true }), { code: "server_error" });
+  });
+
   test("a body the call's validate rejects is never cached over a good one", async (t) => {
     let mode: "good" | "empty" | "down" = "good";
     installFetch(
@@ -294,20 +310,18 @@ describe("response cache (cache: true)", () => {
       ),
     );
     const c = client({ cacheTtlMs: 1 });
+    // Every body rule's kind: an unusable body may be a hiccup (retryable).
     const validate = (body: unknown) => {
       if ((body as { tags: string[] }).tags.length === 0)
-        throw new ApiError({ code: "bad_request", message: "empty" });
+        throw new ApiError({ code: "bad_response", message: "empty", retryable: true });
     };
     await c.getJson("thing", { cache: true, validate });
     await new Promise((r) => setTimeout(r, 5));
     mode = "empty";
-    // A definitive rejection propagates…
-    await assert.rejects(
-      () => c.getJson("thing", { cache: true, validate }),
-      (err: unknown) => err instanceof ApiError && err.code === "bad_request",
-    );
-    // …and the good body is still what's cached: Steam failing next is
-    // answered with it, not with the rejected one.
+    // The unusable body is answered with the good copy…
+    assert.deepEqual(await c.getJson("thing", { cache: true, validate }), { tags: ["a"] });
+    // …and never cached over it: Steam failing next is answered with the
+    // good body too, not with the rejected one.
     mode = "down";
     assert.deepEqual(await c.getJson("thing", { cache: true, validate }), { tags: ["a"] });
   });

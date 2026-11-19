@@ -99,7 +99,7 @@ describe("toProblem", () => {
   test("401/403 never blame the key: a rejected key is invalid_key at the source", () => {
     for (const code of ["forbidden", "unauthorized"] as const) {
       const { detail } = toProblem(new ApiError({ code, message: "d" }), silentLogger());
-      assert.match(detail, /isn't the API key/i);
+      assert.match(detail, /didn't answer with its rejected-key page/i);
       assert.doesNotMatch(detail, /invalid|expired|check the configured/i);
     }
   });

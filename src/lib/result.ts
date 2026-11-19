@@ -58,9 +58,10 @@ type ProblemCode = ApiErrorCode | OwnCode;
 // alone composes each occurrence's `detail` from typed fields, never from an
 // error's free-text message.
 // A rejected key never reaches unauthorized/forbidden: Steam's bad-key page is
-// classified as invalid_key at the source (whatever its status), so these say
-// what is left — whether or not the call carried a key.
-const NOT_THE_KEY = "It isn't the API key (a rejected key is reported as such). ";
+// classified as invalid_key at the source (whatever its status, checked by
+// check:api's bad-key probes), so these say what Steam didn't send — whether
+// or not the call carried a key — never a cause it didn't give.
+const NOT_THE_KEY = "Steam didn't answer with its rejected-key page (that is reported as such). ";
 
 const PROBLEMS: Record<
   ProblemCode,

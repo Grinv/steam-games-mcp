@@ -247,8 +247,9 @@ export function summarizePurchasePrices(r: StoreItemsResponse): {
 
 // GetItems answers one item per id it's asked about — a nonexistent, removed
 // or out-of-range one too (appid 0, or success 8: 5 kinds of id, 5 items,
-// seen live 2026-11-19). So a list short of the ids asked for is no answer: a
-// fact about the whole body, unlike any one item's contents (per row).
+// seen live 2026-11-19; duplicates too). So a list of any other length is no
+// answer — longer isn't what Steam sends either: a fact about the whole body,
+// unlike any one item's contents (per row).
 export function itemsForEveryId(body: StoreItemsResponse, query: Record<string, unknown>): void {
   const asked = (JSON.parse(String(query.input_json)) as { ids?: unknown[] }).ids?.length ?? 0;
   const got = body.response?.store_items?.length ?? 0;

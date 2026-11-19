@@ -95,6 +95,11 @@ export class TtlCache {
     return promise;
   }
 
+  /** Drop a key's value, e.g. when Steam's latest answer supersedes it. */
+  delete(key: string): void {
+    this.#delete(key);
+  }
+
   #delete(key: string): void {
     const hit = this.#map.get(key);
     if (!hit) return;

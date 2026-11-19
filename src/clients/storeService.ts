@@ -124,7 +124,7 @@ function caseless(s: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/(\p{Script=Greek})\p{M}+/gu, "$1")
-    .replace(/\u0307/g, "")
+    .replace(/i\u0307/g, "i")
     .normalize("NFC")
     .replace(/ς/g, "σ");
 }
@@ -154,12 +154,13 @@ function titleKey(s: string): string {
 // doesn't have without a word (it matches or excludes nothing), and the
 // dictionary is in hand, so such a name is refused here, naming it.
 function tagIdsFor(names: string[], tagMap: TagMap, language: string): number[][] {
-  // NFC first: an accented name typed decomposed (some macOS input) is the
-  // same name.
-  const key = (n: string) => caseless(n.normalize("NFC"));
+  // caseless also makes an accented name typed decomposed (some macOS input)
+  // the same name.
+  const key = caseless;
   const byName = new Map<string, number[]>();
   for (const [id, n] of Object.entries(tagMap)) {
-    byName.set(key(n), [...(byName.get(key(n)) ?? []), Number(id)]);
+    const k = key(n);
+    byName.set(k, [...(byName.get(k) ?? []), Number(id)]);
   }
   const idsOf = (name: string) => byName.get(key(name)) ?? [];
   const unknown = names.filter((n) => idsOf(n).length === 0);

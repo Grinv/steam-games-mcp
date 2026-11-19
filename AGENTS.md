@@ -286,7 +286,8 @@ npm run inspector      # run under the MCP Inspector
   on what actually happened: the host client's `classify` (Steam's bad-key page →
   `invalid_key`) and the endpoint's `validate` (a body it can't use, e.g. an
   empty tag dictionary, fails like a request and is never cached). A stale copy answers only a
-  `retryable` failure, without retries when one exists; it is collected per call via
+  `retryable` failure, without retries when one exists, and a definitive one
+  (Steam's latest word) drops it; it is collected per call via
   `callScope` and flags `_meta["io.github.Grinv/stale"]`. `_meta` keys use `META_PREFIX`
   (`src/version.ts`), the reverse-DNS namespace of `mcpName`.
 - **Cancellation** reaches Steam without being threaded through clients: the

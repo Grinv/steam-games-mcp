@@ -166,8 +166,17 @@ export const getReviewHistogramOutput = z.strictObject({
 // Body rules, as in web.schemas.ts: the response types in storefront.ts are
 // inferred from these. Only the required fields are checked.
 
-// One appid's appdetails entry, usable when it carries a boolean `success`.
-export const appEntryInput = z.looseObject({ success: z.boolean() });
+// One appid's appdetails entry: {success:false} (no such app here), or
+// {success:true} with its `data` — an object, or [] when a filter leaves
+// nothing (seen live 2026-11-20 on 620, 570, 1206340, 99999999). Without
+// `data`, a success says nothing about the app.
+export const appEntryInput = z.discriminatedUnion("success", [
+  z.looseObject({ success: z.literal(false) }),
+  z.looseObject({
+    success: z.literal(true),
+    data: z.union([z.looseObject({}), z.array(z.unknown()).length(0)]),
+  }),
+]);
 
 interface FeaturedItem {
   id?: number;

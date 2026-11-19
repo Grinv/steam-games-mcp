@@ -607,6 +607,8 @@ export const Steam = {
   // list short of the ids asked for is no answer (retried, never cached); an
   // item that doesn't fit the price shape costs its own correction, noted.
   // Its own entry because the rule holds for that query, not every GetItems.
+  // Never cached: for one appid its URL is GamePurchaseOptions', whose
+  // stricter rule a body cached under this one would skip.
   GetPurchaseOptions: endpoint<StoreItemsResponse>({
     path: "IStoreBrowseService/GetItems/v1/",
     host: "api",

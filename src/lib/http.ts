@@ -98,6 +98,8 @@ export class HttpClient {
       const shared = this.#cache.wrap(url, async () => {
         // With a stale copy to fall back on, a retry would only delay the
         // answer it ends in (up to ~45 s of timeouts with the defaults).
+        // However old the copy, the agent is told when it was stored (a
+        // note); a maximum age would turn that answer into an error.
         const retries = stale === undefined ? undefined : 0;
         const check = (text: string) => void (parsed = checked(text, options));
         return (await this.#request(url, "application/json", undefined, check, retries)) ?? "";
@@ -105,6 +107,9 @@ export class HttpClient {
       const text = await untilCancelled(shared, signal);
       return parsed ?? parseJson(text);
     } catch (err) {
+      // A definitive answer is Steam's latest word: the copy before it no
+      // longer stands in for a later failure (as a new body replaces it).
+      if (err instanceof ApiError && !err.retryable) this.#cache.delete(url);
       if (stale === undefined || !(err instanceof ApiError && err.retryable)) throw err;
       callScope.getStore()?.stale.push({ err: err as ApiError, storedAt: stale.storedAt });
       return parseJson(stale.value);

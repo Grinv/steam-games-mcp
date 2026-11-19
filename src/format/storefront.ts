@@ -230,10 +230,11 @@ export type PriceDetailsResponse = Record<
 // get_featured's "0.00 USD"; featuredItemSchema's final_price documents it too.
 // get_items reads IStoreBrowseService, which carries a real is_free flag.
 
-/** An appdetails entry Steam answered: an object with a boolean `success`
- *  (appEntryInput). It answers every appid it's asked about, a nonexistent,
- *  removed or region-locked one included ({success:false}; all seen live
- *  2026-11-19). Per row for a batch; get_game's one entry is a body rule. */
+/** An appdetails entry Steam answered: {success:false}, or a success with its
+ *  `data` (appEntryInput). It answers every appid it's asked about, a
+ *  nonexistent, removed or region-locked one included ({success:false}; all
+ *  seen live 2026-11-19). Per row for a batch; get_game's one entry is a body
+ *  rule. */
 export const usableAppEntry = (e: unknown): boolean => appEntryInput.safeParse(e).success;
 export const appEntryRule = bodyRule(appEntryInput, "appdetails' entry for the appid");
 
