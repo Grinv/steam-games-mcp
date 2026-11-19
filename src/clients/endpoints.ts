@@ -11,7 +11,8 @@
 //   Steam's proto2 messages (SteamDatabase/Protobufs: no `syntax`, `[default]`
 //   options): an empty repeated field is left out, and an optional scalar is
 //   sent only when set (game_count 0 when set, nothing when not). So a list
-//   there is never required: absent is empty.
+//   there is required only where it has no "none" (the global player charts
+//   always rank 100); elsewhere absent is empty.
 // - The older Web API interfaces (ISteamUser, ISteamNews, ISteamUserStats)
 //   write their lists out: none is [] (players, newsitems, seen live).
 // - store.steampowered.com/api (the storefront) has its own forms: `data: []`
@@ -53,6 +54,7 @@ import {
   type PlayerAchievementsResponse,
 } from "../format/webAchievements.ts";
 import {
+  searchSuggestionsRule,
   storeQueryRule,
   gamePurchaseOptionsRule,
   itemsForEveryId,
@@ -677,7 +679,7 @@ export const Steam = {
     path: "IStoreQueryService/SearchSuggestions/v1/",
     host: "api",
     keyless: true,
-    absent: { means: "No store_items is Steam's no-match (metadata only).", seen: "no-match" },
+    validate: searchSuggestionsRule,
     probes: [
       {
         query: { input_json: json({ search_term: "zzqxqx", max_results: 1, context: ctx }) },

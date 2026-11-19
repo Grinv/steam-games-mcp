@@ -162,9 +162,12 @@ export const purchaseItemInput = z.looseObject({
   purchase_options: z.array(purchaseOptionInput).optional(),
 });
 
-// IStoreQueryService/Query's answer, its body rule (store.ts's storeQueryRule):
-// the type StoreQueryResponse is inferred from it. Only the total is checked;
-// the cards are decided per row, like GetItems' (storeCard.ts's shownHere).
+// The answer of both IStoreQueryService methods, Query and SearchSuggestions,
+// and their body rule (store.ts's storeQueryRule, searchSuggestionsRule): the
+// response types are inferred from it. Only the total is checked — Steam
+// sends it with every answer, 0 for no match (recorded) — so a body without
+// it is unusable, never "nothing found"; the cards are decided per row, like
+// GetItems' (storeCard.ts's shownHere).
 export const storeQueryInput = z.looseObject({
   response: z.looseObject({
     metadata: z.looseObject({

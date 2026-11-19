@@ -1168,12 +1168,15 @@ test("an appid past 32 bits is refused before any call", async (t) => {
 });
 
 // toLowerCase alone isn't caseless: Turkish "İ" lowercases to "i" plus
-// U+0307 and "I" to "i" (not "ı"), German "ß" uppercases to "SS", and
-// uppercasing Greek "ΐ" splits off its accent (all seen in Steam's tags).
+// U+0307 and "I" to "i" (not "ı"), German "ß" uppercases to "SS" (and is
+// also written "ẞ"), and Greek capitals drop their accents (all seen in
+// Steam's tags).
 for (const [language, typed, name, tagid] of [
   ["turkish", "izometrik", "İzometrik", 5851],
   ["turkish", "BAĞIMSIZ", "Bağımsız", 492],
   ["german", "FUSSBALL", "Fußball", 1254546],
+  ["german", "FUẞBALL", "Fußball", 1254546],
+  ["greek", "ΣΤΡΑΤΗΓΙΚΗ", "Στρατηγική", 9],
   ["greek", "Ιστιοπλοΐα".toUpperCase(), "Ιστιοπλοΐα", 13577],
 ] as const)
   test(`discover_games: the ${language} tag ${name} matches "${typed}"`, async (t) => {

@@ -240,12 +240,19 @@ describe("summarizeWishlistDetailed", () => {
       undefined,
       {},
       { total: 3, exact: true },
-    ) as { matched: number; returned: number; note?: string; items: { appid: number }[] };
+    ) as {
+      matched: number;
+      enriched: number;
+      returned: number;
+      note?: string;
+      items: { appid: number }[];
+    };
     assert.deepEqual(
       s.items.map((i) => i.appid),
       [1],
     );
     assert.equal(s.matched, 2); // the shown one and the uncarded one
+    assert.equal(s.enriched, 2); // Steam carded both, shown or not
     assert.match(s.note ?? "", /^1 not shown in this country.*1174180/);
   });
 

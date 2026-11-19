@@ -6,6 +6,10 @@ import { z } from "zod";
 
 // The 17-digit SteamID64 shape: the steamid tool input (tools/webShared.ts)
 // and the SteamID64-vs-vanity split of STEAM_ID (clients/web.ts).
+// Steam's appid is a uint32 and it wraps a larger one: appdetails for
+// 2^32+620 answers Portal 2 under that id (verified live 2026-11-18).
+export const appidValue = z.uint32().positive();
+
 export const STEAMID64_RE = /^\d{17}$/;
 
 // A 17-digit string that can name an account: accountid (the low 32 bits) is

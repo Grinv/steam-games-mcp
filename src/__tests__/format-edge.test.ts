@@ -1,4 +1,5 @@
 import { ApiError } from "../lib/errors.ts";
+import { RECORDED } from "./helpers.ts";
 import { resolveTags } from "../format/storeCard.ts";
 import { mostPlayedRule, topSellersRule } from "../format/charts.ts";
 import { vanityRule } from "../format/web.ts";
@@ -34,6 +35,7 @@ import {
   summarizeItems,
   computeFavoriteTagWeights,
   summarizeRecommendations,
+  searchSuggestionsRule,
   summarizeSearchSuggestions,
 } from "../format/store.ts";
 import { storeDayStart, storeReleaseDay, stripHtml } from "../format/shared.ts";
@@ -107,6 +109,11 @@ describe("detailApp", () => {
     }) as Record<string, unknown>;
     assert.deepEqual(d.categories, ["Steam Workshop", "Co-op"]);
     assert.deepEqual(d.genres, ["Action"]);
+  });
+
+  test("a fullgame id that isn't an appid names no base game", () => {
+    for (const appid of ["0", "-1", "x", "4294967296"])
+      assert.equal(detailApp({ fullgame: { appid, name: "?" } }).base_game, null, appid);
   });
 
   test("free DLC populates is_free price, base_game and stripped requirements", () => {
@@ -260,6 +267,7 @@ describe("summarizeSearchSuggestions", () => {
     // bundle at $48.36 while the game's own package is $49.99.
     const s = summarizeSearchSuggestions({
       response: {
+        metadata: { total_matching_records: 1 },
         store_items: [
           {
             appid: 2186680,
@@ -286,6 +294,7 @@ describe("summarizeSearchSuggestions", () => {
     // as its only own-package purchase option.
     const s = summarizeSearchSuggestions({
       response: {
+        metadata: { total_matching_records: 1 },
         store_items: [
           {
             appid: 730,
@@ -302,6 +311,7 @@ describe("summarizeSearchSuggestions", () => {
   test("maps the numeric store type and a missing metacritic to null", () => {
     const s = summarizeSearchSuggestions({
       response: {
+        metadata: { total_matching_records: 1 },
         store_items: [
           { appid: 1, visible: true, type: 4 },
           { appid: 2, visible: true, type: 11 },
@@ -317,9 +327,10 @@ describe("summarizeSearchSuggestions", () => {
     assert.equal(s.results[0]!.metascore, null);
   });
 
-  test("carries a discount from the own package, and falls back to the result count for total", () => {
+  test("carries a discount from the own package", () => {
     const s = summarizeSearchSuggestions({
       response: {
+        metadata: { total_matching_records: 1 },
         store_items: [
           {
             appid: 684410,
@@ -345,10 +356,16 @@ describe("summarizeSearchSuggestions", () => {
     });
   });
 
-  test("empty response → total 0, no results", () => {
-    const s = summarizeSearchSuggestions({}) as R;
+  // Steam's no match is a total of 0 (recorded); a body without the total
+  // is unusable, never "nothing found".
+  test("no match is total 0; a body without the total is no answer", () => {
+    const body = JSON.parse(RECORDED["SearchSuggestions/no-match"]!.body) as Parameters<
+      typeof summarizeSearchSuggestions
+    >[0];
+    const s = summarizeSearchSuggestions(body) as R;
     assert.equal(s.total, 0);
     assert.deepEqual(s.results, []);
+    assert.throws(() => searchSuggestionsRule({ response: {} } as never), { code: "bad_response" });
   });
 });
 

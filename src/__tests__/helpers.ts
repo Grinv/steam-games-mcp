@@ -79,12 +79,22 @@ export function textOf(res: unknown): string {
   return content?.[0]?.text ?? "";
 }
 
+// The fetch mock each test installed, so a later install swaps its handler:
+// a second t.mock.method on fetch would be restored (in creation order) to
+// the first mock, not to the real fetch.
+const installed = new WeakMap<
+  TestContext,
+  { mock: { mockImplementation(f: typeof fetch): void } }
+>();
+
 /** Install a fetch mock for the duration of the current test. Scoped to `t.mock`
  * (node:test's built-in mocking), which auto-restores the original
  * `globalThis.fetch` when the test finishes — callers don't call anything to
- * undo it themselves. */
+ * undo it themselves. Installing again in the same test replaces the handler. */
 export function installFetch(t: TestContext, mock: FetchMock): void {
-  t.mock.method(globalThis, "fetch", mock.fn);
+  const current = installed.get(t);
+  if (current) current.mock.mockImplementation(mock.fn);
+  else installed.set(t, t.mock.method(globalThis, "fetch", mock.fn));
 }
 
 /** Build the server and connect an in-memory client for end-to-end tool tests.

@@ -5,7 +5,7 @@
 import { z } from "zod";
 import type { CompatFilters } from "../format/storeCard.ts";
 import { compatFilterSchema } from "../format/store.schemas.ts";
-import { steamLanguage } from "../steam.ts";
+import { appidValue, steamLanguage } from "../steam.ts";
 
 export const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
 
@@ -24,9 +24,7 @@ export const PRICES_MAX = 250;
 // budget above; the default stays 10, the old storesearch page size.
 export const SEARCH_MAX = 100;
 
-// Steam's appid is a uint32 and it wraps a larger one: appdetails for
-// 2^32+620 answers Portal 2 under that id (verified live 2026-11-18).
-export const appidValue = z.uint32().positive();
+export { appidValue };
 
 export const appid = appidValue.describe("Steam application id (appid). Get it from search_games.");
 

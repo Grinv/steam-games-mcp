@@ -110,17 +110,23 @@ function reviewScoreFloor(threshold: number): number {
   return 1;
 }
 
-// Without case, in any language: the lowercase of the uppercase, so German ß
-// is ss and Turkish ı is i (toLowerCase alone keeps them apart from SS and
-// I), and NFC again, since uppercasing can split a letter from its accent
-// (Greek ΐ); minus the dot Turkish İ lowercases with. Checked live on all
-// 31 tag dictionaries: every name found typed in either case, no two merged.
+// Without case, as each language writes it in capitals: lower, upper, lower,
+// so German ß and ẞ are ss and Turkish ı is i (toLowerCase alone keeps them
+// apart from SS and I); minus the dot Turkish İ lowercases with; Greek
+// without its accents (Greek capitals drop them: ΣΤΡΑΤΗΓΙΚΗ is Στρατηγική)
+// and with one sigma (final ς depends on where a word ends). Checked live on
+// all 31 tag dictionaries, each name typed in its language's capitals, in
+// lowercase and with ẞ: every one found, no two merged.
 function caseless(s: string): string {
   return s
+    .toLowerCase()
     .toUpperCase()
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/(\p{Script=Greek})\p{M}+/gu, "$1")
+    .replace(/\u0307/g, "")
     .normalize("NFC")
-    .replace(/\u0307/g, "");
+    .replace(/ς/g, "σ");
 }
 
 // A title as matched by name: only its letters and digits count — symbols

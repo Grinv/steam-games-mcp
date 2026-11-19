@@ -48,12 +48,8 @@ import {
 
 // ---- IStoreQueryService/SearchSuggestions (keyless title search) ------------
 
-export interface SearchSuggestionsResponse {
-  response?: {
-    metadata?: { total_matching_records?: number };
-    store_items?: StoreItem[];
-  };
-}
+export type SearchSuggestionsResponse = z.infer<typeof storeQueryInput>;
+export const searchSuggestionsRule = bodyRule(storeQueryInput, "SearchSuggestions");
 
 const STORE_APP_TYPE = [
   "game",
@@ -76,7 +72,7 @@ const STORE_APP_TYPE = [
 export function summarizeSearchSuggestions(
   r: SearchSuggestionsResponse,
 ): z.infer<typeof searchGamesOutput> {
-  const results = (r.response?.store_items ?? [])
+  const results = (r.response.store_items ?? [])
     .filter((it): it is StoreItemWithAppid => typeof it.appid === "number")
     .map((it) => {
       // Same rule as every card (ownPurchaseOption): the app's OWN package, never
@@ -99,7 +95,7 @@ export function summarizeSearchSuggestions(
       };
     });
   return searchGamesOutput.parse({
-    total: r.response?.metadata?.total_matching_records ?? results.length,
+    total: r.response.metadata.total_matching_records,
     returned: results.length,
     results,
   });
@@ -350,16 +346,18 @@ export function summarizeWishlistDetailed(
     byDiscount ? b.discount_pct - a.discount_pct : (a.priority || 1e9) - (b.priority || 1e9),
   );
   const { included, returned } = capList(cards, WISHLIST_DETAIL_MAX);
-  const unchecked = ctx.exact ? 0 : items.length - enriched.length;
+  // What Steam carded counts the entries it carded as not shown here, too.
+  const carded = listed.filter((i) => i.store_item !== undefined).length;
+  const unchecked = ctx.exact ? 0 : listed.length - carded;
   return wishlistDetailedFound.parse({
     found: true,
     total: ctx.total,
-    enriched: enriched.length,
+    enriched: carded,
     note:
       [
         unchecked > 0
-          ? `${items.length} wishlist items passed Steam's own filters, but only the first ` +
-            `${enriched.length} were checked against the rest (review %, own-package discount, ` +
+          ? `${listed.length} wishlist items passed Steam's own filters, but only the first ` +
+            `${carded} were checked against the rest (review %, own-package discount, ` +
             "compat/platform) — narrow the filters to cover them all."
           : "",
         // Capped like the cards: a whole wishlist is carded when checks run here.

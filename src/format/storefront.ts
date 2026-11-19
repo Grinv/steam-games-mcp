@@ -11,6 +11,7 @@
 
 import { z } from "zod";
 import type { PurchasePrices } from "./store.ts";
+import { appidValue } from "../steam.ts";
 import { bodyRule, capList, isoDay, money, names, storeUrl, stripHtml } from "./shared.ts";
 import {
   appEntryInput,
@@ -194,12 +195,10 @@ export function detailApp(a: StoreApp, override?: PriceOverride): z.infer<typeof
     },
     // Steam's `fullgame`: the game a DLC, soundtrack or demo belongs to, its
     // appid a numeric string (seen live 2026-11-19 on 2778580, 1206340, 219).
-    // Number() of a non-numeric string is NaN, which the schema rejects (an
-    // internal error): an id that isn't one names no base game.
-    base_game:
-      a.fullgame?.appid && Number.isInteger(Number(a.fullgame.appid))
-        ? { appid: Number(a.fullgame.appid), name: a.fullgame.name ?? null }
-        : null,
+    // An id that isn't an appid ("0", "-1", NaN) names no base game.
+    base_game: appidValue.safeParse(Number(a.fullgame?.appid)).success
+      ? { appid: Number(a.fullgame!.appid), name: a.fullgame!.name ?? null }
+      : null,
     drm_notice: a.drm_notice || null,
     account_notice: a.ext_user_account_notice || null,
     pc_requirements_min: stripHtml(reqs?.minimum),

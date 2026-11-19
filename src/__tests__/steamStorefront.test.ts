@@ -12,6 +12,7 @@ import {
   mockFetch,
   installFetch,
   silentLogger,
+  recorded,
 } from "./helpers.ts";
 import { APP, ENV, FEATURED, router, getItemsAnswer } from "./steamFixtures.ts";
 import { PRICES_MAX } from "../tools/common.ts";
@@ -272,7 +273,9 @@ describe("get_game", () => {
   // (seen live). The exact title wins; with none, the top match does.
   test("get_game by name takes the exact title over Steam's top match", async (t) => {
     const suggest = (items: { appid: number; name: string }[]) =>
-      jsonResponse({ response: { store_items: items } });
+      jsonResponse({
+        response: { metadata: { total_matching_records: items.length }, store_items: items },
+      });
     const { client, mock } = await setupServer(t, ENV, (url) =>
       url.includes("SearchSuggestions")
         ? suggest([
@@ -303,15 +306,18 @@ describe("get_game", () => {
     ["мой", "Мой"],
     // An emoji goes with its presentation selector.
     ["love story", "Love ❤️ Story"],
-    // Caseless in any language: ß uppercases to SS, Turkish ı to I.
+    // Caseless in any language: ß uppercases to SS, Turkish ı to I, and a
+    // Greek sigma is one letter wherever the word ends.
     ["FUSSBALL MANAGER", "Fußball Manager"],
     ["KIRMIZI", "Kırmızı"],
+    ["θεοσπολεμος", "Θεός Πόλεμος"],
   ] as const) {
     test(`get_game by name: "${typed}" is ${title}`, async (t) => {
       const { client, mock } = await setupServer(t, ENV, (url) =>
         url.includes("SearchSuggestions")
           ? jsonResponse({
               response: {
+                metadata: { total_matching_records: 2 },
                 store_items: [
                   { appid: 1, name: `${title} Together` },
                   { appid: 2, name: title },
@@ -330,6 +336,7 @@ describe("get_game", () => {
       url.includes("SearchSuggestions")
         ? jsonResponse({
             response: {
+              metadata: { total_matching_records: 2 },
               store_items: [
                 { appid: 1, name: "Мой" },
                 { appid: 2, name: "Мои" },
@@ -347,6 +354,7 @@ describe("get_game", () => {
       url.includes("SearchSuggestions")
         ? jsonResponse({
             response: {
+              metadata: { total_matching_records: 2 },
               store_items: [
                 { appid: 1, name: "ガンダム" },
                 { appid: 2, name: "カンタム" },
@@ -361,9 +369,7 @@ describe("get_game", () => {
 
   test("get_game reports no match when the title resolves to nothing", async (t) => {
     const { client } = await setupServer(t, ENV, (url) =>
-      url.includes("SearchSuggestions")
-        ? jsonResponse({ response: { store_items: [] } })
-        : jsonResponse({}),
+      url.includes("SearchSuggestions") ? recorded("SearchSuggestions/no-match") : jsonResponse({}),
     );
     const res = await client.callTool({ name: "get_game", arguments: { name: "zzzznope" } });
     assertToolError(res, /no steam game found/i);
@@ -729,6 +735,7 @@ test("get_game (by name) skips a non-numeric top search result and resolves the 
     if (url.includes("SearchSuggestions")) {
       return jsonResponse({
         response: {
+          metadata: { total_matching_records: 2 },
           store_items: [
             { name: "Portal Bundle" }, // no appid
             { appid: 620, name: "Portal 2" },
