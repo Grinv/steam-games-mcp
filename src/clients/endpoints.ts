@@ -54,7 +54,7 @@ import {
 } from "../format/webAchievements.ts";
 import {
   storeQueryRule,
-  summarizePurchasePrices,
+  purchaseOptionsRule,
   type SearchSuggestionsResponse,
   type StoreQueryResponse,
   type WishlistDetailedResponse,
@@ -512,7 +512,7 @@ export const Steam = {
     path: "IStoreBrowseService/GetItems/v1/",
     host: "api",
     keyless: true,
-    validate: (body) => void summarizePurchasePrices(body),
+    validate: purchaseOptionsRule,
     probes: [
       {
         query: {

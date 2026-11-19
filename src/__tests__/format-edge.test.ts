@@ -1,4 +1,6 @@
 import { ApiError } from "../lib/errors.ts";
+import { mostPlayedRule, topSellersRule } from "../format/charts.ts";
+import { vanityRule } from "../format/web.ts";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -24,6 +26,7 @@ import {
   GAME_SCHEMA_ACHIEVEMENTS_MAX,
 } from "../format/webAchievements.ts";
 import {
+  purchaseOptionsRule,
   summarizePurchasePrices,
   summarizeItems,
   summarizeRecommendations,
@@ -400,23 +403,36 @@ test("get_items: an item Steam marks not visible is unavailable, name or not", (
 });
 
 describe("summarizePurchasePrices", () => {
-  for (const [label, store_items] of [
-    ["a store_items that isn't a list", {}],
-    ["a null item", [null]],
-    ["an item whose purchase_options isn't a list", [{ appid: 1, purchase_options: "x" }]],
+  // The body's rule: no list at all is an unusable answer (retryable, so a
+  // good cached correction stands in for it).
+  test("a store_items that isn't a list is Steam's unusable answer", () => {
+    assert.throws(
+      () => purchaseOptionsRule({ response: { store_items: {} } }),
+      (err: unknown) => err instanceof ApiError && err.code === "bad_response" && err.retryable,
+    );
+  });
+
+  // Per row: an odd item costs its own correction (counted for a note), never
+  // its neighbours'.
+  const good = {
+    appid: 9,
+    visible: true,
+    best_purchase_option: { packageid: 7, formatted_final_price: "$9.99", discount_pct: 0 },
+  };
+  for (const [label, odd] of [
+    ["a null item", null],
+    ["an item whose purchase_options isn't a list", { appid: 1, purchase_options: "x" }],
     [
       "an option whose active_discounts holds a null",
-      [{ appid: 1, purchase_options: [{ packageid: 1, active_discounts: [null] }] }],
+      { appid: 1, purchase_options: [{ packageid: 1, active_discounts: [null] }] },
     ],
   ] as const) {
-    // Retryable like every unusable body: it's no fact about the game, so a
-    // good cached correction stands in for it (lib/http.ts serves a stale
-    // copy only for a retryable failure).
-    test(`${label} is Steam's unusable answer, not our bug`, () => {
-      assert.throws(
-        () => summarizePurchasePrices({ response: { store_items: store_items as never } }),
-        (err: unknown) => err instanceof ApiError && err.code === "bad_response" && err.retryable,
-      );
+    test(`${label} costs its own correction, not the chunk's`, () => {
+      const s = summarizePurchasePrices({
+        response: { store_items: [odd, good] as never },
+      });
+      assert.equal(s.odd, 1);
+      assert.deepEqual(Object.keys(s.prices), ["9"]);
     });
   }
 
@@ -432,7 +448,7 @@ describe("summarizePurchasePrices", () => {
         ],
       },
     });
-    assert.deepEqual(s["1"], { final: "$9.99", initial: "$9.99", discount_percent: 0 });
+    assert.deepEqual(s.prices["1"], { final: "$9.99", initial: "$9.99", discount_percent: 0 });
   });
 
   test("a bundle best option is passed over for the app's own package", () => {
@@ -455,10 +471,14 @@ describe("summarizePurchasePrices", () => {
         ],
       },
     });
-    assert.deepEqual(s["3717330"], { final: "$19.99", initial: "$19.99", discount_percent: 0 });
+    assert.deepEqual(s.prices["3717330"], {
+      final: "$19.99",
+      initial: "$19.99",
+      discount_percent: 0,
+    });
   });
 
-  test("items with no own-package option or no appid are skipped, not emitted as nulls", () => {
+  test("items with no own-package option are skipped, not emitted as nulls", () => {
     // Skipping is what makes overridePrice() leave the Storefront answer standing
     // for a free/unreleased/region-locked app instead of blanking its price.
     const s = summarizePurchasePrices({
@@ -470,18 +490,14 @@ describe("summarizePurchasePrices", () => {
             visible: true,
             best_purchase_option: { bundleid: 9, formatted_final_price: "$1.00" }, // a bundle
           },
-          {
-            name: "No appid",
-            best_purchase_option: { packageid: 7, formatted_final_price: "$1.00" },
-          },
         ],
       },
     });
-    assert.deepEqual(s, {});
+    assert.deepEqual(s, { prices: {}, odd: 0 });
   });
 
   test("empty response → no overrides", () => {
-    assert.deepEqual(summarizePurchasePrices({}), {});
+    assert.deepEqual(summarizePurchasePrices({}), { prices: {}, odd: 0 });
   });
 });
 
@@ -838,6 +854,23 @@ describe("a game with no reviews", () => {
     assert.deepEqual(
       s.recommendations.map((r) => r.appid),
       [2],
+    );
+  });
+});
+
+describe("body rules held to what was seen", () => {
+  // The three global player charts always rank 100 games: no ranks is no
+  // answer. Top sellers leaves its ranks out when there is no chart (recorded).
+  test("a global chart without ranks is unusable; top sellers without them is empty", () => {
+    assert.throws(() => mostPlayedRule({ response: {} }), /unusable|ranks/);
+    assert.doesNotThrow(() => topSellersRule({ response: {} }));
+  });
+
+  // The steamid a vanity resolves to becomes STEAM_ID's default.
+  test("a vanity hit whose steamid names no account is unusable", () => {
+    assert.throws(() => vanityRule({ response: { success: 1, steamid: "76561197960265728" } }));
+    assert.doesNotThrow(() =>
+      vanityRule({ response: { success: 1, steamid: "76561197960287930" } }),
     );
   });
 });

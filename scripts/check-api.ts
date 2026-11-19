@@ -451,10 +451,13 @@ const checks: Check[] = [
       const input = {
         steamid: WISHLIST_STEAMID,
         context: { language: "english", country_code: "US" },
-        data_request: { include_basic_info: true },
+        // The server's card request: its cards are read through shownHere.
+        data_request: storeCardDataRequest(),
       };
       const body = await getJson<{
-        response?: { items?: { appid?: unknown; store_item?: { appid?: unknown } }[] };
+        response?: {
+          items?: { appid?: unknown; store_item?: { appid?: unknown; visible?: unknown } }[];
+        };
       }>(
         `${API}/IWishlistService/GetWishlistSortedFiltered/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
       );
@@ -465,23 +468,44 @@ const checks: Check[] = [
       if (typeof item?.appid !== "number") throw new Error("missing items[0].appid");
       if (typeof item.store_item?.appid !== "number")
         throw new Error("missing items[0].store_item.appid");
+      need(
+        items.every((i) => !i.store_item || typeof i.store_item.visible === "boolean"),
+        "visible on every card (what shownHere reads)",
+      );
     },
   },
   {
     name: "web IStoreQueryService/Query (discover)",
     run: async () => {
       const input = {
-        query: { start: 0, count: 1, filters: { price_filters: { min_discount_percent: 80 } } },
+        // Unsorted games, released or not: a page with unreviewed games on it.
+        query: { start: 0, count: 50, filters: { type_filters: { include_games: true } } },
         context: { language: "english", country_code: "US", steam_realm: 1 },
-        data_request: { include_basic_info: true },
+        data_request: storeCardDataRequest(),
+      };
+      type Card = {
+        visible?: unknown;
+        reviews?: { summary_filtered?: { review_count?: unknown } };
       };
       const body = await getJson<{
-        response?: { metadata?: { total_matching_records?: unknown } };
+        response?: { metadata?: { total_matching_records?: unknown }; store_items?: Card[] };
       }>(
         `${API}/IStoreQueryService/Query/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`,
       );
       if (typeof body.response?.metadata?.total_matching_records !== "number")
         throw new Error("missing metadata.total_matching_records");
+      const cards = body.response.store_items ?? [];
+      need(cards.length > 0, "store_items");
+      // What shownHere reads, and what reviewPercent rests on: a count on
+      // every card, 0 sent outright for a game nobody reviewed yet.
+      need(
+        cards.every((c) => typeof c.visible === "boolean"),
+        "visible on every card",
+      );
+      need(
+        cards.every((c) => typeof c.reviews?.summary_filtered?.review_count === "number"),
+        "review_count on every card, unreviewed ones included",
+      );
     },
   },
   {

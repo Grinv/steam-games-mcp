@@ -148,21 +148,18 @@ const purchaseOptionInput = z.looseObject({
   active_discounts: z.array(z.looseObject({})).optional(),
 });
 
+// The body: a store_items list, if any (a proto list, left out when empty).
+// Its items are decided per row, below: one that doesn't fit costs its own
+// correction, not the chunk's.
 export const purchaseItemsInput = z.looseObject({
-  response: z
-    .looseObject({
-      store_items: z
-        .array(
-          z.looseObject({
-            appid: z.number().optional(),
-            is_free: z.boolean().optional(),
-            best_purchase_option: purchaseOptionInput.optional(),
-            purchase_options: z.array(purchaseOptionInput).optional(),
-          }),
-        )
-        .optional(),
-    })
-    .optional(),
+  response: z.looseObject({ store_items: z.array(z.unknown()).optional() }).optional(),
+});
+// One item, as summarizePurchasePrices walks into it.
+export const purchaseItemInput = z.looseObject({
+  appid: z.number(),
+  is_free: z.boolean().optional(),
+  best_purchase_option: purchaseOptionInput.optional(),
+  purchase_options: z.array(purchaseOptionInput).optional(),
 });
 
 // IStoreQueryService/Query's answer, its body rule (store.ts's storeQueryRule):
@@ -185,14 +182,12 @@ export const storeQueryInput = z.looseObject({
 // clients, not a tool output: it carries no currency code, because GetItems
 // never returns one (verified live against every data_request flag), so the
 // Storefront row being corrected keeps supplying that field.
-export const purchasePricesSchema = z.record(
-  z.string(),
-  z.strictObject({
-    final: z.string(),
-    initial: z.string(),
-    discount_percent: z.number(),
-  }),
-);
+export const purchasePriceRow = z.strictObject({
+  final: z.string(),
+  initial: z.string(),
+  discount_percent: z.number(),
+});
+export const purchasePricesSchema = z.record(z.string(), purchasePriceRow);
 
 export const discoverGamesOutput = z.strictObject({
   total_matching: z

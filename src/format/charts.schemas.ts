@@ -90,9 +90,11 @@ interface DeckRank extends Rank {
   last_period_rank?: number;
 }
 
-// A chart's `response` is on every answer; its ranks are left out when there
-// is no chart (top sellers for cc=XX, or a week before Steam's history: seen
-// live 2026-11-19), so absent is an empty chart, not an unusable answer.
+// A chart's `response` is on every answer. Top sellers leaves its ranks out
+// when there is no chart (cc=XX, or a week before Steam's history: seen live
+// 2026-11-19, a recorded situation), so there absent is an empty chart. The
+// three global player charts always rank 100 games: no ranks there is no
+// answer, never an empty chart a cache would keep.
 export const topSellersInput = z.looseObject({
   response: z.looseObject({
     start_date: unchecked<number>().optional(),
@@ -102,15 +104,15 @@ export const topSellersInput = z.looseObject({
 export const mostPlayedInput = z.looseObject({
   response: z.looseObject({
     rollup_date: unchecked<number>().optional(),
-    ranks: z.array(unchecked<PlayerRank>()).optional(),
+    ranks: z.array(unchecked<PlayerRank>()),
   }),
 });
 export const concurrentPlayersInput = z.looseObject({
   response: z.looseObject({
     last_update: unchecked<number>().optional(),
-    ranks: z.array(unchecked<PlayerRank>()).optional(),
+    ranks: z.array(unchecked<PlayerRank>()),
   }),
 });
 export const deckMostPlayedInput = z.looseObject({
-  response: z.looseObject({ ranks: z.array(unchecked<DeckRank>()).optional() }),
+  response: z.looseObject({ ranks: z.array(unchecked<DeckRank>()) }),
 });

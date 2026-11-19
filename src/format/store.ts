@@ -12,12 +12,14 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
-import { bodyRule, capList, isoDay, notFound, notShown, storeUrl, unusableBody } from "./shared.ts";
+import { bodyRule, capList, isoDay, notFound, notShown, storeUrl } from "./shared.ts";
 import { wishlistNotFound } from "./shared.schemas.ts";
 import {
   discoverGamesOutput,
   getItemsOutput,
+  purchaseItemInput,
   purchaseItemsInput,
+  purchasePriceRow,
   purchasePricesSchema,
   recommendedGamesFound,
   searchGamesOutput,
@@ -197,12 +199,23 @@ export function summarizeItems(
  *  Storefront said" rather than as "no price". */
 export type PurchasePrices = z.infer<typeof purchasePricesSchema>;
 
-export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
-  const input = purchaseItemsInput.safeParse(r);
-  if (!input.success) throw unusablePrices(input.error);
-  const out: Record<string, z.infer<typeof purchasePricesSchema>[string]> = {};
-  for (const it of r.response?.store_items ?? []) {
-    if (typeof it.appid !== "number") continue;
+/** Each item's correction, decided per row: an item that doesn't fit the
+ *  price shape (or whose row doesn't) costs its own correction — counted in
+ *  `odd` for the caller's note — never the chunk's. The body itself is
+ *  checked by the endpoint's rule (purchaseOptionsRule). */
+export function summarizePurchasePrices(r: StoreItemsResponse): {
+  prices: PurchasePrices;
+  odd: number;
+} {
+  const prices: PurchasePrices = {};
+  let odd = 0;
+  for (const raw of r.response?.store_items ?? []) {
+    const item = purchaseItemInput.safeParse(raw);
+    if (!item.success) {
+      odd += 1;
+      continue;
+    }
+    const it = item.data as StoreItem & { appid: number };
     // The app's OWN package, like every card (ownPurchaseOption): when Valve's
     // best option is a bundle, the own package is still among purchase_options
     // (verified live 2026-11-05: Yakuza Kiwami 3717330's best option became
@@ -222,25 +235,19 @@ export function summarizePurchasePrices(r: StoreItemsResponse): PurchasePrices {
     if (it.is_free) continue;
     const { discount_pct, final, original } = priceFields(own);
     if (!final) continue;
-    out[String(it.appid)] = {
+    // priceFields already falls back to final; the ?? only satisfies TS.
+    const row = purchasePriceRow.safeParse({
       final,
-      // priceFields already falls back to final; the ?? only satisfies TS.
       initial: original ?? final,
       discount_percent: discount_pct,
-    };
+    });
+    if (row.success) prices[String(it.appid)] = row.data;
+    else odd += 1;
   }
-  // Unlike the other summarizers' parse, a mismatch here is Steam's payload
-  // (it only feeds a price correction), not our tool output: classified as
-  // an unusable answer, so it costs the correction instead of the call.
-  const parsed = purchasePricesSchema.safeParse(out);
-  if (!parsed.success) throw unusablePrices(parsed.error);
-  return parsed.data;
+  return { prices, odd };
 }
 
-// Retryable like every unusable body: a good cached correction stands in for
-// it (a stale copy answers only a retryable failure), and "retry later" holds.
-const unusablePrices = (error: z.ZodError) =>
-  unusableBody("GetItems purchase options don't fit the price shape", error);
+export const purchaseOptionsRule = bodyRule(purchaseItemsInput, "GetItems purchase options");
 
 // ---- IWishlistService/GetWishlistSortedFiltered (enriched wishlist) ----------
 

@@ -9,6 +9,7 @@
 // owned-library, ...) — those parse against the shared `notFoundReason`
 // fragment (format/shared.schemas.ts) at their own construction site, not here.
 import { z } from "zod";
+import { isSteamId64 } from "../steam.ts";
 import { gamesNotFound } from "./shared.schemas.ts";
 import { unchecked } from "./shared.ts";
 
@@ -308,7 +309,8 @@ export const vanityInput = z.looseObject({
   response: z.discriminatedUnion("success", [
     z.looseObject({
       success: z.literal(RESULT_OK),
-      steamid: z.string().min(1),
+      // Becomes STEAM_ID's default: held to the same range as a steamid input.
+      steamid: z.string().refine(isSteamId64, "a SteamID64 that names an account"),
       message: unchecked<string>().optional(),
     }),
     z.looseObject({

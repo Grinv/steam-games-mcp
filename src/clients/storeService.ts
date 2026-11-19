@@ -539,13 +539,16 @@ export class StoreServiceClient {
     const chunks: number[][] = [];
     for (let i = 0; i < appids.length; i += PRICE_LOOKUP_CHUNK)
       chunks.push(appids.slice(i, i + PRICE_LOOKUP_CHUNK));
-    // A payload that fails the price shape rejects like a failed request
-    // (Steam.GetPurchaseOptions' validate): it costs only this chunk's
-    // corrections. With `cache`, the request is cached (and served stale while
-    // Steam is down, so getGame's details keep their correction during an
-    // outage); a failure never is.
-    const load = async (chunk: number[]) =>
-      summarizePurchasePrices(
+    // A body without a store_items list rejects like a failed request (the
+    // endpoint's rule): it costs only this chunk's corrections. An item that
+    // doesn't fit the price shape costs only its own, noted. With `cache`, the
+    // request is cached (and served stale while Steam is down, so getGame's
+    // details keep their correction during an outage); a failure never is.
+    const what = (n: number) =>
+      `Price check of ${n} appids against the store's purchase options ` +
+      "(the price shown may be an upgrade or bundle SKU's, not the game's)";
+    const load = async (chunk: number[]) => {
+      const { prices, odd } = summarizePurchasePrices(
         await this.#call(
           Steam.GetPurchaseOptions,
           {
@@ -558,16 +561,23 @@ export class StoreServiceClient {
           { cache: opts.cache },
         ),
       );
+      if (odd) {
+        noteDegraded(
+          what(odd),
+          new ApiError({
+            code: "bad_response",
+            message: `${odd} GetItems purchase-option items don't fit the price shape`,
+            retryable: true,
+          }),
+        );
+      }
+      return prices;
+    };
     const settled = await Promise.allSettled(chunks.map(load));
     // Rejects only on a bug: the outer Promise.all in StorefrontClient.getPrices/
     // getGame would otherwise turn an enrichment's upstream failure into a
     // failed tool call.
-    const parts = optionalParts(
-      settled,
-      (i) =>
-        `Price check of ${chunks[i]!.length} appids against the store's purchase options ` +
-        "(the price shown may be an upgrade or bundle SKU's, not the game's)",
-    );
+    const parts = optionalParts(settled, (i) => what(chunks[i]!.length));
     return Object.assign({}, ...parts) as PurchasePrices;
   }
 

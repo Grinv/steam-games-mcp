@@ -168,7 +168,9 @@ export function registerPrompts(
                 .filter((n): n is string => Boolean(n))
                 .slice(0, COMPLETION_LIMIT);
             } catch (e) {
-              if (e instanceof ApiError) logger.debug("title completions unavailable:", e);
+              // One line, as guard logs an expected failure; stacks are for bugs.
+              if (e instanceof ApiError)
+                logger.debug(`title completions unavailable: ${e.code} ${e.status ?? ""}`);
               else logger.error("internal error in title completions:", e);
               return [];
             }
