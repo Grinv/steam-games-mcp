@@ -44,6 +44,7 @@ import {
   type SteamLevelResponse,
   type VanityResponse,
   type WishlistResponse,
+  ownedGamesRule,
 } from "../format/web.ts";
 import {
   gameSchemaRule,
@@ -230,7 +231,7 @@ export const Steam = {
     path: "IPlayerService/GetOwnedGames/v1/",
     host: "api",
     keyless: false,
-    validate: responseEnvelopeRule("GetOwnedGames"),
+    validate: ownedGamesRule,
     absent: {
       means:
         "{} (neither games nor game_count) is Steam not showing the library; a public empty one is {game_count:0}.",

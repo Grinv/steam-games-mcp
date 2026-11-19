@@ -296,7 +296,8 @@ export function registerPlayerWebTools(
               "launched, so those report owned:false — as does an appid that doesn't exist, so " +
               "this field can't tell 'no such game' from 'doesn't own it'. A private profile " +
               "reports no `owns` at all " +
-              "(ownership unknown) rather than a false owned:false.",
+              "(ownership unknown) rather than a false owned:false; owned:null is unknown too, when " +
+              "Steam's answer left some games unnamed (noted).",
           )
           .optional(),
         limit: z

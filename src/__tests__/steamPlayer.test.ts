@@ -2006,13 +2006,21 @@ test("get_items: an item Steam returns no card for is its own unavailable row", 
 
 // An empty friends list was never seen public; an absent `friends` reads as
 // none (protobuf-backed APIs omit an empty repeated field).
-test("get_friend_list: a friendslist without friends is zero friends", async (t) => {
-  const { client } = await setupServer(t, ENV, (url) =>
-    url.includes("GetFriendList") ? jsonResponse({ friendslist: {} }) : router(url),
-  );
-  const res = await client.callTool({
-    name: "get_friend_list",
-    arguments: { steamid: "76561197960287930" },
-  });
-  assert.equal((res.structuredContent as { total: number }).total, 0);
+// ISteamUser writes its list out: zero friends is {"friends":[]} (seen live
+// 2026-11-20); a friendslist without the list isn't Steam's "none".
+test("get_friend_list: friends [] is zero friends; no list at all is no answer", async (t) => {
+  for (const [friendslist, zero] of [
+    [{ friends: [] }, true],
+    [{}, false],
+  ] as const) {
+    const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
+      url.includes("GetFriendList") ? jsonResponse({ friendslist }) : router(url),
+    );
+    const res = await client.callTool({
+      name: "get_friend_list",
+      arguments: { steamid: "76561197960287930" },
+    });
+    if (zero) assert.equal((res.structuredContent as { total: number }).total, 0);
+    else assertToolError(res, /unusable response/i);
+  }
 });

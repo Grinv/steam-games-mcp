@@ -216,9 +216,12 @@ npm run inspector      # run under the MCP Inspector
   one that declares neither, so the rule's reach is checked, not remembered.
   Whether an absent field still turns into a verdict is checked too:
   `degradation.test.ts` drops each field of each answer every tool reads, in
-  turn, and fails on a verdict (`found:false`, not found, `available`/
-  `priced`/`owned:false`) the full answer didn't give, unless the body left
-  is one Steam was recorded sending. A list is required only where its absence
+  turn (also under the optional arguments that lead to other verdicts,
+  `VARIANTS`), and fails on a verdict (`found:false`, not found,
+  `available`/`priced`/`owned:false`) the full answer didn't give, or on a
+  fact a list states by membership (a friend who owns, a game two players
+  share) dropping out unnoted, unless the body left is one Steam was
+  recorded sending. A list is required only where its absence
   can't mean "none": where Steam writes "none" as `[]`, or where there is no
   "none" (the global player charts always rank 100). The protobuf service
   methods (`I…Service`) are proto2 and leave an empty list out, so there an

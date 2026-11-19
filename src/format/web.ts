@@ -10,7 +10,7 @@
 // storefront.ts's header comment for the full rationale).
 
 import { z } from "zod";
-import type { ApiError } from "../lib/errors.ts";
+import { ApiError } from "../lib/errors.ts";
 import { problemDetail } from "../lib/result.ts";
 import {
   NO_SUCH_ACCOUNT_REASON,
@@ -20,6 +20,7 @@ import {
   hours,
   isoDay,
   notFound,
+  responseEnvelopeRule,
   storeUrl,
   stripHtml,
 } from "./shared.ts";
@@ -129,6 +130,31 @@ export interface OwnedGamesResponse {
 // Strictly GetOwnedGames: its sibling GetRecentlyPlayedGames answers with its
 // own `total_count` field instead, which is exactly the mix-up that once
 // reported a public profile with no recent playtime as private.
+// A library Steam counts games in lists them: game_count 0 is its "none",
+// sent without a list (proto2). A list missing beside a count is no answer.
+const ownedEnvelopeRule = responseEnvelopeRule("GetOwnedGames");
+export function ownedGamesRule(body: OwnedGamesResponse): void {
+  ownedEnvelopeRule(body);
+  const { game_count, games } = body.response;
+  if ((game_count ?? 0) > 0 && !games?.length)
+    throw new ApiError({
+      code: "bad_response",
+      message: `GetOwnedGames counted ${game_count} games but listed none`,
+      retryable: true,
+    });
+}
+
+/** Library rows without an appid: Steam sends one on every game (428 of 428,
+ *  seen live 2026-11-20), so such a row is that game's unknown, for the
+ *  caller to note — never a game the player doesn't have. */
+export const unnamedGames = (r: OwnedGamesResponse): number =>
+  (r.response.games ?? []).filter((g) => typeof g.appid !== "number").length;
+
+/** Friend rows without a steamid: that friend's unknown, for the caller to
+ *  note — never "no such friend". */
+export const unnamedFriends = (r: FriendListResponse): number =>
+  r.friendslist.friends.filter((f) => !f.steamid).length;
+
 export function ownedGamesNotShown(r: OwnedGamesResponse): boolean {
   return r.response?.game_count === undefined && r.response?.games === undefined;
 }
@@ -194,7 +220,8 @@ export function summarizeOwnedGames(
         const g = byAppid.get(appid);
         return {
           appid,
-          owned: g !== undefined,
+          // Not listed is "doesn't own" only when every game was named.
+          owned: g !== undefined ? true : unnamedGames(r) ? null : false,
           playtime_hours: g ? hours(g.playtime_forever) : null,
         };
       }),
@@ -587,7 +614,7 @@ export const FRIENDS_CHECKED_MAX = 200;
 export function summarizeFriendsWhoOwn(
   appids: number[],
   friendIds: string[],
-  ownership: (Map<number, number> | null | ApiError)[],
+  ownership: (Map<number, number | undefined> | null | ApiError)[],
   players: PlayerSummariesResponse,
   opts: { max?: number; totalFriends?: number } = {},
 ): z.infer<typeof findFriendsWhoOwnFound> {

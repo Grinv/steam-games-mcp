@@ -418,7 +418,18 @@ export class StoreServiceClient {
         data_request: {},
       }),
     });
-    const items = (res.response?.store_items ?? []).filter((it) => typeof it.appid === "number");
+    // "No game" is Steam's own count (0, recorded: no-match), never an empty
+    // or unusable list beside a count: that is no answer.
+    const total = res.response.metadata.total_matching_records;
+    if (total === 0) return null;
+    const items = (res.response.store_items ?? []).filter((it) => typeof it.appid === "number");
+    if (items.length === 0) {
+      throw new ApiError({
+        code: "bad_response",
+        message: `SearchSuggestions counted ${total} matches but listed none with an appid`,
+        retryable: true,
+      });
+    }
     const wanted = titleKey(term);
     const exact = wanted ? items.find((it) => titleKey(it.name ?? "") === wanted) : undefined;
     return (exact ?? items[0])?.appid ?? null;

@@ -23,6 +23,8 @@ import { isSteamId64, STEAMID64_RE } from "../steam.ts";
 import {
   FRIENDS_CHECKED_MAX,
   friendIdsToEnrich,
+  unnamedFriends,
+  unnamedGames,
   friendsNotShown,
   libraryNotShown,
   ownedGamesNotShown,
@@ -64,6 +66,15 @@ import type { Config } from "../config.ts";
 // without a key (see #vanityViaCommunity). Not a config knob — it isn't an API
 // this server otherwise talks to, and there's nothing to point elsewhere.
 const STEAM_COMMUNITY_BASE_URL = "https://steamcommunity.com";
+
+// Rows Steam sent without a field it sends on every one: that row's unknown.
+const unnamedRows = (endpoint: string, field: string) =>
+  new ApiError({
+    code: "bad_response",
+    message: `${endpoint} rows without ${field}`,
+    detail: `Steam's answer left out their ${field}.`,
+    retryable: true,
+  });
 
 function friendIdsOf(r: FriendListResponse): string[] {
   return (r.friendslist?.friends ?? [])
@@ -253,6 +264,8 @@ export class SteamWebClient {
     // Deduped: each `owns` row answers one appid, so a repeated one only
     // repeated the row.
     const unique = checkAppids && [...new Set(checkAppids)];
+    const unnamed = ownedGamesNotShown(res) ? 0 : unnamedGames(res);
+    if (unnamed) noteDegraded(`${unnamed} library games`, unnamedRows("GetOwnedGames", "appid"));
     return summarizeOwnedGames(res, { checkAppids: unique, ...opts });
   }
 
@@ -336,6 +349,11 @@ export class SteamWebClient {
       this.#ownedGamesRaw(steamidA, { include_appinfo: true, include_played_free_games: true }),
       this.#ownedGamesRaw(steamidB, { include_appinfo: true, include_played_free_games: true }),
     ]);
+    // A game without an appid can't be matched: noted, never "not shared".
+    const unnamed = [a, b]
+      .filter((r) => !ownedGamesNotShown(r))
+      .reduce((n, r) => n + unnamedGames(r), 0);
+    if (unnamed) noteDegraded(`${unnamed} library games`, unnamedRows("GetOwnedGames", "appid"));
     return summarizeComparePlayers(a, b);
   }
 
@@ -392,7 +410,11 @@ export class SteamWebClient {
   // answer. Shared by getFriendList and findFriendsWhoOwn.
   async #friendsRaw(steamid: string): Promise<FriendListResponse | null> {
     const res = await this.#call(Steam.GetFriendList, { steamid, relationship: "friend" });
-    return res.answer ? null : res.data;
+    if (res.answer) return null;
+    // A friend without a steamid: noted, never left out unsaid.
+    const unnamed = unnamedFriends(res.data);
+    if (unnamed) noteDegraded(`${unnamed} friends`, unnamedRows("GetFriendList", "steamid"));
+    return res.data;
   }
 
   // A player's friend list (needs the friends list to be public). GetFriendList
@@ -480,7 +502,10 @@ export class SteamWebClient {
   // steamid owns, or null when Steam returns no library (as it does for
   // private game details, without saying so). Only
   // requested appids are kept — the caller never needs the rest of the library.
-  async #ownedPlaytimes(steamid: string, appids: number[]): Promise<Map<number, number> | null> {
+  async #ownedPlaytimes(
+    steamid: string,
+    appids: number[],
+  ): Promise<Map<number, number | undefined> | null> {
     // include_played_free_games: without it Steam omits a played free-to-play
     // game (e.g. Path of Exile, Warframe) from the response entirely, so an
     // owning friend would be misreported as a non-owner rather than an owner.
@@ -495,11 +520,14 @@ export class SteamWebClient {
       ...Object.fromEntries(appids.map((appid, i) => [`appids_filter[${i}]`, appid])),
     });
     if (ownedGamesNotShown(res)) return null;
+    // A game without an appid could be any of these: this friend's ownership
+    // is unknown (unavailable, noted), never "doesn't own".
+    if (unnamedGames(res)) throw unnamedRows("GetOwnedGames", "appid");
     const wanted = new Set(appids);
-    const playtimes = new Map<number, number>();
-    for (const g of res.response?.games ?? []) {
+    const playtimes = new Map<number, number | undefined>();
+    for (const g of res.response.games ?? []) {
       if (typeof g.appid === "number" && wanted.has(g.appid))
-        playtimes.set(g.appid, g.playtime_forever ?? 0);
+        playtimes.set(g.appid, g.playtime_forever);
     }
     return playtimes;
   }

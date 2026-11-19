@@ -86,7 +86,12 @@ export const getOwnedGamesOutput = z.discriminatedUnion("found", [
       .array(
         z.strictObject({
           appid: z.number(),
-          owned: z.boolean(),
+          owned: z
+            .boolean()
+            .nullable()
+            .describe(
+              "null: unknown — Steam left some library games without an appid (see notes).",
+            ),
           playtime_hours: z.number().nullable(),
         }),
       )
@@ -284,8 +289,10 @@ interface Friend {
   relationship?: string;
   friend_since?: number;
 }
+// ISteamUser writes its list out: an empty public friends list is
+// {"friends":[]} (seen live 2026-11-20 on new accounts), so it's required.
 export const friendListInput = z.looseObject({
-  friendslist: z.looseObject({ friends: unchecked<Friend[]>().optional() }),
+  friendslist: z.looseObject({ friends: z.array(unchecked<Friend>()) }),
 });
 
 interface NewsItem {

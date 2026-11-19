@@ -134,23 +134,51 @@ function verdicts(r: Result): string[] {
   walk(r.structuredContent, "");
   return out;
 }
+// Facts a list states by membership: a friend who owns a game, a game two
+// players share. One that silently drops out reads as "doesn't own" or "not
+// shared": a verdict too, unless the answer fails or notes the gap.
+type Rows = { appid: number; owners?: { steamid: string }[] }[];
+function positives(name: string, r: Result): string[] {
+  const sc = r.structuredContent as { matches?: Rows; games?: Rows } | undefined;
+  if (name === "find_friends_who_own")
+    return (sc?.matches ?? []).flatMap((m) =>
+      (m.owners ?? []).map((o) => `${m.appid} owned by ${o.steamid}`),
+    );
+  if (name === "compare_players") return (sc?.games ?? []).map((g) => `${g.appid} shared`);
+  return [];
+}
+
 const SEEN = new Set(
   Object.values(RECORDED)
     .filter((r) => r.status === 200 && r.contentType.includes("json"))
     .map((r) => JSON.stringify(JSON.parse(r.body))),
 );
 
+// Verdicts an optional argument leads to, swept as runs of their own.
+// Each is merged over the base arguments (undefined drops one).
+const VARIANTS: Record<string, Record<string, unknown>[]> = {
+  get_game: [{ appid: undefined, name: "portal" }],
+  get_owned_games: [{ check_appids: [620, 400, 999] }],
+  get_wishlist: [{ include_details: true }],
+};
+
 test("a field Steam leaves out never becomes a verdict the full answer didn't give", async (t) => {
   const { client: lister } = await setupServer(t, ENV, router);
   const { tools } = await lister.listTools();
   const found: string[] = [];
   let checked = 0;
-  for (const tool of tools) {
-    const args = argsFor(tool.inputSchema as Parameters<typeof argsFor>[0]);
-    const clean = await setupServer(t, ENV, router);
-    const before = new Set(
-      verdicts((await clean.client.callTool({ name: tool.name, arguments: args })) as Result),
+  const runs = tools.flatMap((tool) => {
+    const base = argsFor(tool.inputSchema as Parameters<typeof argsFor>[0]);
+    const variants = (VARIANTS[tool.name] ?? []).map((v) =>
+      JSON.parse(JSON.stringify({ ...base, ...v })),
     );
+    return [base, ...variants].map((args) => ({ tool, args }));
+  });
+  for (const { tool, args } of runs) {
+    const clean = await setupServer(t, ENV, router);
+    const full = (await clean.client.callTool({ name: tool.name, arguments: args })) as Result;
+    const before = new Set(verdicts(full));
+    const held = positives(tool.name, full);
     const urls = new Map<string, string>(); // endpoint → the first URL it was asked
     for (const c of clean.mock.calls) {
       const e = endpointOf(c.url);
@@ -172,14 +200,17 @@ test("a field Steam leaves out never becomes a verdict the full answer didn't gi
           if (r === null) seen = true;
           return r ?? (await router(u));
         });
-        const after = verdicts(
-          (await client.callTool({ name: tool.name, arguments: args })) as Result,
-        );
+        const answer = (await client.callTool({ name: tool.name, arguments: args })) as Result;
+        const after = verdicts(answer);
+        const kept = new Set(positives(tool.name, answer));
+        const explained = answer.isError || (answer.structuredContent?.notes?.length ?? 0) > 0;
+        const lost = explained ? [] : held.filter((p) => !kept.has(p)).map((p) => `lost: ${p}`);
         checked += 1;
         if (seen) continue;
-        for (const v of after)
-          if (!before.has(v))
-            found.push(`${tool.name}: ${endpoint} without ${path.join(".")} → ${v}`);
+        for (const v of [...after.filter((v) => !before.has(v)), ...lost])
+          found.push(
+            `${tool.name} ${JSON.stringify(args)}: ${endpoint} without ${path.join(".")} → ${v}`,
+          );
       }
     }
   }
