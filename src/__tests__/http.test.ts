@@ -565,3 +565,22 @@ test("a retry is logged without the player identifier", async (t) => {
   assert.match(lines[0]!, /retrying https:\/\/steamcommunity\.com after/);
   assert.doesNotMatch(lines[0]!, /someone|7656/);
 });
+
+// Hiding a privatePaths host's page from the log mustn't change what the
+// error is: its JSON body still marks it the method's own answer.
+test("a privatePaths error keeps its body out of the message, not out of jsonBody", async (t) => {
+  installFetch(
+    t,
+    mockFetch(() => jsonResponse({ error: "x" }, { status: 404 })),
+  );
+  const c = new HttpClient({
+    baseUrl: "https://steamcommunity.com",
+    logger: silentLogger(),
+    retries: 0,
+    privatePaths: true,
+  });
+  await assert.rejects(
+    c.getJson("id/someone/"),
+    (err: unknown) => err instanceof ApiError && err.jsonBody && !err.message.includes("error"),
+  );
+});

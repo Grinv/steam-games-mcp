@@ -99,8 +99,9 @@ before any call, with a validation message instead.
 
 Steam answered with a success status but a body that can't be used: invalid
 JSON, an empty or non-object body, or one the endpoint's own check rejects (e.g.
-an appdetails answer missing an appid it was asked about, an empty tag
-dictionary). Usually transient.
+`get_game`'s appdetails answer without an entry for its appid, an empty tag
+dictionary; in a `get_prices` batch such an entry is that row's
+`available: null`, noted). Usually transient.
 
 ## unknown
 

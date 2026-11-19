@@ -1943,6 +1943,13 @@ describe("a body missing the field a whole-body verdict rests on is unusable", (
     ],
     ["get_player_bans", { steamid: "76561197960287930" }, "GetPlayerBans", {}],
     ["get_friend_list", { steamid: "76561197960287930" }, "GetFriendList", {}],
+    ["get_global_achievements", { appid: 620 }, "GetGlobalAchievementPercentagesForApp", {}],
+    [
+      "get_player_achievements",
+      { steamid: "76561197960287930", appid: 620 },
+      "GetPlayerAchievements",
+      { playerstats: {} },
+    ],
   ] as const) {
     test(`${tool}: ${endpoint} without it`, async (t) => {
       const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, (url) =>
@@ -1982,4 +1989,17 @@ test("get_items: an item Steam returns no card for is its own unavailable row", 
       [4294967295, false],
     ],
   );
+});
+
+// An empty friends list was never seen public; an absent `friends` reads as
+// none (protobuf-backed APIs omit an empty repeated field).
+test("get_friend_list: a friendslist without friends is zero friends", async (t) => {
+  const { client } = await setupServer(t, ENV, (url) =>
+    url.includes("GetFriendList") ? jsonResponse({ friendslist: {} }) : router(url),
+  );
+  const res = await client.callTool({
+    name: "get_friend_list",
+    arguments: { steamid: "76561197960287930" },
+  });
+  assert.equal((res.structuredContent as { total: number }).total, 0);
 });

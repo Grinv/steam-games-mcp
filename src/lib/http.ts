@@ -205,7 +205,7 @@ export class HttpClient {
       // can't be read, what this failure means is unknown — an I/O failure,
       // not an answer to read off the status alone.
       const raw = await io(res.text());
-      const err = toHttpError(res, this.#opts.privatePaths ? "" : raw);
+      const err = toHttpError(res, raw, !this.#opts.privatePaths);
       throw this.#opts.classify ? this.#opts.classify(err, raw) : err;
     } finally {
       clearTimeout(timer);
@@ -223,7 +223,7 @@ export class HttpClient {
   }
 }
 
-function toHttpError(res: Response, raw: string): ApiError {
+function toHttpError(res: Response, raw: string, logBody: boolean): ApiError {
   const { code, retryable } = classifyStatus(res.status);
   // The body is log-only text, never shown to the agent; that it is a JSON
   // object at all (the method answered, not a gateway page) is the one fact
@@ -232,7 +232,7 @@ function toHttpError(res: Response, raw: string): ApiError {
     code,
     status: res.status,
     retryable,
-    message: `HTTP ${res.status} ${res.statusText}${raw ? `: ${raw.slice(0, 500)}` : ""}`,
+    message: `HTTP ${res.status} ${res.statusText}${raw && logBody ? `: ${raw.slice(0, 500)}` : ""}`,
     retryAfterMs: parseRetryAfter(res.headers.get("retry-after")),
     jsonBody: isJsonObject(raw),
   });

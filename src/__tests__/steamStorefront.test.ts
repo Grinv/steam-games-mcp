@@ -301,6 +301,8 @@ describe("get_game", () => {
     ["ежик в тумане", "Ёжик в тумане"],
     // й isn't и: a mark that makes another letter stays.
     ["мой", "Мой"],
+    // An emoji goes with its presentation selector.
+    ["love story", "Love ❤️ Story"],
   ] as const) {
     test(`get_game by name: "${typed}" is ${title}`, async (t) => {
       const { client, mock } = await setupServer(t, ENV, (url) =>

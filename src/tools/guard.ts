@@ -130,8 +130,10 @@ export function toolOutput(logger: Logger): ToolOutput {
       // alongside a cancel is still logged.
       if (err instanceof CallCancelled) return problemResult(ownProblem("cancelled"));
       // The log gets the gaps met on the way, whatever failed the call (their
-      // notes have no result to ride in).
+      // notes have no result to ride in); stale copies are logged as they're
+      // worded, below, for an ApiError, and here for anything else.
       gapNotes(state);
+      if (!(err instanceof ApiError)) staleNotes(state);
       if (err instanceof ApiError) {
         logger.warn(`tool call failed: ${line(err)}`);
         // The error may rest on a cached copy (an old "no such app"), or not

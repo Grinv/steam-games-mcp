@@ -275,17 +275,22 @@ test("get_current_players errors on an unknown appid instead of reporting a sile
   assertToolError(res, /no steam app with id 999999999/i);
 });
 
-test("get_current_players errors on a 200 response with a non-1 result too", async (t) => {
-  const { client } = await setupServer(t, { STEAM_API_MIN_INTERVAL_MS: "0" }, (url) =>
-    url.includes("GetNumberOfCurrentPlayers")
-      ? jsonResponse({ response: { result: 42 } })
-      : jsonResponse({}),
+// "No such app" is the 404 with result 42 (recorded); a 200 is result 1 on
+// every app seen, so another result there says nothing established.
+test("get_current_players: a 200 with a result other than 1 is unusable, not 'no such app'", async (t) => {
+  const { client } = await setupServer(
+    t,
+    { STEAM_API_MIN_INTERVAL_MS: "0", HTTP_RETRIES: "0" },
+    (url) =>
+      url.includes("GetNumberOfCurrentPlayers")
+        ? jsonResponse({ response: { result: 42 } })
+        : jsonResponse({}),
   );
   const res = await client.callTool({
     name: "get_current_players",
     arguments: { appid: 999999999 },
   });
-  assertToolError(res, /no steam app with id 999999999/i);
+  assertToolError(res, /unusable/);
 });
 
 describe("get_wishlist", () => {

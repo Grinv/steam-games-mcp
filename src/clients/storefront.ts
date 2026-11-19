@@ -99,7 +99,7 @@ export class StorefrontClient {
     const [res, prices] = await Promise.all([
       call(
         this.#http,
-        Steam.AppDetails,
+        Steam.GameDetails,
         { appids: appid, cc, l, filters: APPDETAILS_FILTERS },
         { cache: true },
       ),
@@ -178,10 +178,12 @@ export class StorefrontClient {
     const parts = optionalParts(settled, (i) => `Prices of ${chunks[i]!.length} appids`);
     const merged: PriceDetailsResponse = Object.assign({}, ...parts);
     // Per row: an entry Steam sent without a boolean `success` is that price's
-    // gap alone (available:null), noted like a failed chunk's.
+    // gap alone, noted like a failed chunk's — dropped here, decided once, so
+    // summarizePrices reads it as no entry (available:null).
     const odd = chunks.flatMap((chunk, i) =>
       settled[i]!.status === "fulfilled" ? chunk.filter((id) => !usableAppEntry(merged[id])) : [],
     );
+    for (const id of odd) delete merged[id];
     if (odd.length) {
       noteDegraded(
         `Prices of ${odd.length} appids`,

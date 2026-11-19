@@ -117,14 +117,17 @@ function reviewScoreFloor(threshold: number): number {
 // Pokémon, "portal 2" Portal². Other marks are part of the letter — Cyrillic
 // й isn't и, Ukrainian ї isn't і, Japanese ガ isn't カ — so they're kept (NFC).
 function titleKey(s: string): string {
-  return s
-    .replace(/\p{S}/gu, "")
-    .normalize("NFKD")
-    .replace(/([\p{Script=Latin}\p{Script=Greek}])\p{M}+/gu, "$1")
-    .replace(/([еЕ])\u0308/g, "$1")
-    .normalize("NFC")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\p{M}]/gu, "");
+  return (
+    s
+      // A symbol with its presentation selector or keycap (❤️, 1️⃣), not just the symbol.
+      .replace(/\p{S}[\uFE00-\uFE0F\u20E3]*|[\uFE00-\uFE0F\u20E3]/gu, "")
+      .normalize("NFKD")
+      .replace(/([\p{Script=Latin}\p{Script=Greek}])\p{M}+/gu, "$1")
+      .replace(/([еЕ])\u0308/g, "$1")
+      .normalize("NFC")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\p{M}]/gu, "")
+  );
 }
 
 // Tag names → each name's tagids, case-insensitively. A name isn't unique: in

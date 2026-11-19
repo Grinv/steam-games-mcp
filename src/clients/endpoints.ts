@@ -129,12 +129,8 @@ export const Steam = {
     keyless: false,
     validate: (body) => {
       const r = body.response;
-      if ((r?.success === RESULT_OK && r.steamid) || r?.success === RESULT_NO_MATCH) return;
-      throw new ApiError({
-        code: "bad_response",
-        message: `ResolveVanityURL answered success ${r?.success}`,
-        retryable: true,
-      });
+      const answered = (r?.success === RESULT_OK && !!r.steamid) || r?.success === RESULT_NO_MATCH;
+      requireField(answered, `a success of 1 (with a steamid) or 42, not ${r?.success}`);
     },
     probes: [
       { query: { vanityurl: "gabelogannewell" }, expect: "data", shows: "resolves" },
@@ -210,8 +206,14 @@ export const Steam = {
     path: "ISteamUser/GetFriendList/v1/",
     host: "api",
     keyless: false,
+    // `friendslist` is on every 200 seen; its `friends` was an array on all 9
+    // sampled, but no public list without friends was seen, so an absent one
+    // reads as none (protobuf-backed APIs omit an empty repeated field).
     validate: (body) =>
-      requireField(Array.isArray(body.friendslist?.friends), "friendslist.friends"),
+      requireField(
+        typeof body.friendslist === "object" && body.friendslist !== null,
+        "friendslist",
+      ),
     answers: {
       401: "not_shown",
       404: "not_shown",
@@ -247,6 +249,8 @@ export const Steam = {
     host: "api",
     keyless: false,
     answers: { 403: "not_shown", 400: "no_stats" },
+    validate: (body) =>
+      requireField(typeof body.playerstats?.success === "boolean", "playerstats.success"),
     probes: [
       badKeyProbe({ steamid: PUBLIC, appid: 620 }),
       {
@@ -315,6 +319,8 @@ export const Steam = {
     host: "api",
     keyless: true,
     answers: { 403: "no_data" },
+    validate: (body) =>
+      requireField(Array.isArray(body.achievementpercentages?.achievements), "achievements"),
     probes: [
       { query: { gameid: 620 }, expect: "data", shows: "a game with achievements" },
       {
@@ -329,6 +335,13 @@ export const Steam = {
         shows: "no such app is a 403",
         situation: "no-app",
       },
+      {
+        // get_global_achievements says the three answer alike.
+        query: { gameid: 228980 },
+        expect: "no_data",
+        shows: "an app with stats but no achievements is a 403 too",
+        situation: "no-achievements",
+      },
     ],
   }),
   GetNumberOfCurrentPlayers: endpoint<CurrentPlayersResponse, "no_app">({
@@ -336,7 +349,9 @@ export const Steam = {
     host: "api",
     keyless: true,
     answers: { 404: "no_app" },
-    validate: (body) => requireField(typeof body.response?.result === "number", "response.result"),
+    // On a 200, result 1 (seen on every app); "no such app" is the 404 with 42.
+    // Any other result says nothing established: unusable, not "no such app".
+    validate: (body) => requireField(body.response?.result === 1, "a result of 1"),
     probes: [
       { query: { appid: 620 }, expect: "data", shows: "a live count" },
       {
@@ -405,14 +420,11 @@ export const Steam = {
     path: "IStoreService/GetTagList/v1/",
     host: "api",
     keyless: true,
-    validate: (body, query) => {
-      if (Object.keys(summarizeTagList(body)).length > 0) return;
-      throw new ApiError({
-        code: "bad_response",
-        message: `Steam returned an empty tag dictionary for language "${query.language}"`,
-        retryable: true,
-      });
-    },
+    validate: (body, query) =>
+      requireField(
+        Object.keys(summarizeTagList(body)).length > 0,
+        `tags for language "${query.language}"`,
+      ),
     probes: [
       { query: { language: "english" }, expect: "data", shows: "a dictionary" },
       {
@@ -526,24 +538,32 @@ export const Steam = {
 
   // ---- store.steampowered.com (keyless) -------------------------------------
   // appdetails answers every appid it's asked about with an entry carrying a
-  // boolean `success` (usableAppEntry). For one appid (get_game) that entry is
-  // the whole answer, so without it the body is unusable — retried, never
-  // cached. A batch (get_prices) decides it per row: one odd entry costs its
-  // own price, noted, not the chunk's hundred.
+  // boolean `success` (usableAppEntry). A batch (get_prices) decides that per
+  // row: one odd entry costs its own price, noted, not the chunk's hundred.
   AppDetails: endpoint<AppDetailsResponse>({
     path: "api/appdetails",
     host: "store",
     keyless: true,
-    validate: (body, query) => {
-      const ids = String(query.appids).split(",");
-      if (ids.length === 1) requireField(usableAppEntry(body[ids[0]!]), `an entry for ${ids[0]}`);
-    },
     probes: [
       {
         query: { appids: "620,99999999", filters: "price_overview" },
         expect: "data",
         shows: "an entry for every appid, {success:false} for a nonexistent one",
       },
+    ],
+  }),
+  // The same path for get_game's one appid, its own entry because the rule is
+  // that query's: the entry is the whole answer, so without it the body is
+  // unusable — retried, never cached.
+  GameDetails: endpoint<AppDetailsResponse>({
+    path: "api/appdetails",
+    host: "store",
+    keyless: true,
+    validate: (body, query) =>
+      requireField(usableAppEntry(body[String(query.appids)]), `an entry for ${query.appids}`),
+    probes: [
+      { query: { appids: 620 }, expect: "data", shows: "a game's entry" },
+      { query: { appids: 99999999 }, expect: "data", shows: "{success:false} for no such app" },
     ],
   }),
   ReviewHistogram: endpoint<ReviewHistogramResponse>({

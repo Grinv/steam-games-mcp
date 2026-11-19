@@ -29,6 +29,11 @@
     "contentType": "text/html; charset=UTF-8",
     "body": "<html><head><title>Bad Request</title></head><body><h1>Bad Request</h1>Missing required routing parameter</body></html>"
   },
+  "GetGlobalAchievementPercentagesForApp/no-achievements": {
+    "status": 403,
+    "contentType": "application/json; charset=UTF-8",
+    "body": "{}"
+  },
   "GetGlobalAchievementPercentagesForApp/no-app": {
     "status": 403,
     "contentType": "application/json; charset=UTF-8",

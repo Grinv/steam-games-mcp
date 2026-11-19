@@ -241,9 +241,9 @@ export function summarizePrices(
 ): z.infer<typeof getPricesOutput> {
   const prices = appids.map((id) => {
     const entry = merged[String(id)];
-    // Per row: no usable entry (its chunk failed, or Steam's entry for it
-    // lacked `success`) is unknown, never "not available"; either is noted.
-    if (!entry || !usableAppEntry(entry)) return { appid: id, available: null };
+    // No entry (its chunk failed, or the client dropped one without
+    // `success`): unknown, never "not available"; either is noted.
+    if (!entry) return { appid: id, available: null };
     const data = entry.data;
     const po = data && !Array.isArray(data) ? data.price_overview : undefined;
     if (!entry.success) return { appid: id, available: false as const };
