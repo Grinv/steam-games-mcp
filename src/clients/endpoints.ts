@@ -163,6 +163,7 @@ export const Steam = {
         query: { vanityurl: "zzzz-no-such-vanity-q7x" },
         expect: "data",
         shows: "a name nothing has is success 42",
+        situation: "no-match",
       },
       badKeyProbe({ vanityurl: "gabelogannewell" }),
     ],
@@ -397,6 +398,14 @@ export const Steam = {
     answers: { 403: "no_news" },
     probes: [
       { query: { appid: 620, count: 1 }, expect: "data", shows: "news" },
+      {
+        // The legacy interface writes "none" as [] (a soundtrack has no
+        // community announcements).
+        query: { appid: 1206340, count: 3, feeds: "steam_community_announcements" },
+        expect: "data",
+        shows: "no news under a filter is newsitems []",
+        situation: "none",
+      },
       {
         query: { appid: 99999999, count: 1 },
         expect: "no_news",
@@ -643,7 +652,15 @@ export const Steam = {
     // results with success 1 on every answer, an unknown appid's too (its
     // rollups absent: none, seen live).
     validate: reviewHistogramRule,
-    probes: [{ query: { appid: 620, l: "english" }, expect: "data", shows: "a histogram" }],
+    probes: [
+      { query: { appid: 620, l: "english" }, expect: "data", shows: "a histogram" },
+      {
+        query: { appid: 99999999, l: "english" },
+        expect: "data",
+        shows: "an unknown appid is success 1 with results but no rollups",
+        situation: "no-app",
+      },
+    ],
   }),
   FeaturedCategories: endpoint<FeaturedResponse>({
     path: "api/featuredcategories",
