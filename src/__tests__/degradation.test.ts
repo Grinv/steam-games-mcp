@@ -154,29 +154,65 @@ const SEEN = new Set(
     .map((r) => JSON.stringify(JSON.parse(r.body))),
 );
 
-// Verdicts an optional argument leads to, swept as runs of their own.
-// Each is merged over the base arguments (undefined drops one).
-const VARIANTS: Record<string, Record<string, unknown>[]> = {
-  get_game: [{ appid: undefined, name: "portal" }],
-  get_owned_games: [{ check_appids: [620, 400, 999] }],
-  get_wishlist: [{ include_details: true }],
+// Every optional argument is swept as a run of its own, so a verdict one
+// leads to (get_game by name, check_appids' owned) is covered without a list
+// to remember: its value is a known name's, else one its schema allows.
+const VALUES: Record<string, unknown> = {
+  ...BY_NAME,
+  check_appids: [620, 400, 999],
+  tags: ["Puzzle"], // in the fixture dictionary
+  exclude_tags: ["Shooter"],
+  country: "US",
 };
+// get_game takes an appid or a name, not both.
+const INSTEAD: Record<string, string[]> = { name: ["appid"] };
+type Prop = {
+  type?: string;
+  enum?: unknown[];
+  format?: string;
+  minimum?: number;
+  maximum?: number;
+};
+function valueFor(key: string, p: Prop): unknown {
+  if (key in VALUES) return VALUES[key];
+  if (p.enum) return p.enum[0];
+  if (p.format === "date") return "2025-01-06";
+  if (p.type === "boolean") return true;
+  if (p.type === "integer" || p.type === "number")
+    return p.minimum !== undefined && p.maximum !== undefined
+      ? Math.round((p.minimum + p.maximum) / 2)
+      : (p.minimum ?? 0) + 1;
+  return "x";
+}
+function runsFor(schema: { properties?: Record<string, Prop>; required?: string[] }) {
+  const base = argsFor(schema);
+  const variants = Object.entries(schema.properties ?? {})
+    .filter(([key]) => !(key in base))
+    .map(([key, p]) => {
+      const args: Record<string, unknown> = { ...base, [key]: valueFor(key, p) };
+      for (const other of INSTEAD[key] ?? []) delete args[other];
+      return args;
+    });
+  return [base, ...variants];
+}
 
 test("a field Steam leaves out never becomes a verdict the full answer didn't give", async (t) => {
   const { client: lister } = await setupServer(t, ENV, router);
   const { tools } = await lister.listTools();
   const found: string[] = [];
   let checked = 0;
-  const runs = tools.flatMap((tool) => {
-    const base = argsFor(tool.inputSchema as Parameters<typeof argsFor>[0]);
-    const variants = (VARIANTS[tool.name] ?? []).map((v) =>
-      JSON.parse(JSON.stringify({ ...base, ...v })),
-    );
-    return [base, ...variants].map((args) => ({ tool, args }));
-  });
+  const runs = tools.flatMap((tool) =>
+    runsFor(tool.inputSchema as Parameters<typeof runsFor>[0]).map((args) => ({ tool, args })),
+  );
   for (const { tool, args } of runs) {
     const clean = await setupServer(t, ENV, router);
     const full = (await clean.client.callTool({ name: tool.name, arguments: args })) as Result;
+    // A run that fails before any field is dropped would check nothing.
+    assert.notEqual(
+      full.isError,
+      true,
+      `${tool.name} ${JSON.stringify(args)}: ${full.content[0]?.text}`,
+    );
     const before = new Set(verdicts(full));
     const held = positives(tool.name, full);
     const urls = new Map<string, string>(); // endpoint → the first URL it was asked

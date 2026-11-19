@@ -216,8 +216,9 @@ npm run inspector      # run under the MCP Inspector
   one that declares neither, so the rule's reach is checked, not remembered.
   Whether an absent field still turns into a verdict is checked too:
   `degradation.test.ts` drops each field of each answer every tool reads, in
-  turn (also under the optional arguments that lead to other verdicts,
-  `VARIANTS`), and fails on a verdict (`found:false`, not found,
+  turn — each tool once with its required arguments and once per optional
+  one, valued from its schema, so a verdict an argument leads to is covered
+  without a list to keep — and fails on a verdict (`found:false`, not found,
   `available`/`priced`/`owned:false`) the full answer didn't give, or on a
   fact a list states by membership (a friend who owns, a game two players
   share) dropping out unnoted, unless the body left is one Steam was
