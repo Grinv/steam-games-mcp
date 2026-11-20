@@ -11,6 +11,7 @@
 // its own — both clients hit the same api.steampowered.com host and must honor
 // one rate limiter and one cache, not one each.
 import { ApiError } from "../lib/errors.ts";
+import { unnamedRows } from "../format/shared.ts";
 import type { Answered, CallOptions, Endpoint, Query } from "../lib/endpoint.ts";
 import { Steam } from "./endpoints.ts";
 import { noteDegraded, optional, optionalParts, orFailure } from "../lib/call.ts";
@@ -64,6 +65,12 @@ function noteUnsettled(n: number): void {
       retryable: true,
     }),
   );
+}
+
+// A catalog card Steam sent without its appid can't be shown: said.
+function noteUnnamedItems(items: { appid?: number }[]): void {
+  const n = items.filter((it) => typeof it.appid !== "number").length;
+  if (n) noteDegraded(`${n} games' appid`, unnamedRows("IStoreQueryService/Query", "appid"));
 }
 
 // The include_* flags every store-service card call needs (reviews, release,
@@ -708,6 +715,7 @@ export class StoreServiceClient {
     });
     const ownedAppids = new Set(ownedGames.map((g) => g.appid));
     noteUnsettled(unsettledItems(poolRes.response?.store_items ?? []));
+    noteUnnamedItems(poolRes.response?.store_items ?? []);
     return summarizeRecommendations(
       poolRes.response?.store_items ?? [],
       tagWeights,
@@ -774,6 +782,7 @@ export class StoreServiceClient {
       filterTagMap,
     );
     noteUnsettled(unsettledItems(res.response.store_items ?? []));
+    noteUnnamedItems(res.response.store_items ?? []);
     return summarizeDiscover(res, { ...post, tagMap });
   }
 
@@ -893,6 +902,7 @@ export class StoreServiceClient {
     return summarizeWishlistDetailed(filtered.res, filtered.tagMap, filters, {
       total,
       exact: !checksHere,
+      carded: input.page_size,
     });
   }
 

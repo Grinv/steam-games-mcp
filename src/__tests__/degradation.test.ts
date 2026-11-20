@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { RECORDED, jsonResponse, setupServer } from "./helpers.ts";
 import { ENV, router } from "./steamFixtures.ts";
+import { Steam } from "../clients/endpoints.ts";
 
 // The invariant behind lib/call.ts's optional() and tools/guard.ts's notes,
 // checked for every tool against every Steam endpoint it calls — so a new
@@ -134,25 +135,75 @@ function verdicts(r: Result): string[] {
   walk(r.structuredContent, "");
   return out;
 }
-// Facts a list states by membership: a friend who owns a game, a game two
-// players share. One that silently drops out reads as "doesn't own" or "not
-// shared": a verdict too, unless the answer fails or notes the gap.
-type Rows = { appid: number; owners?: { steamid: string }[] }[];
-function positives(name: string, r: Result): string[] {
-  const sc = r.structuredContent as { matches?: Rows; games?: Rows } | undefined;
-  if (name === "find_friends_who_own")
-    return (sc?.matches ?? []).flatMap((m) =>
-      (m.owners ?? []).map((o) => `${m.appid} owned by ${o.steamid}`),
-    );
-  if (name === "compare_players") return (sc?.games ?? []).map((g) => `${g.appid} shared`);
-  return [];
+// Facts a list states by membership: every entry of every list in the answer
+// (a game found, a friend who owns one, a game two players share). One that
+// drops out reads as "not there": a verdict too, unless the answer fails or
+// notes the gap.
+function positives(r: Result): string[] {
+  const out: string[] = [];
+  const walk = (x: unknown, at: string) => {
+    if (Array.isArray(x)) {
+      for (const e of x) {
+        const o = e as Record<string, unknown> | null;
+        const id = o && typeof o === "object" ? (o.appid ?? o.steamid) : undefined;
+        if (id !== undefined) out.push(`${at}: ${String(id)}`);
+        walk(e, `${at}[${String(id ?? "")}]`);
+      }
+    } else if (x && typeof x === "object")
+      for (const [k, v] of Object.entries(x)) walk(v, at ? `${at}.${k}` : k);
+  };
+  walk(r.structuredContent, "");
+  return out;
 }
 
-const SEEN = new Set(
-  Object.values(RECORDED)
-    .filter((r) => r.status === 200 && r.contentType.includes("json"))
-    .map((r) => JSON.stringify(JSON.parse(r.body))),
-);
+// A filter keeps only what Steam's answer shows satisfies it, and a field it
+// tests that isn't there is Steam's own "none" (a protobuf default: no
+// reviews, no purchase option, unsupported, unknown compat), so in a run with
+// a filter an entry dropping out is the filter's answer, not a lost fact.
+const FILTERS = new Set([
+  "tags",
+  "exclude_tags",
+  "min_review",
+  "min_reviews",
+  "min_discount",
+  "on_sale_only",
+  "platform",
+  "steam_deck",
+  "steam_os",
+  "steam_machine",
+  "steam_frame",
+  "released_after",
+  "released_within_days",
+]);
+
+// What Steam was recorded sending: a whole body, or a list it left out (its
+// "none" there, read as empty), per endpoint.
+const recordedBodies = new Map<string, unknown[]>();
+for (const [key, r] of Object.entries(RECORDED)) {
+  if (r.status !== 200 || !r.contentType.includes("json")) continue;
+  const ep = Steam[key.split("/")[0] as keyof typeof Steam];
+  const base =
+    ep.host === "api" ? "https://api.steampowered.com/" : "https://store.steampowered.com/";
+  const e = endpointOf(base + ep.path);
+  if (e) recordedBodies.set(e, [...(recordedBodies.get(e) ?? []), JSON.parse(r.body)]);
+}
+const SEEN = new Set([...recordedBodies.values()].flat().map((b) => JSON.stringify(b)));
+const valueAt = (v: unknown, path: Path): unknown =>
+  path.reduce<unknown>(
+    (x, k) =>
+      Array.isArray(x)
+        ? k === "[]"
+          ? x[0]
+          : undefined
+        : (x as Record<string, unknown> | undefined)?.[k],
+    v,
+  );
+function leftOutLike(endpoint: string, fixture: unknown, path: Path): boolean {
+  if (!Array.isArray(valueAt(fixture, path))) return false;
+  return (recordedBodies.get(endpoint) ?? []).some(
+    (b) => valueAt(b, path.slice(0, -1)) !== undefined && valueAt(b, path) === undefined,
+  );
+}
 
 // Every optional argument is swept as a run of its own, so a verdict one
 // leads to (get_game by name, check_appids' owned) is covered without a list
@@ -214,7 +265,7 @@ test("a field Steam leaves out never becomes a verdict the full answer didn't gi
       `${tool.name} ${JSON.stringify(args)}: ${full.content[0]?.text}`,
     );
     const before = new Set(verdicts(full));
-    const held = positives(tool.name, full);
+    const held = positives(full);
     const urls = new Map<string, string>(); // endpoint → the first URL it was asked
     for (const c of clean.mock.calls) {
       const e = endpointOf(c.url);
@@ -223,7 +274,9 @@ test("a field Steam leaves out never becomes a verdict the full answer didn't gi
     for (const [endpoint, url] of urls) {
       const res = await router(url);
       if (!res.headers.get("content-type")?.includes("json")) continue;
-      for (const path of fieldPaths(await res.json())) {
+      const fixture: unknown = await res.json();
+      for (const path of fieldPaths(fixture)) {
+        if (leftOutLike(endpoint, fixture, path)) continue;
         const handler = async (u: string) => {
           const r = await router(u);
           if (endpointOf(u) !== endpoint) return r;
@@ -238,9 +291,12 @@ test("a field Steam leaves out never becomes a verdict the full answer didn't gi
         });
         const answer = (await client.callTool({ name: tool.name, arguments: args })) as Result;
         const after = verdicts(answer);
-        const kept = new Set(positives(tool.name, answer));
-        const explained = answer.isError || (answer.structuredContent?.notes?.length ?? 0) > 0;
-        const lost = explained ? [] : held.filter((p) => !kept.has(p)).map((p) => `lost: ${p}`);
+        const kept = new Set(positives(answer));
+        const sc = answer.structuredContent as { notes?: string[]; note?: string } | undefined;
+        const explained = answer.isError || (sc?.notes?.length ?? 0) > 0 || Boolean(sc?.note);
+        const filtered = Object.keys(args).some((k) => FILTERS.has(k));
+        const lost =
+          explained || filtered ? [] : held.filter((p) => !kept.has(p)).map((p) => `lost: ${p}`);
         checked += 1;
         if (seen) continue;
         for (const v of [...after.filter((v) => !before.has(v)), ...lost])

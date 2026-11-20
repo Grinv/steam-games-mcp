@@ -20,6 +20,7 @@ import {
   usableAppEntry,
 } from "../format/storefront.ts";
 import type { PurchasePrices } from "../format/store.ts";
+import { unnamedRows } from "../format/shared.ts";
 import type { Logger } from "../lib/logger.ts";
 import type { Config } from "../config.ts";
 
@@ -55,6 +56,16 @@ const APPDETAILS_FILTERS = [
 export interface PurchasePriceSource {
   getPurchasePrices(appids: number[], country?: string, language?: string): Promise<PurchasePrices>;
   getGamePurchasePrice(appid: number, country?: string, language?: string): Promise<PurchasePrices>;
+}
+
+// A featured app Steam listed without its id is shown without an appid: said.
+function noteUnnamedFeatured(
+  sections: ({ items?: { id?: number; type?: number }[] } | undefined)[],
+) {
+  const n = sections
+    .flatMap((s) => s?.items ?? [])
+    .filter((i) => (i.type === undefined || i.type === 0) && typeof i.id !== "number").length;
+  if (n) noteDegraded(`${n} featured games' appid`, unnamedRows("featuredcategories", "id"));
 }
 
 export class StorefrontClient {
@@ -218,10 +229,14 @@ export class StorefrontClient {
   }
 
   async getFeatured(country?: string, language?: string): Promise<Record<string, unknown>> {
-    return summarizeFeatured(await this.#featured(country ?? this.#cc, language ?? this.#l));
+    const r = await this.#featured(country ?? this.#cc, language ?? this.#l);
+    noteUnnamedFeatured([r.specials, r.top_sellers, r.new_releases, r.coming_soon]);
+    return summarizeFeatured(r);
   }
 
   async getSpecials(country?: string, language?: string): Promise<Record<string, unknown>> {
-    return summarizeSpecials(await this.#featured(country ?? this.#cc, language ?? this.#l));
+    const r = await this.#featured(country ?? this.#cc, language ?? this.#l);
+    noteUnnamedFeatured([r.specials]);
+    return summarizeSpecials(r);
   }
 }

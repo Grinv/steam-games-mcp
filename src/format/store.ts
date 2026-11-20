@@ -327,7 +327,8 @@ export function summarizeWishlistDetailed(
   // server-filtered response only lists matches). exact: every filter ran
   // server-side, so the listed entries ARE the matches and only the displayed
   // page needed cards; otherwise storeItemFilter re-checks each carded match.
-  ctx: { total: number; exact: boolean },
+  // carded: how many listed entries Steam cards (the request's page_size).
+  ctx: { total: number; exact: boolean; carded?: number },
 ): z.infer<typeof wishlistNotFound> | z.infer<typeof wishlistDetailedFound> {
   if (ctx.total === 0) {
     return wishlistNotFound.parse({
@@ -351,6 +352,15 @@ export function summarizeWishlistDetailed(
     );
   const hidden = appidsWhere(false);
   const unsettled = appidsWhere(undefined);
+  // Steam cards the first `carded` entries it lists; one among them without
+  // a usable card (none, or none with an appid) is named, not left out.
+  const cardless = listed
+    .slice(0, ctx.carded ?? 0)
+    .flatMap((i) =>
+      (!i.store_item || typeof i.store_item.appid !== "number") && typeof i.appid === "number"
+        ? [i.appid]
+        : [],
+    );
   const enriched = items.filter(
     (i): i is typeof i & { store_item: StoreItem } => i.store_item !== undefined,
   );
@@ -396,6 +406,10 @@ export function summarizeWishlistDetailed(
         unsettled.length > 0
           ? `${unsettled.length} with a card that doesn't say whether it's shown in this ` +
             `country, so without one (ask again): appids ${appidList(unsettled)}.`
+          : "",
+        cardless.length > 0
+          ? `${cardless.length} that Steam's answer gave no usable card, so without one ` +
+            `(ask again): appids ${appidList(cardless)}.`
           : "",
       ]
         .filter(Boolean)

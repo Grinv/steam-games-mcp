@@ -37,6 +37,17 @@ export function bodyRule(schema: z.ZodType, what: string): (body: unknown) => vo
 export const responseEnvelopeRule = (what: string) =>
   bodyRule(z.looseObject({ response: z.looseObject({}) }), what);
 
+/** Rows Steam sent without a field it sends on every one (an id, a
+ *  playtime): each is that row's unknown — left out or shown without it, and
+ *  noted with this, never dropped without a word. */
+export const unnamedRows = (endpoint: string, field: string) =>
+  new ApiError({
+    code: "bad_response",
+    message: `${endpoint} rows without ${field}`,
+    detail: `Steam's answer left out their ${field}.`,
+    retryable: true,
+  });
+
 // A list element: an object, its fields typed but not checked (`unchecked`).
 // A list holding anything else (a null) is no answer, never a row to crash on.
 export const row = <T>() =>

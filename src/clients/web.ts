@@ -9,6 +9,7 @@
 import { HttpClient } from "../lib/http.ts";
 import { RateLimiter } from "../lib/rateLimit.ts";
 import { ApiError } from "../lib/errors.ts";
+import { unnamedRows } from "../format/shared.ts";
 import {
   call,
   type Answered,
@@ -66,15 +67,6 @@ import type { Config } from "../config.ts";
 // without a key (see #vanityViaCommunity). Not a config knob — it isn't an API
 // this server otherwise talks to, and there's nothing to point elsewhere.
 const STEAM_COMMUNITY_BASE_URL = "https://steamcommunity.com";
-
-// Rows Steam sent without a field it sends on every one: that row's unknown.
-const unnamedRows = (endpoint: string, field: string) =>
-  new ApiError({
-    code: "bad_response",
-    message: `${endpoint} rows without ${field}`,
-    detail: `Steam's answer left out their ${field}.`,
-    retryable: true,
-  });
 
 function friendIdsOf(r: FriendListResponse): string[] {
   return (r.friendslist?.friends ?? [])
@@ -264,8 +256,19 @@ export class SteamWebClient {
     // Deduped: each `owns` row answers one appid, so a repeated one only
     // repeated the row.
     const unique = checkAppids && [...new Set(checkAppids)];
-    const unnamed = ownedGamesNotShown(res) ? 0 : unnamedGames(res);
-    if (unnamed) noteDegraded(`${unnamed} library games`, unnamedRows("GetOwnedGames", "appid"));
+    if (!ownedGamesNotShown(res)) {
+      const games = res.response.games ?? [];
+      const unnamed = unnamedGames(res);
+      if (unnamed) noteDegraded(`${unnamed} library games`, unnamedRows("GetOwnedGames", "appid"));
+      // Steam sends a playtime with every game, 0 included (seen live): one
+      // without it sorts and caps as unknown, so it's said.
+      const untimed = games.filter((g) => typeof g.playtime_forever !== "number").length;
+      if (untimed)
+        noteDegraded(
+          `${untimed} library games' playtime`,
+          unnamedRows("GetOwnedGames", "playtime"),
+        );
+    }
     return summarizeOwnedGames(res, { checkAppids: unique, ...opts });
   }
 
@@ -274,6 +277,9 @@ export class SteamWebClient {
       steamid,
       count: RECENTLY_PLAYED_MAX,
     });
+    const unnamed = (res.response.games ?? []).filter((g) => typeof g.appid !== "number").length;
+    if (unnamed)
+      noteDegraded(`${unnamed} recent games`, unnamedRows("GetRecentlyPlayedGames", "appid"));
     return summarizeRecentlyPlayed(res);
   }
 
@@ -622,7 +628,10 @@ export class SteamWebClient {
 
   // A player's wishlist (needs the wishlist/profile to be public). Keyless.
   async #getWishlistLight(steamid: string): Promise<Record<string, unknown>> {
-    return summarizeWishlist(await this.#call(Steam.GetWishlist, { steamid }));
+    const res = await this.#call(Steam.GetWishlist, { steamid });
+    const unnamed = (res.response.items ?? []).filter((i) => typeof i.appid !== "number").length;
+    if (unnamed) noteDegraded(`${unnamed} wishlist items`, unnamedRows("GetWishlist", "appid"));
+    return summarizeWishlist(res);
   }
 
   // A player's followed games (needs the profile to be public). Keyless — a

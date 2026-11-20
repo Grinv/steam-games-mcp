@@ -219,10 +219,13 @@ npm run inspector      # run under the MCP Inspector
   turn — each tool once with its required arguments and once per optional
   one, valued from its schema, so a verdict an argument leads to is covered
   without a list to keep — and fails on a verdict (`found:false`, not found,
-  `available`/`priced`/`owned:false`) the full answer didn't give, or on a
-  fact a list states by membership (a friend who owns, a game two players
-  share) dropping out unnoted, unless the body left is one Steam was
-  recorded sending. A list is required only where its absence
+  `available`/`priced`/`owned:false`) the full answer didn't give, or on an
+  entry of any list in the answer (a game found, a friend who owns one)
+  dropping out with neither an error nor a note — unless the body left is
+  one Steam was recorded sending, or the field is a list Steam was recorded
+  leaving out (its "none"). In a run with a filter argument an entry may
+  drop out: a field the filter tests that isn't there is Steam's own "none"
+  (a protobuf default), so the filter answers it. A list is required only where its absence
   can't mean "none": where Steam writes "none" as `[]`, or where there is no
   "none" (the global player charts always rank 100). The protobuf service
   methods (`I…Service`) are proto2 and leave an empty list out, so there an
