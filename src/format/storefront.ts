@@ -12,7 +12,17 @@
 import { z } from "zod";
 import type { PurchasePrices } from "./store.ts";
 import { appidValue } from "../steam.ts";
-import { bodyRule, capList, isoDay, money, names, storeUrl, stripHtml } from "./shared.ts";
+import {
+  bodyRule,
+  capList,
+  isRecord,
+  isoDay,
+  money,
+  names,
+  storeUrl,
+  stripHtml,
+  usableRows,
+} from "./shared.ts";
 import {
   gameEntryInput,
   priceEntryInput,
@@ -273,17 +283,16 @@ type FeaturedItem = NonNullable<FeaturedResponse["specials"]["items"]>[number];
 // Steam's featuredcategories endpoint itself repeats the same appid within a
 // section (confirmed live against store.steampowered.com/api/featuredcategories),
 // so dedupe here rather than passing upstream's repeats through to the agent.
+const hasId = (i: FeaturedItem): i is FeaturedItem & { id: number } => typeof i.id === "number";
 function featuredItems(items: FeaturedItem[] | undefined): z.infer<typeof featuredItemSchema>[] {
   const seen = new Set<number>();
   const out: z.infer<typeof featuredItemSchema>[] = [];
-  for (const i of items ?? []) {
-    // Keep apps only: a bundle's id rendered as `appid` sends the agent to a
-    // broken store_url and makes get_game/get_items fail on it.
-    if (i.type !== undefined && i.type !== 0) continue;
-    if (i.id !== undefined) {
-      if (seen.has(i.id)) continue;
-      seen.add(i.id);
-    }
+  // Keep apps only: a bundle's id rendered as `appid` sends the agent to a
+  // broken store_url and makes get_game/get_items fail on it.
+  const apps = (items ?? []).filter((i) => !isRecord(i) || i.type === undefined || i.type === 0);
+  for (const i of usableRows(apps, hasId, "featured games", "featuredcategories", "id")) {
+    if (seen.has(i.id)) continue;
+    seen.add(i.id);
     out.push({
       appid: i.id,
       name: i.name,

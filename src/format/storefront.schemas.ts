@@ -7,7 +7,7 @@
 // silently accepted. Also exported for wiring into `registerTool`'s
 // `outputSchema` in tools/storefront.ts.
 import { z } from "zod";
-import { unchecked, row } from "./shared.ts";
+import { isRecord, unchecked, row } from "./shared.ts";
 import type { PriceOverview, StoreApp } from "./storefront.ts";
 
 // The currency/final/initial/discount_percent fields formattedPrice() builds,
@@ -91,8 +91,9 @@ export const getPricesOutput = z.strictObject({
       z
         .strictObject({ appid: z.number(), available: z.null() })
         .describe(
-          "Unknown: Steam failed to answer for the batch this appid was looked up in (the " +
-            "result's `notes` says why). Says nothing about the game — retry for its price.",
+          "Unknown: Steam's answer for this appid failed or didn't fit — its whole batch, or " +
+            "this row alone (the result's `notes` says which). Says nothing about the game — " +
+            "retry for its price.",
         ),
       z
         .strictObject({
@@ -172,7 +173,6 @@ export const getReviewHistogramOutput = z.strictObject({
 // its `data` (seen live 2026-11-20: 620, 570, 1206340, 10110, 219820, 99999999,
 // 1174180 under RU). Without `data` a success says nothing, so it isn't one:
 // the entry types are inferred from these, and only success:false is a "no".
-const isRecord = (v: unknown) => typeof v === "object" && v !== null && !Array.isArray(v);
 const appEntry = <D>(isData: (v: unknown) => boolean) =>
   z.discriminatedUnion("success", [
     z.looseObject({ success: z.literal(false) }),

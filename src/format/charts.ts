@@ -4,7 +4,7 @@
 // appid, name, link and the chart's own metrics; price/reviews/compat are what
 // get_items is for.
 import { z } from "zod";
-import { bodyRule, isoDateTime, storeUrl } from "./shared.ts";
+import { bodyRule, hasAppid, isoDateTime, storeUrl, usableRows } from "./shared.ts";
 import {
   concurrentPlayersInput,
   deckMostPlayedInput,
@@ -39,12 +39,17 @@ export function summarizeTopSellers(
   r: TopSellersResponse,
   limit: number,
 ): z.infer<typeof getChartsOutput> {
-  const entries = (r.response?.ranks ?? [])
-    .filter((e) => typeof e.appid === "number")
+  const entries = usableRows(
+    r.response?.ranks,
+    hasAppid,
+    "chart entries",
+    "GetWeeklyTopSellers",
+    "appid",
+  )
     .slice(0, limit)
     .map((e) => ({
       rank: e.rank ?? 0,
-      appid: e.appid!,
+      appid: e.appid,
       name: e.item?.name ?? null,
       store_url: storeUrl(e.appid),
       last_week_rank: prevRank(e.last_week_rank),
@@ -62,12 +67,17 @@ export function summarizeMostPlayed(
   r: MostPlayedResponse,
   limit: number,
 ): z.infer<typeof getChartsOutput> {
-  const entries = (r.response?.ranks ?? [])
-    .filter((e) => typeof e.appid === "number")
+  const entries = usableRows(
+    r.response?.ranks,
+    hasAppid,
+    "chart entries",
+    "GetMostPlayedGames",
+    "appid",
+  )
     .slice(0, limit)
     .map((e) => ({
       rank: e.rank ?? 0,
-      appid: e.appid!,
+      appid: e.appid,
       name: e.item?.name ?? null,
       store_url: storeUrl(e.appid),
       last_week_rank: prevRank(e.last_week_rank),
@@ -85,12 +95,17 @@ export function summarizeMostPlayedDeck(
   r: DeckMostPlayedResponse,
   limit: number,
 ): z.infer<typeof getChartsOutput> {
-  const entries = (r.response?.ranks ?? [])
-    .filter((e) => typeof e.appid === "number")
+  const entries = usableRows(
+    r.response?.ranks,
+    hasAppid,
+    "chart entries",
+    "GetMostPlayedSteamDeckGames",
+    "appid",
+  )
     .slice(0, limit)
     .map((e) => ({
       rank: e.rank ?? 0,
-      appid: e.appid!,
+      appid: e.appid,
       name: e.item?.name ?? null,
       store_url: storeUrl(e.appid),
       last_week_rank: prevRank(e.last_period_rank),
@@ -107,12 +122,17 @@ export function summarizeConcurrentPlayers(
   r: ConcurrentPlayersResponse,
   limit: number,
 ): z.infer<typeof getChartsOutput> {
-  const entries = (r.response?.ranks ?? [])
-    .filter((e) => typeof e.appid === "number")
+  const entries = usableRows(
+    r.response?.ranks,
+    hasAppid,
+    "chart entries",
+    "GetGamesByConcurrentPlayers",
+    "appid",
+  )
     .slice(0, limit)
     .map((e) => ({
       rank: e.rank ?? 0,
-      appid: e.appid!,
+      appid: e.appid,
       name: e.item?.name ?? null,
       store_url: storeUrl(e.appid),
       concurrent_in_game: num(e.concurrent_in_game),

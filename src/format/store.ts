@@ -13,7 +13,16 @@
 
 import { z } from "zod";
 import { ApiError } from "../lib/errors.ts";
-import { bodyRule, capList, isoDay, notFound, notShown, storeUrl } from "./shared.ts";
+import {
+  bodyRule,
+  capList,
+  hasAppid,
+  isoDay,
+  notFound,
+  notShown,
+  storeUrl,
+  usableRows,
+} from "./shared.ts";
 import { wishlistNotFound } from "./shared.schemas.ts";
 import {
   discoverGamesOutput,
@@ -81,31 +90,37 @@ const STORE_APP_TYPE = [
   "advertising",
 ] as const;
 
+// No visible check here: a search leaves out what isn't shown in the country
+// (under RU: no RDR2, Anno 1800's DLC only, SIGNALIS 0 results; live 2026-11-20).
 export function summarizeSearchSuggestions(
   r: SearchSuggestionsResponse,
 ): z.infer<typeof searchGamesOutput> {
-  const results = (r.response.store_items ?? [])
-    .filter((it): it is StoreItemWithAppid => typeof it.appid === "number")
-    .map((it) => {
-      // Same rule as every card (ownPurchaseOption): the app's OWN package, never
-      // a bundle it sits in, and never a free app's paid add-on.
-      const p = priceFields(ownPurchaseOption(it));
-      return {
-        appid: it.appid,
-        name: it.name ?? null,
-        type: (typeof it.type === "number" && STORE_APP_TYPE[it.type]) || null,
-        price: p.final
-          ? { final: p.final, initial: p.original, discount_percent: p.discount_pct }
-          : null,
-        // 0 would read as a real (terrible) score; treat it as unscored, like
-        // storesearch's empty string was.
-        metascore: it.extra_details?.metacritic?.score
-          ? String(it.extra_details.metacritic.score)
-          : null,
-        platforms: nativePlatforms(it.platforms),
-        store_url: storeUrl(it.appid),
-      };
-    });
+  const results = usableRows(
+    r.response.store_items,
+    hasAppid,
+    "search results",
+    "SearchSuggestions",
+    "appid",
+  ).map((it) => {
+    // Same rule as every card (ownPurchaseOption): the app's OWN package, never
+    // a bundle it sits in, and never a free app's paid add-on.
+    const p = priceFields(ownPurchaseOption(it));
+    return {
+      appid: it.appid,
+      name: it.name ?? null,
+      type: (typeof it.type === "number" && STORE_APP_TYPE[it.type]) || null,
+      price: p.final
+        ? { final: p.final, initial: p.original, discount_percent: p.discount_pct }
+        : null,
+      // 0 would read as a real (terrible) score; treat it as unscored, like
+      // storesearch's empty string was.
+      metascore: it.extra_details?.metacritic?.score
+        ? String(it.extra_details.metacritic.score)
+        : null,
+      platforms: nativePlatforms(it.platforms),
+      store_url: storeUrl(it.appid),
+    };
+  });
   return searchGamesOutput.parse({
     total: r.response.metadata.total_matching_records,
     returned: results.length,
@@ -138,11 +153,8 @@ export function summarizeDiscover(
   // CStoreQueryFilters names; SteamOS, native platform, min_reviews and a
   // second compat dimension have no server-side form and are applied only here.
   const keep = storeItemFilter(opts);
-  const rows = (r.response?.store_items ?? [])
-    .filter(
-      (it): it is StoreItemWithAppid =>
-        shownHere(it) === true && typeof it.appid === "number" && keep(it),
-    )
+  const rows = usableRows(r.response?.store_items, hasAppid, "games", "Query", "appid")
+    .filter((it) => shownHere(it) === true && keep(it))
     .map((it) => storeCard(it, opts.tagMap))
     .sort((a, b) => (b.discount_pct as number) - (a.discount_pct as number));
   // Capped like every other card list: `count` scans up to 200 entries, and with
@@ -164,6 +176,10 @@ export function summarizeDiscover(
 
 // ---- IStoreBrowseService/GetItems (keyless batch store data) ----------------
 
+// GetItems rows are known by the id Steam echoes, or failing that their appid.
+const itemId = (it: StoreItem): number | undefined => it.id ?? it.appid;
+const hasItemId = (it: StoreItem): it is StoreItem => typeof itemId(it) === "number";
+
 // Batch store card per requested appid: base card + a NESTED price block, is_free
 // and coming_soon. Missing appids come back available:false.
 export function summarizeItems(
@@ -173,10 +189,8 @@ export function summarizeItems(
 ): z.infer<typeof getItemsOutput> {
   // Matched on the id Steam echoes (an unknown appid's item has appid 0).
   const byId = new Map<number, StoreItem>();
-  for (const it of r.response?.store_items ?? []) {
-    const id = it.id ?? it.appid;
-    if (typeof id === "number") byId.set(id, it);
-  }
+  for (const it of usableRows(r.response?.store_items, hasItemId, "store items", "GetItems", "id"))
+    byId.set(itemId(it)!, it);
   return getItemsOutput.parse({
     count: appids.length,
     items: appids.map((appid) => {
@@ -354,10 +368,13 @@ export function summarizeWishlistDetailed(
   const unsettled = appidsWhere(undefined);
   // Steam cards the first `carded` entries it lists; one among them without
   // a usable card (none, or none with an appid) is named, not left out.
+  // (One Steam says it doesn't show here is named above, not again.)
   const cardless = listed
     .slice(0, ctx.carded ?? 0)
     .flatMap((i) =>
-      (!i.store_item || typeof i.store_item.appid !== "number") && typeof i.appid === "number"
+      (!i.store_item ||
+        (shownHere(i.store_item) === true && typeof i.store_item.appid !== "number")) &&
+      typeof i.appid === "number"
         ? [i.appid]
         : [],
     );
@@ -387,7 +404,9 @@ export function summarizeWishlistDetailed(
   const { included, returned } = capList(cards, WISHLIST_DETAIL_MAX);
   // What Steam carded counts the entries it carded as not shown here, too.
   const carded = listed.filter((i) => i.store_item !== undefined).length;
-  const unchecked = ctx.exact ? 0 : listed.length - carded;
+  // Past the page Steam cards (an entry without a card inside it is cardless).
+  const page = ctx.carded ?? carded;
+  const unchecked = ctx.exact ? 0 : Math.max(0, listed.length - page);
   return wishlistDetailedFound.parse({
     found: true,
     total: ctx.total,
@@ -396,7 +415,7 @@ export function summarizeWishlistDetailed(
       [
         unchecked > 0
           ? `${listed.length} wishlist items passed Steam's own filters, but only the first ` +
-            `${carded} were checked against the rest (review %, own-package discount, ` +
+            `${page} were checked against the rest (review %, own-package discount, ` +
             "compat/platform) — narrow the filters to cover them all."
           : "",
         hidden.length > 0
@@ -433,10 +452,9 @@ export function computeFavoriteTagWeights(
   tagMap: TagMap,
 ): Map<number, number> {
   const weights = new Map<number, number>();
-  for (const it of ownedItems) {
+  for (const it of usableRows(ownedItems, hasItemId, "owned games' store data", "GetItems", "id")) {
     // The id Steam echoes for the appid asked (summarizeItems).
-    const appid = it.id ?? it.appid;
-    if (typeof appid !== "number") continue;
+    const appid = itemId(it)!;
     const hoursPlayed = (playtimeMinutesByAppid.get(appid) ?? 0) / 60;
     if (hoursPlayed <= 0) continue;
     for (const tag of topTagIds(it.tags, tagMap)) {
@@ -469,11 +487,10 @@ export function summarizeRecommendations(
   // Games-only and exclude_tags already ran server-side on the pool
   // (clients/storeService.ts), so only ownership and the discount backstop
   // remain here.
-  const scored = candidates
+  const scored = usableRows(candidates, hasAppid, "candidate games", "Query", "appid")
     .filter(
-      (it): it is StoreItemWithAppid =>
+      (it) =>
         shownHere(it) === true &&
-        typeof it.appid === "number" &&
         !ownedAppids.has(it.appid) &&
         // Client-side discount backstop, like summarizeDiscover: the server
         // filter is a superset (a bundle's discount, and 99 standing in for

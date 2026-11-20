@@ -7,7 +7,7 @@
 // card/filter primitives live in one place, separate from the response shapers
 // that consume them. Zod schemas in store.schemas.ts.
 import { z } from "zod";
-import { isoDateTime, storeReleaseDay, storeUrl } from "./shared.ts";
+import { isRecord, isoDateTime, storeReleaseDay, storeUrl } from "./shared.ts";
 import {
   baseCardSchema,
   compatBadgeSchema,
@@ -100,7 +100,7 @@ export interface GetTagListResponse {
 export function summarizeTagList(r: GetTagListResponse): TagMap {
   const map: TagMap = {};
   for (const t of r.response?.tags ?? [])
-    if (typeof t.tagid === "number" && t.name) map[t.tagid] = t.name;
+    if (isRecord(t) && typeof t.tagid === "number" && t.name) map[t.tagid] = t.name;
   return map;
 }
 // How many resolved tag names to surface per card (most-weighted first). Bounded
@@ -198,7 +198,7 @@ export function shownHere(it: StoreItem): boolean | undefined {
 /** The appids of items Steam's answer doesn't settle (shownHere undefined),
  *  for the client to note. */
 export const unsettledItems = (items: StoreItem[]): number =>
-  items.filter((it) => shownHere(it) === undefined).length;
+  items.filter((it) => isRecord(it) && shownHere(it) === undefined).length;
 
 /** Whether best_purchase_option prices THIS app rather than a bundle containing
  *  it. Valve's "best" option is whatever it considers the best value, which is

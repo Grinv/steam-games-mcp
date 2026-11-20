@@ -17,12 +17,15 @@ import {
   bodyRule,
   notShown,
   capList,
+  hasAppid,
   hours,
+  isRecord,
   isoDay,
   notFound,
   responseEnvelopeRule,
   storeUrl,
   stripHtml,
+  usableRows,
 } from "./shared.ts";
 import { notFoundReason, wishlistNotFound } from "./shared.schemas.ts";
 import {
@@ -132,7 +135,7 @@ export interface OwnedGamesResponse {
 // reported a public profile with no recent playtime as private.
 // A library Steam counts games in lists them: game_count 0 is its "none",
 // sent without a list (proto2). A list missing beside a count is no answer.
-const ownedEnvelopeRule = responseEnvelopeRule("GetOwnedGames");
+const ownedEnvelopeRule = responseEnvelopeRule("GetOwnedGames", "games");
 export function ownedGamesRule(body: OwnedGamesResponse): void {
   ownedEnvelopeRule(body);
   const { game_count, games } = body.response;
@@ -148,12 +151,12 @@ export function ownedGamesRule(body: OwnedGamesResponse): void {
  *  seen live 2026-11-20), so such a row is that game's unknown, for the
  *  caller to note — never a game the player doesn't have. */
 export const unnamedGames = (r: OwnedGamesResponse): number =>
-  (r.response.games ?? []).filter((g) => typeof g.appid !== "number").length;
+  (r.response.games ?? []).filter((g) => !isRecord(g) || typeof g.appid !== "number").length;
 
 /** Friend rows without a steamid: that friend's unknown, for the caller to
  *  note — never "no such friend". */
 export const unnamedFriends = (r: FriendListResponse): number =>
-  r.friendslist.friends.filter((f) => !f.steamid).length;
+  r.friendslist.friends.filter((f) => !isRecord(f) || !f.steamid).length;
 
 export function ownedGamesNotShown(r: OwnedGamesResponse): boolean {
   return r.response?.game_count === undefined && r.response?.games === undefined;
@@ -193,7 +196,9 @@ export function summarizeOwnedGames(
       games: [],
     });
   }
-  const all = r.response?.games ?? [];
+  const all = usableRows(r.response.games, hasAppid, "library games", "GetOwnedGames", "appid");
+  // Not listed is "doesn't own" only when every game was named.
+  const unnamed = (r.response.games?.length ?? 0) - all.length;
   const direction = opts.sort === "playtime_asc" ? -1 : 1;
   const games = all
     .slice()
@@ -220,8 +225,7 @@ export function summarizeOwnedGames(
         const g = byAppid.get(appid);
         return {
           appid,
-          // Not listed is "doesn't own" only when every game was named.
-          owned: g !== undefined ? true : unnamedGames(r) ? null : false,
+          owned: g !== undefined ? true : unnamed ? null : false,
           playtime_hours: g ? hours(g.playtime_forever) : null,
         };
       }),
@@ -253,8 +257,11 @@ export function summarizeComparePlayers(
           : "`other_steamid`";
     return notFound(notShown(`a game library for ${missing}`));
   }
-  const gamesA = new Map((a.response?.games ?? []).map((g) => [g.appid, g]));
-  const gamesB = new Map((b.response?.games ?? []).map((g) => [g.appid, g]));
+  // A game without an appid can't be matched: noted, never "not shared".
+  const named = (r: OwnedGamesResponse) =>
+    usableRows(r.response.games, hasAppid, "library games", "GetOwnedGames", "appid");
+  const gamesA = new Map(named(a).map((g) => [g.appid, g]));
+  const gamesB = new Map(named(b).map((g) => [g.appid, g]));
   const shared = [...gamesA.keys()]
     .filter((appid): appid is number => typeof appid === "number" && gamesB.has(appid))
     .map((appid) => {
@@ -291,6 +298,20 @@ export interface RecentlyPlayedResponse {
   response: { total_count?: number; games?: OwnedGame[] };
 }
 
+// Recent games Steam counts are listed (total_count 0 is its "none", with no
+// list): a list missing beside a count is no answer, as for the library.
+const recentEnvelopeRule = responseEnvelopeRule("GetRecentlyPlayedGames", "games");
+export function recentlyPlayedRule(body: RecentlyPlayedResponse): void {
+  recentEnvelopeRule(body);
+  const { total_count, games } = body.response;
+  if ((total_count ?? 0) > 0 && !games?.length)
+    throw new ApiError({
+      code: "bad_response",
+      message: `GetRecentlyPlayedGames counted ${total_count} games but listed none`,
+      retryable: true,
+    });
+}
+
 function recentlyPlayedNotShown(r: RecentlyPlayedResponse): boolean {
   return r.response?.total_count === undefined && r.response?.games === undefined;
 }
@@ -313,7 +334,8 @@ export function summarizeRecentlyPlayed(
       games: [],
     });
   }
-  const games = r.response?.games ?? [];
+  const listed = r.response.games ?? [];
+  const games = usableRows(listed, hasAppid, "recent games", "GetRecentlyPlayedGames", "appid");
   return getRecentlyPlayedOutput.parse({
     found: true,
     total: r.response?.total_count ?? games.length,
@@ -438,8 +460,8 @@ export function summarizeWishlist(
   r: WishlistResponse,
   max = WISHLIST_LIGHT_MAX,
 ): z.infer<typeof wishlistNotFound> | z.infer<typeof wishlistLightFound> {
-  const items = r.response?.items ?? [];
-  if (items.length === 0) {
+  // "Not shown" is Steam listing nothing, never rows it sent without an id.
+  if (!r.response.items?.length) {
     return wishlistNotFound.parse({
       found: false,
       reason: notShown("any wishlist items for this SteamID64"),
@@ -447,6 +469,7 @@ export function summarizeWishlist(
       items: [],
     });
   }
+  const items = usableRows(r.response.items, hasAppid, "wishlist items", "GetWishlist", "appid");
   const sorted = items.toSorted(
     (a, b) =>
       (a.priority || 1e9) - (b.priority || 1e9) || (a.date_added ?? 0) - (b.date_added ?? 0),
@@ -454,7 +477,7 @@ export function summarizeWishlist(
   const { included, returned } = capList(sorted, max);
   return wishlistLightFound.parse({
     found: true,
-    total: items.length,
+    total: r.response.items.length, // Steam's, an unusable row included (noted)
     returned,
     items: included.map((i) => ({
       appid: i.appid,

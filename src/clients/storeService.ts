@@ -11,7 +11,7 @@
 // its own — both clients hit the same api.steampowered.com host and must honor
 // one rate limiter and one cache, not one each.
 import { ApiError } from "../lib/errors.ts";
-import { unnamedRows } from "../format/shared.ts";
+import { hasAppid, isRecord, usableRows } from "../format/shared.ts";
 import type { Answered, CallOptions, Endpoint, Query } from "../lib/endpoint.ts";
 import { Steam } from "./endpoints.ts";
 import { noteDegraded, optional, optionalParts, orFailure } from "../lib/call.ts";
@@ -65,12 +65,6 @@ function noteUnsettled(n: number): void {
       retryable: true,
     }),
   );
-}
-
-// A catalog card Steam sent without its appid can't be shown: said.
-function noteUnnamedItems(items: { appid?: number }[]): void {
-  const n = items.filter((it) => typeof it.appid !== "number").length;
-  if (n) noteDegraded(`${n} games' appid`, unnamedRows("IStoreQueryService/Query", "appid"));
 }
 
 // The include_* flags every store-service card call needs (reviews, release,
@@ -444,7 +438,13 @@ export class StoreServiceClient {
     // "No game" is Steam's own count (0, recorded: no-match); a count beside
     // nothing usable fails the body rule (searchSuggestionsRule).
     if (res.response.metadata.total_matching_records === 0) return null;
-    const items = (res.response.store_items ?? []).filter((it) => typeof it.appid === "number");
+    const items = usableRows(
+      res.response.store_items,
+      hasAppid,
+      "search results",
+      "SearchSuggestions",
+      "appid",
+    );
     const wanted = titleKey(term);
     const exact = wanted ? items.find((it) => titleKey(it.name ?? "") === wanted) : undefined;
     return (exact ?? items[0])?.appid ?? null;
@@ -473,8 +473,9 @@ export class StoreServiceClient {
       l,
     );
     const out = summarizeItems(res, appids, tagMap);
-    // A row Steam's item didn't settle (available:null) is that row's gap.
-    noteUnsettled(out.items.filter((i) => i.available === null).length);
+    // An item that doesn't say whether it's shown (decided from Steam's items;
+    // a row with no usable item is noted where it's dropped).
+    noteUnsettled(unsettledItems(res.response?.store_items ?? []));
     return out;
   }
 
@@ -656,6 +657,8 @@ export class StoreServiceClient {
       country?: string;
       language?: string;
       minDiscount?: number;
+      // Library rows that couldn't be read (noted by the caller).
+      unread?: number;
     },
     tags: RecommendationTags | ApiError,
   ): Promise<Record<string, unknown>> {
@@ -683,6 +686,17 @@ export class StoreServiceClient {
       tagMap,
     );
     if (tagWeights.size === 0) {
+      // A taste read from a library or sample with unreadable rows (noted) is
+      // no answer when it comes out empty: those rows may have been it.
+      const unreadSample = (sampleRes.response?.store_items ?? []).some(
+        (it) => !isRecord(it) || typeof (it.id ?? it.appid) !== "number",
+      );
+      if (opts.unread || unreadSample)
+        throw new ApiError({
+          code: "bad_response",
+          message: "no taste from a library or sample with unreadable rows",
+          retryable: true,
+        });
       return noTasteToRecommendFrom();
     }
     const favoriteIds = [...tagWeights.entries()]
@@ -715,7 +729,6 @@ export class StoreServiceClient {
     });
     const ownedAppids = new Set(ownedGames.map((g) => g.appid));
     noteUnsettled(unsettledItems(poolRes.response?.store_items ?? []));
-    noteUnnamedItems(poolRes.response?.store_items ?? []);
     return summarizeRecommendations(
       poolRes.response?.store_items ?? [],
       tagWeights,
@@ -782,7 +795,6 @@ export class StoreServiceClient {
       filterTagMap,
     );
     noteUnsettled(unsettledItems(res.response.store_items ?? []));
-    noteUnnamedItems(res.response.store_items ?? []);
     return summarizeDiscover(res, { ...post, tagMap });
   }
 
@@ -889,6 +901,14 @@ export class StoreServiceClient {
         filterTagMap,
       ),
     ]);
+    // With no filter sent, Steam lists every entry: nothing listed beside a
+    // wishlist that has some is no answer, never "nothing matched".
+    if (Object.keys(server).length === 0 && total > 0 && !filtered.res.response.items?.length)
+      throw new ApiError({
+        code: "bad_response",
+        message: `GetWishlistSortedFiltered listed nothing, unfiltered, for a wishlist of ${total}`,
+        retryable: true,
+      });
     const filters = {
       onSaleOnly: opts.onSaleOnly,
       minReview: opts.minReview,

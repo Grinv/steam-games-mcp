@@ -53,7 +53,7 @@ describe("search_games", () => {
     const res = await client.callTool({ name: "search_games", arguments: { term: "portal" } });
     const s = res.structuredContent as { total: number; returned: number; results: unknown[] };
     assert.equal(s.total, 204);
-    assert.equal(s.returned, 1);
+    assert.equal(s.returned, 2);
     assert.deepEqual(s.results[0], {
       appid: 620,
       name: "Portal 2",

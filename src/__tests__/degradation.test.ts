@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { RECORDED, jsonResponse, setupServer } from "./helpers.ts";
+import { RECORDED, connectServer, jsonResponse, mockFetch, setupServer } from "./helpers.ts";
 import { ENV, router } from "./steamFixtures.ts";
 import { Steam } from "../clients/endpoints.ts";
 
@@ -109,12 +109,15 @@ function fieldPaths(v: unknown, depth = 4, at: Path = []): Path[] {
     ...fieldPaths(x, depth - 1, [...at, k]),
   ]);
 }
-function without(v: unknown, [head, ...rest]: Path): unknown {
+// Drops `path` from every element of a list on the way, or (first) only from
+// the first one: a partial loss, one row of many, is a case of its own.
+function without(v: unknown, [head, ...rest]: Path, first = false): unknown {
   if (typeof v !== "object" || v === null) return v;
-  if (Array.isArray(v)) return head === "[]" ? v.map((x) => without(x, rest)) : v;
+  if (Array.isArray(v))
+    return head === "[]" ? v.map((x, i) => (first && i > 0 ? x : without(x, rest, first))) : v;
   const o = { ...(v as Record<string, unknown>) };
   if (rest.length === 0) delete o[head!];
-  else if (head! in o) o[head!] = without(o[head!], rest);
+  else if (head! in o) o[head!] = without(o[head!], rest, first);
   return o;
 }
 // Every verdict in an answer, by what it is about (an appid or steamid).
@@ -198,10 +201,25 @@ const valueAt = (v: unknown, path: Path): unknown =>
         : (x as Record<string, unknown> | undefined)?.[k],
     v,
   );
+// A list Steam left out in a recorded answer whose object around it had the
+// same other fields: that answer's situation, not merely the same endpoint.
+const keysOf = (v: unknown, drop?: string) =>
+  v && typeof v === "object"
+    ? JSON.stringify(
+        Object.keys(v)
+          .filter((k) => k !== drop)
+          .sort(),
+      )
+    : "";
 function leftOutLike(endpoint: string, fixture: unknown, path: Path): boolean {
   if (!Array.isArray(valueAt(fixture, path))) return false;
+  const parent = path.slice(0, -1);
+  const own = keysOf(valueAt(fixture, parent), path.at(-1));
   return (recordedBodies.get(endpoint) ?? []).some(
-    (b) => valueAt(b, path.slice(0, -1)) !== undefined && valueAt(b, path) === undefined,
+    (b) =>
+      valueAt(b, parent) !== undefined &&
+      valueAt(b, path) === undefined &&
+      keysOf(valueAt(b, parent)) === own,
   );
 }
 
@@ -250,14 +268,22 @@ function runsFor(schema: { properties?: Record<string, Prop>; required?: string[
 test("a field Steam leaves out never becomes a verdict the full answer didn't give", async (t) => {
   const { client: lister } = await setupServer(t, ENV, router);
   const { tools } = await lister.listTools();
+  const realFetch = globalThis.fetch;
+  t.after(() => void (globalThis.fetch = realFetch));
   const found: string[] = [];
   let checked = 0;
   const runs = tools.flatMap((tool) =>
     runsFor(tool.inputSchema as Parameters<typeof runsFor>[0]).map((args) => ({ tool, args })),
   );
+  // One fetch, swapped per run (see below), and each server closed after its call.
+  async function ask(name: string, args: Record<string, unknown>, env: NodeJS.ProcessEnv) {
+    const { client, close } = await connectServer(env);
+    return (await client.callTool({ name, arguments: args }).finally(close)) as Result;
+  }
   for (const { tool, args } of runs) {
-    const clean = await setupServer(t, ENV, router);
-    const full = (await clean.client.callTool({ name: tool.name, arguments: args })) as Result;
+    const clean = mockFetch(router);
+    globalThis.fetch = clean.fn;
+    const full = await ask(tool.name, args, ENV);
     // A run that fails before any field is dropped would check nothing.
     assert.notEqual(
       full.isError,
@@ -267,29 +293,32 @@ test("a field Steam leaves out never becomes a verdict the full answer didn't gi
     const before = new Set(verdicts(full));
     const held = positives(full);
     const urls = new Map<string, string>(); // endpoint → the first URL it was asked
-    for (const c of clean.mock.calls) {
+    for (const c of clean.calls) {
       const e = endpointOf(c.url);
       if (e && !urls.has(e)) urls.set(e, c.url);
     }
+    assert.ok(urls.size > 0, `${tool.name} ${JSON.stringify(args)} reached no endpoint`);
     for (const [endpoint, url] of urls) {
       const res = await router(url);
       if (!res.headers.get("content-type")?.includes("json")) continue;
       const fixture: unknown = await res.json();
-      for (const path of fieldPaths(fixture)) {
-        if (leftOutLike(endpoint, fixture, path)) continue;
-        const handler = async (u: string) => {
+      const cases = fieldPaths(fixture).flatMap((path) => [
+        { path, first: false },
+        ...(path.includes("[]") ? [{ path, first: true }] : []),
+      ]);
+      for (const { path, first } of cases) {
+        if (!first && leftOutLike(endpoint, fixture, path)) continue;
+        let seen = false;
+        // Swapped directly: node:test's mock keeps every call it sees (each
+        // Response included), which over thousands of runs costs gigabytes.
+        globalThis.fetch = mockFetch(async (u) => {
           const r = await router(u);
           if (endpointOf(u) !== endpoint) return r;
-          const body = without(await r.json(), path);
-          return SEEN.has(JSON.stringify(body)) ? null : jsonResponse(body);
-        };
-        let seen = false;
-        const { client } = await setupServer(t, { ...ENV, HTTP_RETRIES: "0" }, async (u) => {
-          const r = await handler(u);
-          if (r === null) seen = true;
-          return r ?? (await router(u));
-        });
-        const answer = (await client.callTool({ name: tool.name, arguments: args })) as Result;
+          const body = without(await r.json(), path, first);
+          if (SEEN.has(JSON.stringify(body))) seen = true;
+          return jsonResponse(body);
+        }).fn;
+        const answer = await ask(tool.name, args, { ...ENV, HTTP_RETRIES: "0" });
         const after = verdicts(answer);
         const kept = new Set(positives(answer));
         const sc = answer.structuredContent as { notes?: string[]; note?: string } | undefined;
@@ -299,10 +328,9 @@ test("a field Steam leaves out never becomes a verdict the full answer didn't gi
           explained || filtered ? [] : held.filter((p) => !kept.has(p)).map((p) => `lost: ${p}`);
         checked += 1;
         if (seen) continue;
+        const what = `${path.join(".")}${first ? " (first row only)" : ""}`;
         for (const v of [...after.filter((v) => !before.has(v)), ...lost])
-          found.push(
-            `${tool.name} ${JSON.stringify(args)}: ${endpoint} without ${path.join(".")} → ${v}`,
-          );
+          found.push(`${tool.name} ${JSON.stringify(args)}: ${endpoint} without ${what} → ${v}`);
       }
     }
   }

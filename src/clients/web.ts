@@ -258,8 +258,6 @@ export class SteamWebClient {
     const unique = checkAppids && [...new Set(checkAppids)];
     if (!ownedGamesNotShown(res)) {
       const games = res.response.games ?? [];
-      const unnamed = unnamedGames(res);
-      if (unnamed) noteDegraded(`${unnamed} library games`, unnamedRows("GetOwnedGames", "appid"));
       // Steam sends a playtime with every game, 0 included (seen live): one
       // without it sorts and caps as unknown, so it's said.
       const untimed = games.filter((g) => typeof g.playtime_forever !== "number").length;
@@ -277,9 +275,6 @@ export class SteamWebClient {
       steamid,
       count: RECENTLY_PLAYED_MAX,
     });
-    const unnamed = (res.response.games ?? []).filter((g) => typeof g.appid !== "number").length;
-    if (unnamed)
-      noteDegraded(`${unnamed} recent games`, unnamedRows("GetRecentlyPlayedGames", "appid"));
     return summarizeRecentlyPlayed(res);
   }
 
@@ -342,7 +337,11 @@ export class SteamWebClient {
         retryable: true,
       });
     }
-    return this.#store.getRecommendedGames(games, opts, tags);
+    return this.#store.getRecommendedGames(
+      games,
+      { ...opts, unread: listed.length - games.length },
+      tags,
+    );
   }
 
   // Shared games between two players' FULL libraries, unlike get_owned_games
@@ -355,11 +354,6 @@ export class SteamWebClient {
       this.#ownedGamesRaw(steamidA, { include_appinfo: true, include_played_free_games: true }),
       this.#ownedGamesRaw(steamidB, { include_appinfo: true, include_played_free_games: true }),
     ]);
-    // A game without an appid can't be matched: noted, never "not shared".
-    const unnamed = [a, b]
-      .filter((r) => !ownedGamesNotShown(r))
-      .reduce((n, r) => n + unnamedGames(r), 0);
-    if (unnamed) noteDegraded(`${unnamed} library games`, unnamedRows("GetOwnedGames", "appid"));
     return summarizeComparePlayers(a, b);
   }
 
@@ -628,10 +622,7 @@ export class SteamWebClient {
 
   // A player's wishlist (needs the wishlist/profile to be public). Keyless.
   async #getWishlistLight(steamid: string): Promise<Record<string, unknown>> {
-    const res = await this.#call(Steam.GetWishlist, { steamid });
-    const unnamed = (res.response.items ?? []).filter((i) => typeof i.appid !== "number").length;
-    if (unnamed) noteDegraded(`${unnamed} wishlist items`, unnamedRows("GetWishlist", "appid"));
-    return summarizeWishlist(res);
+    return summarizeWishlist(await this.#call(Steam.GetWishlist, { steamid }));
   }
 
   // A player's followed games (needs the profile to be public). Keyless — a

@@ -1,6 +1,7 @@
 // Generic field helpers shared by the storefront and web formatters. Pure,
 // dependency-free transforms used to keep tool responses token-efficient.
 import { ApiError } from "../lib/errors.ts";
+import { noteDegraded } from "../lib/call.ts";
 import { notFoundReason } from "./shared.schemas.ts";
 import { z } from "zod";
 
@@ -34,8 +35,14 @@ export function bodyRule(schema: z.ZodType, what: string): (body: unknown) => vo
 // and its "none" is {"response":{}} (recorded per endpoint): a body without
 // the envelope is no answer, never that "none". What an absent field inside
 // means is the endpoint's `absent`.
-export const responseEnvelopeRule = (what: string) =>
-  bodyRule(z.looseObject({ response: z.looseObject({}) }), what);
+// `list`, when named, must hold objects (`row`): a null row is no answer.
+export const responseEnvelopeRule = (what: string, list?: string) =>
+  bodyRule(
+    z.looseObject({
+      response: z.looseObject(list ? { [list]: z.array(row<object>()).optional() } : {}),
+    }),
+    what,
+  );
 
 /** Rows Steam sent without a field it sends on every one (an id, a
  *  playtime): each is that row's unknown — left out or shown without it, and
@@ -48,10 +55,31 @@ export const unnamedRows = (endpoint: string, field: string) =>
     retryable: true,
   });
 
+export const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
 // A list element: an object, its fields typed but not checked (`unchecked`).
 // A list holding anything else (a null) is no answer, never a row to crash on.
-export const row = <T>() =>
-  z.custom<T>((v) => typeof v === "object" && v !== null && !Array.isArray(v));
+export const row = <T>() => z.custom<T>(isRecord);
+
+/** The rows of one Steam list an answer can use — each one `has` accepts (it
+ *  carries the id it is known by) — with every other row dropped and noted
+ *  in the same step, so no list loses a row unsaid. Steam sends the id on
+ *  every row (seen live), so such a row is that row's unknown. */
+export function usableRows<T, U extends T>(
+  rows: readonly T[] | undefined,
+  has: (row: T) => row is U,
+  what: string,
+  endpoint: string,
+  field: string,
+): U[] {
+  const out = (rows ?? []).filter((r): r is U => isRecord(r) && has(r));
+  const odd = (rows?.length ?? 0) - out.length;
+  if (odd) noteDegraded(`${odd} ${what}`, unnamedRows(endpoint, field));
+  return out;
+}
+export const hasAppid = <T extends { appid?: number }>(r: T): r is T & { appid: number } =>
+  typeof r.appid === "number";
 
 // Typed, not checked: Steam's optional fields and list elements are
 // hand-written types never verified live. Only a body rule's required fields

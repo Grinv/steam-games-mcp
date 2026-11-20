@@ -44,8 +44,8 @@ export const APP = {
 // response: store_items carry the card fields asked for in data_request.
 export const SUGGEST = {
   response: {
-    metadata: { total_matching_records: 204, start: 0, count: 1 },
-    ids: [{ appid: 620 }],
+    metadata: { total_matching_records: 204, start: 0, count: 2 },
+    ids: [{ appid: 620 }, { appid: 400 }],
     store_items: [
       {
         appid: 620,
@@ -59,6 +59,7 @@ export const SUGGEST = {
           metacritic: { score: 95, url: "https://www.metacritic.com/game/pc/portal-2" },
         },
       },
+      { appid: 400, visible: true, name: "Portal", type: 0, platforms: { windows: true } },
     ],
   },
 };
@@ -75,6 +76,8 @@ export const REVIEWS = {
 };
 export const FEATURED = {
   specials: {
+    id: "cat_specials",
+    name: "Specials",
     items: [
       {
         id: 620,
@@ -99,9 +102,10 @@ export const FEATURED = {
     ],
   },
   // Steam sends all four sections on every answer (seen live); empty here.
-  top_sellers: { items: [] },
-  new_releases: { items: [] },
-  coming_soon: { items: [] },
+  // Each section carries its id and name (seen live), items or not.
+  top_sellers: { id: "cat_topsellers", name: "Top Sellers", items: [] },
+  new_releases: { id: "cat_newreleases", name: "New Releases", items: [] },
+  coming_soon: { id: "cat_comingsoon", name: "Coming Soon", items: [] },
 };
 export const NEWS = {
   appnews: {
@@ -440,9 +444,16 @@ export function router(url: string) {
   if (url.includes("GetRecentlyPlayedGames")) return jsonResponse(RECENT);
   if (url.includes("GetPlayerAchievements")) return jsonResponse(ACHIEVEMENTS);
   if (url.includes("ResolveVanityURL")) return jsonResponse(VANITY);
-  // Every chart answers with its ranks list (seen live); empty here.
+  // Every chart answers with its ranks list (seen live).
   if (/ISteamChartsService|IStoreTopSellersService/.test(url))
-    return jsonResponse({ response: { ranks: [] } });
+    return jsonResponse({
+      response: {
+        ranks: [
+          { rank: 1, appid: 620, item: { name: "Portal 2" } },
+          { rank: 2, appid: 400, item: { name: "Portal" } },
+        ],
+      },
+    });
   return jsonResponse({});
 }
 

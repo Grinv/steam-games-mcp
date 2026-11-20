@@ -45,6 +45,7 @@ import {
   type VanityResponse,
   type WishlistResponse,
   ownedGamesRule,
+  recentlyPlayedRule,
 } from "../format/web.ts";
 import {
   gameSchemaRule,
@@ -253,7 +254,7 @@ export const Steam = {
     path: "IPlayerService/GetRecentlyPlayedGames/v1/",
     host: "api",
     keyless: false,
-    validate: responseEnvelopeRule("GetRecentlyPlayedGames"),
+    validate: recentlyPlayedRule,
     absent: {
       means:
         "{} is Steam not showing the list, for private and some public profiles alike, so worded as not shown; a public quiet one is {total_count:0}.",
@@ -488,7 +489,7 @@ export const Steam = {
     path: "IWishlistService/GetWishlist/v1/",
     host: "api",
     keyless: true,
-    validate: responseEnvelopeRule("GetWishlist"),
+    validate: responseEnvelopeRule("GetWishlist", "items"),
     absent: {
       means: "{} is Steam's answer for a private and an empty wishlist alike, worded as not shown.",
       seen: "hidden",
@@ -507,7 +508,7 @@ export const Steam = {
     path: "IWishlistService/GetWishlistSortedFiltered/v1/",
     host: "api",
     keyless: true,
-    validate: responseEnvelopeRule("GetWishlistSortedFiltered"),
+    validate: responseEnvelopeRule("GetWishlistSortedFiltered", "items"),
     absent: {
       means:
         "{} is Steam's answer when its filters match nothing; the wishlist's size comes from GetWishlist.",
