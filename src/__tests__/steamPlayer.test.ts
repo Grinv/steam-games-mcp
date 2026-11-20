@@ -27,6 +27,9 @@ import {
 import { FRIENDS_CHECKED_MAX, FRIENDS_MAX } from "../format/web.ts";
 import { OWNED_GAMES_LIMIT_MAX } from "../tools/webPlayer.ts";
 
+// The host itself, not a substring of the URL (CodeQL js/incomplete-url-substring-sanitization).
+const onCommunity = (url: string) => new URL(url).hostname === "steamcommunity.com";
+
 // Steam answers a raw, non-JSON HTTP 400 (not its usual empty-200 response) for
 // some malformed/out-of-range steamids — e.g. the SteamID64 base constant
 // (accountid 0), which is 17 digits and passes the tool schema but is never a
@@ -1628,11 +1631,11 @@ describe("STEAM_ID default / vanity resolution", () => {
 
   test("a vanity STEAM_ID resolves without a key, via the community profile", async (t) => {
     const { client, mock } = await setupServer(t, { STEAM_ID: "gabe" }, (url) =>
-      url.includes("steamcommunity.com") ? PROFILE_XML("76561197960287930") : router(url),
+      onCommunity(url) ? PROFILE_XML("76561197960287930") : router(url),
     ); // no STEAM_API_KEY
     const res = await client.callTool({ name: "get_followed_games", arguments: {} });
     assert.equal(res.isError, undefined);
-    const call = mock.calls.find((c) => c.url.includes("steamcommunity.com"))!;
+    const call = mock.calls.find((c) => onCommunity(c.url))!;
     assert.match(call.url, /steamcommunity\.com\/id\/gabe\/\?xml=1$/);
     // The official lookup is never attempted without a key to send.
     assert.ok(!mock.calls.some((c) => c.url.includes("ResolveVanityURL")));
@@ -1645,7 +1648,7 @@ describe("STEAM_ID default / vanity resolution", () => {
       t,
       { ...ENV, STEAM_ID: "gabe", HTTP_RETRIES: "0" },
       (url) => {
-        if (url.includes("steamcommunity.com")) return PROFILE_XML("76561197960287930");
+        if (onCommunity(url)) return PROFILE_XML("76561197960287930");
         if (url.includes("ResolveVanityURL")) return recorded("ResolveVanityURL/bad-key");
         return router(url);
       },
@@ -1657,7 +1660,7 @@ describe("STEAM_ID default / vanity resolution", () => {
   test("an unresolvable vanity STEAM_ID names the vanity and the numeric way out", async (t) => {
     // A missing profile answers HTTP 200 with an <error> body and no steamID64.
     const { client } = await setupServer(t, { STEAM_ID: "nobody-such-vanity" }, (url) =>
-      url.includes("steamcommunity.com")
+      onCommunity(url)
         ? new Response(
             "<response><error>The specified profile could not be found.</error></response>",
             {
@@ -1677,7 +1680,7 @@ describe("STEAM_ID default / vanity resolution", () => {
   for (const status of [503, 403]) {
     test(`a vanity STEAM_ID whose profile lookup failed (${status}) isn't blamed on its spelling`, async (t) => {
       const { client } = await setupServer(t, { STEAM_ID: "gabe", HTTP_RETRIES: "0" }, (url) =>
-        url.includes("steamcommunity.com") ? jsonResponse({}, { status }) : router(url),
+        onCommunity(url) ? jsonResponse({}, { status }) : router(url),
       ); // no key: the community profile is the only attempt
       const res = await client.callTool({ name: "get_followed_games", arguments: {} });
       assert.equal(res.isError, true);
@@ -1689,9 +1692,7 @@ describe("STEAM_ID default / vanity resolution", () => {
   // Only the two answers seen live settle it; an outage's HTML 200 doesn't.
   test("a community page that is neither answer isn't read as 'no such profile'", async (t) => {
     const { client } = await setupServer(t, { STEAM_ID: "gabe", HTTP_RETRIES: "0" }, (url) =>
-      url.includes("steamcommunity.com")
-        ? htmlResponse("<html>Busy</html>", { status: 200 })
-        : router(url),
+      onCommunity(url) ? htmlResponse("<html>Busy</html>", { status: 200 }) : router(url),
     );
     const res = await client.callTool({ name: "get_followed_games", arguments: {} });
     assertToolError(res, /unusable/);
@@ -1704,7 +1705,7 @@ describe("STEAM_ID default / vanity resolution", () => {
       { ...ENV, STEAM_ID: "nobody-such-vanity", HTTP_RETRIES: "0" },
       (url) => {
         if (url.includes("ResolveVanityURL")) return jsonResponse({}, { status: 429 });
-        if (url.includes("steamcommunity.com"))
+        if (onCommunity(url))
           return new Response(
             "<response><error>The specified profile could not be found.</error></response>",
             {
@@ -1732,7 +1733,7 @@ describe("STEAM_ID default / vanity resolution", () => {
     );
     const res = await client.callTool({ name: "get_followed_games", arguments: {} });
     assertToolError(res, /Could not resolve the STEAM_ID vanity name "nobody-such-vanity"/);
-    assert.ok(!mock.calls.some((c) => c.url.includes("steamcommunity.com")));
+    assert.ok(!mock.calls.some((c) => onCommunity(c.url)));
   });
 
   // Only 1 and 42 are answers; another EResult says nothing about the name.
