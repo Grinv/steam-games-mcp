@@ -563,6 +563,6 @@ unrelated fixes into one commit), then a separate `docs:` commit adding to
 `CHANGELOG.md`'s `[Unreleased]` section (style: the `changelog-style` skill)
 with one bullet per fix, each linking that fix commit's short sha
 (`https://github.com/Grinv/steam-games-mcp/commit/<7-char-sha>`).
-Author/committer `Grinv <4070730+Grinv@users.noreply.github.com>`, **no**
+Author/committer `Konstantin Ostrovskii <4070730+Grinv@users.noreply.github.com>`, **no**
 `Co-Authored-By` trailer (AGENTS.md's commit convention). Don't push unless
 explicitly asked.

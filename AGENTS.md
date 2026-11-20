@@ -354,7 +354,8 @@ dist/src-*.mjs`'s `standardSchemaToJsonSchema`) — one of these types reaching
 - **Never commit secrets.** The key comes from env vars / OS keychain only.
 - Cross-platform: macOS, Linux and Windows. Avoid POSIX-only shell in npm
   scripts (use the Node helper scripts).
-- **Commits:** author/committer `Grinv <4070730+Grinv@users.noreply.github.com>`;
+- **Commits:** author/committer `Konstantin Ostrovskii <4070730+Grinv@users.noreply.github.com>`
+  (from 2026-11-20; earlier commits are signed `Grinv`, same email);
   do **not** add a `Co-Authored-By` trailer.
 - **Work directly on `main`** — single-developer repo, so no feature branches
   (a forgotten branch silently drifts: one sat unmerged for a month and needed
