@@ -1,6 +1,6 @@
 // Minimal leveled logger. Always writes to stderr (stdout is reserved for the
 // MCP stdio protocol); an optional sink can mirror each line onto a second
-// channel (e.g. MCP `notifications/message`). All messages are redacted of
+// channel (MCP log mirroring was removed: see src/server.ts). All messages are redacted of
 // credentials before either channel sees them.
 import { redact } from "./errors.ts";
 

@@ -48,7 +48,8 @@ carrying only what that specific call needs:
   (see Storage and retention below).
 - **Steam Community** (`steamcommunity.com`), only when the server config's
   `STEAM_ID` is a vanity name rather than a SteamID64: its public profile
-  page (`/id/<name>/?xml=1`) is read once to resolve that name without a key.
+  page (`/id/<name>/?xml=1`) is read to resolve that name without a key, or
+  when Steam's own lookup with the key fails.
   Carries the vanity name only, never the API key.
 
 All three hosts are operated by Valve Corporation and governed by
@@ -63,15 +64,15 @@ its maintainer.
 `compare_players`, `get_recommended_games`) only return data for a Steam
 profile whose relevant visibility setting (profile / game details / friends
 list) is set to **Public**. This is enforced by Steam itself, not by this
-server. A private profile makes the tool report a clear "private" reason
-instead of the requested data; it never bypasses Steam's own privacy
+server. A private profile makes the tool report that Steam returned no data,
+and which tool shows why, instead of the requested data; it never bypasses Steam's own privacy
 settings.
 
 ## Storage and retention
 
 - **Caching**: successful API responses are cached in the server process's
   own memory only (never written to disk), as raw Steam responses keyed by
-  request URL, fresh for a short configurable TTL (`CACHE_TTL_MS`, default 5
+  endpoint and request URL, fresh for a short configurable TTL (`CACHE_TTL_MS`, default 5
   minutes) to cut latency and avoid hammering the Storefront/Web APIs. An
   expired copy is kept until evicted (bounded to ~32 MB per Steam host the
   server caches for — two today, the Web API and the store — oldest first),
@@ -100,7 +101,7 @@ settings.
 Material changes will be noted in [CHANGELOG.md](CHANGELOG.md) and reflected
 here, at the same URL, with the effective date below updated.
 
-_Last updated: 2026-11-17._
+_Last updated: 2026-11-20._
 
 ## Contact
 

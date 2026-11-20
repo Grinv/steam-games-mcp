@@ -76,7 +76,7 @@ credentials**; player tools need a free Steam Web API key.
         "STEAM_API_KEY": "your-steam-web-api-key (optional — enables player tools)",
         "STEAM_ID": "your-steamid64-or-vanity-name (optional — default 'you' for player tools)",
         "STEAM_COUNTRY": "US (optional — store price region)",
-        "STEAM_LANGUAGE": "english (optional — store language)"
+        "STEAM_LANGUAGE": "english (optional — store language, Steam's own name, e.g. russian)"
       }
     }
   }

@@ -696,7 +696,10 @@ describe("get_player_achievements", () => {
       name: "get_game_achievements",
       arguments: { appid: 99999999 },
     });
-    assertToolError(res, /no achievement schema for this appid; get_game shows/);
+    assertToolError(
+      res,
+      /no achievement data for this appid, as it answers for one that doesn't exist/,
+    );
   });
 
   test("get_game_achievements: a bad key on the schema call isn't read as 'no achievements'", async (t) => {
@@ -831,7 +834,7 @@ describe("get_player_achievements", () => {
     assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /no achievement schema/);
+    assert.match(s.reason, /no achievement data for this appid/);
     assert.doesNotMatch(s.reason, /Steam's own words/);
   });
 
@@ -868,7 +871,7 @@ describe("get_player_achievements", () => {
     assert.equal(res.isError, undefined);
     const s = res.structuredContent as { found: boolean; reason: string };
     assert.equal(s.found, false);
-    assert.match(s.reason, /no achievement schema/);
+    assert.match(s.reason, /no achievement data for this appid/);
   });
 });
 
@@ -1754,7 +1757,7 @@ describe("STEAM_ID default / vanity resolution", () => {
     );
     const res = await client.callTool({ name: "get_game_achievements", arguments: { appid: 620 } });
     assertToolError(res, /\(405\)/);
-    assert.doesNotMatch((res.content as { text: string }[])[0]!.text, /no achievement schema/);
+    assert.doesNotMatch((res.content as { text: string }[])[0]!.text, /no achievement data/);
   });
 
   test("player tools error clearly when steamid is omitted and STEAM_ID is unset", async (t) => {

@@ -39,17 +39,17 @@ Use the same stdio pattern:
 
 ## Tunables (optional env)
 
-| Var                           | Default                          | Meaning                                                            |
-| ----------------------------- | -------------------------------- | ------------------------------------------------------------------ |
-| `STEAM_API_KEY`               | _(unset)_                        | Steam Web API key; enables player tools                            |
-| `STEAM_ID`                    | _(unset)_                        | Default SteamID64 or vanity name for the player tools              |
-| `STEAM_COUNTRY`               | `US`                             | ISO country code (cc) for store prices                             |
-| `STEAM_LANGUAGE`              | `english`                        | Store language (l)                                                 |
-| `STEAM_STORE_MIN_INTERVAL_MS` | `250`                            | Min spacing between Storefront calls (burst-sensitive; 0 disables) |
-| `STEAM_API_MIN_INTERVAL_MS`   | `0`                              | Min spacing between Web API calls                                  |
-| `CACHE_TTL_MS`                | `300000`                         | TTL for cached responses                                           |
-| `HTTP_TIMEOUT_MS`             | `15000`                          | Per-request timeout                                                |
-| `HTTP_RETRIES`                | `2`                              | Retries for transient failures                                     |
-| `LOG_LEVEL`                   | `info`                           | `debug` \| `info` \| `warn` \| `error` \| `silent`                 |
-| `STEAM_API_BASE_URL`          | `https://api.steampowered.com`   | Web API base URL                                                   |
-| `STEAM_STORE_BASE_URL`        | `https://store.steampowered.com` | Storefront base URL                                                |
+| Var                           | Default                          | Meaning                                                                                       |
+| ----------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------- |
+| `STEAM_API_KEY`               | _(unset)_                        | Steam Web API key; enables player tools                                                       |
+| `STEAM_ID`                    | _(unset)_                        | Default SteamID64 or vanity name for the player tools                                         |
+| `STEAM_COUNTRY`               | `US`                             | ISO country code (cc) for store prices                                                        |
+| `STEAM_LANGUAGE`              | `english`                        | Store language: one of Steam's 31 names (e.g. `russian`); anything else is refused at startup |
+| `STEAM_STORE_MIN_INTERVAL_MS` | `250`                            | Min spacing between Storefront calls (burst-sensitive; 0 disables)                            |
+| `STEAM_API_MIN_INTERVAL_MS`   | `0`                              | Min spacing between Web API calls                                                             |
+| `CACHE_TTL_MS`                | `300000`                         | TTL for cached responses                                                                      |
+| `HTTP_TIMEOUT_MS`             | `15000`                          | Per-request timeout                                                                           |
+| `HTTP_RETRIES`                | `2`                              | Retries for transient failures                                                                |
+| `LOG_LEVEL`                   | `info`                           | `debug` \| `info` \| `warn` \| `error` \| `silent`                                            |
+| `STEAM_API_BASE_URL`          | `https://api.steampowered.com`   | Web API base URL                                                                              |
+| `STEAM_STORE_BASE_URL`        | `https://store.steampowered.com` | Storefront base URL                                                                           |

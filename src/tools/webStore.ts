@@ -236,7 +236,7 @@ export function registerStoreWebTools(
         "release date for a LIST of games by appid in ONE keyless call. The efficient way to price-, " +
         "rating-, tag- and compat-check a wishlist or library without a request per game. For a bigger " +
         `batch (up to ${PRICES_MAX} appids) when you only need price, use get_prices instead. An unknown/invalid ` +
-        "appid comes back as its own row marked available:false — rows stay in the order you passed " +
+        "appid, or one not sold in that `country`, comes back as its own row marked available:false — rows stay in the order you passed " +
         "them, one per id, never dropped; available:null (explained in `notes`, as in get_prices) " +
         "means Steam's answer didn't settle that row. Each item " +
         "carries four compatibility fields, each verified/playable/unsupported/unknown: steam_deck " +
@@ -288,8 +288,8 @@ export function registerStoreWebTools(
         "inferred from the player's WHOLE library instead, use get_recommended_games (key-gated). " +
         "Filtering: min_discount, released_after/released_within_days, tags, min_review and ONE of " +
         "steam_deck/steam_machine/steam_frame are applied by Steam across the whole catalog, so a " +
-        "niche combination still finds its games, most popular first (`total_matching` is Steam's " +
-        "count of them). steam_os, platform, min_reviews and a second hardware filter have no " +
+        "niche combination still finds its games: the page fetched is Steam's most popular matches " +
+        "(`total_matching` is Steam's count of them). steam_os, platform, min_reviews and a second hardware filter have no " +
         "server-side form and are applied afterwards to the `count` entries fetched, so those can " +
         "return fewer — raise `count` for them. min_review only counts games with a Steam rating " +
         `(10+ reviews). At most ${DISCOVER_MAX} results come back per call, best discount first: ` +
@@ -477,7 +477,8 @@ export function registerStoreWebTools(
             .default(20),
           country: country.describe(
             "top_sellers only: two-letter country code for that country's best-sellers, e.g. DE. " +
-              `Omit for the global chart. ${COUNTRY_UNKNOWN_WARNING}`,
+              "Omit for the global chart. A code Steam has no chart for returns an empty chart " +
+              "(count 0), not an error.",
           ),
           week: z.iso
             .date({
@@ -519,7 +520,7 @@ export function registerStoreWebTools(
         "otherwise it returns found:false, which is ALSO what a public account following nothing " +
         "returns: Steam answers the two alike. `reason` names what narrows it down (a private or missing " +
         "profile); a public profile's hidden and empty follows can't be told apart. Returns appids + store_url only (no price/name), " +
-        `capped at ${FOLLOWED_MAX} in whatever order Steam sends them — unlike every other capped list ` +
+        `capped at ${FOLLOWED_MAX} in whatever order Steam sends them — unlike the ranked lists ` +
         "here there is no ranking, so a game past the cut is not 'less followed' (check " +
         "`returned` vs `total`); pass the appids to get_items for " +
         "price, review % and compat. Convert a vanity name with resolve_vanity_url " +
@@ -555,7 +556,8 @@ export function registerStoreWebTools(
         "pre-cap count. tags, steam_deck, mac/linux and the discount floor are applied by Steam over " +
         "the whole wishlist; min_review, the exact own-package discount and the other compat/" +
         "platform filters are checked by this server over up to 1000 matching entries, and `note` " +
-        "says when a bigger match set left some unchecked. Convert a vanity name with resolve_vanity_url " +
+        "says when a bigger match set left some unchecked, and names entries Steam doesn't show in " +
+        "`country` (removed, or not sold there) or gave no usable card. Convert a vanity name with resolve_vanity_url " +
         "first (that conversion itself needs STEAM_API_KEY, even though this tool doesn't).",
       inputSchema: z.strictObject({
         steamid,
@@ -605,7 +607,8 @@ export function registerStoreWebTools(
         steam_machine: steamMachine,
         steam_frame: steamFrame,
         country: country.describe(
-          `Country (cc) for prices; overrides STEAM_COUNTRY. Implies include_details. ${COUNTRY_UNKNOWN_WARNING}`,
+          "Country (cc) for prices and regional availability (an entry not shown there is named " +
+            `in \`note\`); overrides STEAM_COUNTRY. Implies include_details. ${COUNTRY_UNKNOWN_WARNING}`,
         ),
         language: language.describe(
           "Store language (Steam's own name, e.g. russian); overrides STEAM_LANGUAGE. Implies include_details.",

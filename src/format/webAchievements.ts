@@ -78,7 +78,8 @@ export function summarizePlayerAchievements(
 // never says which case it is (AGENTS.md: "Tell the agent what Steam
 // returned"); the one fact the server has is the game's schema.
 export const NO_ACHIEVEMENT_SCHEMA =
-  "Steam has no achievement schema for this appid; get_game shows whether the appid exists.";
+  "Steam has no achievement data for this appid, as it answers for one that doesn't exist; " +
+  "get_game shows whether the appid exists.";
 
 export const playerAchievementsNotShown = () =>
   notFound(

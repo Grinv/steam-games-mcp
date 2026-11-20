@@ -89,8 +89,9 @@ export function registerPlayerWebTools(
         "List a game's achievements by appid with their names, descriptions, hidden flag and " +
         `global unlock % (rarity), in the game's own definition order (capped at the first ${GAME_SCHEMA_ACHIEVEMENTS_MAX}; ` +
         "check `returned` vs `total` — most games have far fewer). An empty `achievements` list " +
-        "with total:0 means the app has a schema with no achievements (e.g. a DLC); an appid Steam " +
-        "has no schema for at all is an error (get_game shows whether it exists). Requires STEAM_API_KEY (the " +
+        "with total:0 (and `game` null) means Steam lists no achievements for the app — e.g. a DLC, " +
+        "which has no achievement schema; an appid Steam rejects (normally no such app) is an error " +
+        "(get_game shows whether it exists). Requires STEAM_API_KEY (the " +
         "achievement schema needs a key). For just the rarity by internal id without a key, use " +
         "get_global_achievements; for a few named highlights, see get_game's achievements_highlighted; " +
         "for a specific player's own unlock progress instead of the catalog-wide list, use " +
@@ -432,7 +433,8 @@ export function registerPlayerWebTools(
         "instead; for just the rarity without a key, use get_global_achievements. Requires " +
         "STEAM_API_KEY and a public profile with game-details visibility — otherwise it returns " +
         "found:false — which is also what a game the player doesn't own, a SteamID64 with no " +
-        "account behind it, an appid with no achievements, or no such appid at all returns. " +
+        "account behind it, or no such appid at all returns; a game without achievements comes " +
+        "back as found:false or as found:true with total:0, as Steam answers it. " +
         "Steam doesn't tell most of these apart, so `reason` says what it didn't return and which " +
         "tools establish why (get_player_summary, get_owned_games' check_appids, get_game). ",
       inputSchema: z.strictObject({

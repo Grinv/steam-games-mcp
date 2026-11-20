@@ -62,8 +62,8 @@ export function registerStorefrontTools(
             .trim()
             .nonempty()
             .describe(
-              "Game title to look up instead of an appid — the exact title if Steam has it, else its " +
-                "closest match. " +
+              "Game title to look up instead of an appid — the exact title (case, punctuation and " +
+                "accents aside) if it's among Steam's top 10 search results, else its closest match. " +
                 "Provide appid OR name; appid wins if both are given.",
             )
             .optional(),
