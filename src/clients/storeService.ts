@@ -922,7 +922,7 @@ export class StoreServiceClient {
     return summarizeWishlistDetailed(filtered.res, filtered.tagMap, filters, {
       total,
       exact: !checksHere,
-      carded: input.page_size,
+      asked: input.page_size,
     });
   }
 

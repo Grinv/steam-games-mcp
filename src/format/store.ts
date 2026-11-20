@@ -181,7 +181,8 @@ const itemId = (it: StoreItem): number | undefined => it.id ?? it.appid;
 const hasItemId = (it: StoreItem): it is StoreItem => typeof itemId(it) === "number";
 
 // Batch store card per requested appid: base card + a NESTED price block, is_free
-// and coming_soon. Missing appids come back available:false.
+// and coming_soon. An appid Steam says it doesn't show here comes back
+// available:false; one its answer doesn't settle, available:null (noted).
 export function summarizeItems(
   r: StoreItemsResponse,
   appids: number[],
@@ -341,8 +342,8 @@ export function summarizeWishlistDetailed(
   // server-filtered response only lists matches). exact: every filter ran
   // server-side, so the listed entries ARE the matches and only the displayed
   // page needed cards; otherwise storeItemFilter re-checks each carded match.
-  // carded: how many listed entries Steam cards (the request's page_size).
-  ctx: { total: number; exact: boolean; carded?: number },
+  // asked: how many listed entries the request asked Steam to card (page_size).
+  ctx: { total: number; exact: boolean; asked?: number },
 ): z.infer<typeof wishlistNotFound> | z.infer<typeof wishlistDetailedFound> {
   if (ctx.total === 0) {
     return wishlistNotFound.parse({
@@ -366,11 +367,16 @@ export function summarizeWishlistDetailed(
     );
   const hidden = appidsWhere(false);
   const unsettled = appidsWhere(undefined);
-  // Steam cards the first `carded` entries it lists; one among them without
-  // a usable card (none, or none with an appid) is named, not left out.
+  // Steam cards a prefix of what it lists, so its page ends after the last
+  // carded entry — measured, since it may card fewer than asked; only an
+  // answer with no card at all falls back to the page asked for. An entry
+  // inside the page without a usable card (none, or none with an appid) is
+  // named, not left out.
+  const lastCarded = listed.reduce((end, i, at) => (i.store_item ? at + 1 : end), 0);
+  const page = lastCarded || Math.min(listed.length, ctx.asked ?? 0);
   // (One Steam says it doesn't show here is named above, not again.)
   const cardless = listed
-    .slice(0, ctx.carded ?? 0)
+    .slice(0, page)
     .flatMap((i) =>
       (!i.store_item ||
         (shownHere(i.store_item) === true && typeof i.store_item.appid !== "number")) &&
@@ -405,8 +411,7 @@ export function summarizeWishlistDetailed(
   // What Steam carded counts the entries it carded as not shown here, too.
   const carded = listed.filter((i) => i.store_item !== undefined).length;
   // Past the page Steam cards (an entry without a card inside it is cardless).
-  const page = ctx.carded ?? carded;
-  const unchecked = ctx.exact ? 0 : Math.max(0, listed.length - page);
+  const unchecked = ctx.exact ? 0 : listed.length - page;
   return wishlistDetailedFound.parse({
     found: true,
     total: ctx.total,

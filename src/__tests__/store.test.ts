@@ -473,3 +473,25 @@ describe("summarizeRecommendations", () => {
     );
   });
 });
+
+// Steam may card fewer entries than asked: the page is measured from its
+// answer, so entries past the last card are unchecked, not "ask again".
+test("the wishlist's carded page is measured from Steam's answer", () => {
+  const carded = (appid: number) => ({
+    appid,
+    priority: appid,
+    store_item: { appid, visible: true },
+  });
+  const s = summarizeWishlistDetailed(
+    {
+      response: {
+        items: [carded(1), carded(2), { appid: 3, priority: 3 }, { appid: 4, priority: 4 }],
+      },
+    },
+    undefined,
+    { minReview: 1 },
+    { total: 4, exact: false, asked: 1000 },
+  ) as { note?: string };
+  assert.match(s.note ?? "", /only the first 2 were checked/);
+  assert.doesNotMatch(s.note ?? "", /no usable card/);
+});
