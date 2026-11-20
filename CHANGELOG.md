@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-20
+
 ### Changed
 
 - **Breaking:** refuse a `language`, `review_language` or `STEAM_LANGUAGE` that isn't one of Steam's 31 language names (any case), such as `ru`. ([d043f14](https://github.com/Grinv/steam-games-mcp/commit/d043f14), [3380fe5](https://github.com/Grinv/steam-games-mcp/commit/3380fe5))

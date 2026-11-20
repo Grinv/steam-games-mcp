@@ -1,5 +1,5 @@
 // Kept in sync with package.json by a unit test (see __tests__/version.test.ts).
-export const VERSION = "0.17.2";
+export const VERSION = "0.18.0";
 
 // The server's registry identity; kept equal to package.json mcpName by a test.
 export const MCP_NAME = "io.github.Grinv/steam-games-mcp";
